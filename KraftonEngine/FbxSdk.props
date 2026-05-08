@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <!-- Prefer an environment/MSBuild override, but use the local Autodesk install when present. -->
+    <FbxSdkRoot Condition="'$(FbxSdkRoot)'==''">$(FBXSDK_ROOT)</FbxSdkRoot>
+    <FbxSdkRoot Condition="'$(FbxSdkRoot)'=='' And Exists('C:\Program Files\Autodesk\FBX\FBX SDK\2020.3.9\include\fbxsdk.h')">C:\Program Files\Autodesk\FBX\FBX SDK\2020.3.9</FbxSdkRoot>
+
+    <FbxSdkArch Condition="'$(Platform)'=='x64'">x64</FbxSdkArch>
+    <FbxSdkConfig Condition="'$(Configuration)'=='Debug'">debug</FbxSdkConfig>
+    <FbxSdkConfig Condition="'$(FbxSdkConfig)'==''">release</FbxSdkConfig>
+
+    <FbxSdkIncludeDir>$(FbxSdkRoot)\include</FbxSdkIncludeDir>
+    <FbxSdkLibDir>$(FbxSdkRoot)\lib\$(FbxSdkArch)\$(FbxSdkConfig)</FbxSdkLibDir>
+    <FbxSdkDll>$(FbxSdkLibDir)\libfbxsdk.dll</FbxSdkDll>
+
+    <WithFbxSdk Condition="'$(Platform)'=='x64' And Exists('$(FbxSdkIncludeDir)\fbxsdk.h') And Exists('$(FbxSdkLibDir)\libfbxsdk.lib')">1</WithFbxSdk>
+    <WithFbxSdk Condition="'$(WithFbxSdk)'==''">0</WithFbxSdk>
+
+    <FbxSdkPreprocessorDefinitions Condition="'$(WithFbxSdk)'=='1'">WITH_FBX_SDK=1;FBXSDK_SHARED</FbxSdkPreprocessorDefinitions>
+    <FbxSdkPreprocessorDefinitions Condition="'$(WithFbxSdk)'!='1'">WITH_FBX_SDK=0</FbxSdkPreprocessorDefinitions>
+  </PropertyGroup>
+
+  <ItemDefinitionGroup Condition="'$(Platform)'=='x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories Condition="'$(WithFbxSdk)'=='1'">
+        $(FbxSdkIncludeDir);
+        %(AdditionalIncludeDirectories)
+      </AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>
+        $(FbxSdkPreprocessorDefinitions);
+        %(PreprocessorDefinitions)
+      </PreprocessorDefinitions>
+    </ClCompile>
+
+    <Link>
+      <AdditionalLibraryDirectories Condition="'$(WithFbxSdk)'=='1'">
+        $(FbxSdkLibDir);
+        %(AdditionalLibraryDirectories)
+      </AdditionalLibraryDirectories>
+      <AdditionalDependencies Condition="'$(WithFbxSdk)'=='1'">
+        libfbxsdk.lib;
+        %(AdditionalDependencies)
+      </AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+
+  <Target Name="CopyFbxSdkRuntimeDll"
+          AfterTargets="Build"
+          Condition="'$(WithFbxSdk)'=='1' And Exists('$(FbxSdkDll)')">
+    <Message Importance="High"
+             Text="Copying FBX SDK runtime DLL from $(FbxSdkDll) to $(TargetDir)" />
+    <Copy SourceFiles="$(FbxSdkDll)"
+          DestinationFolder="$(TargetDir)"
+          SkipUnchangedFiles="true" />
+  </Target>
+</Project>

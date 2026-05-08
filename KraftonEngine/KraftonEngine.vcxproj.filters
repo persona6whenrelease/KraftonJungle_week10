@@ -2245,6 +2245,7 @@
     <ResourceCompile Include="KraftonEngine.rc" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="FbxSdk.props" />
     <None Include="VcpkgLua.props" />
   </ItemGroup>
 </Project>

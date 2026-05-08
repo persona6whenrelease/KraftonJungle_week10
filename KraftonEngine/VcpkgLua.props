@@ -10,6 +10,10 @@
     <VcpkgLibDir Condition="'$(VcpkgLibDir)'==''">$(VcpkgInstalledRoot)\lib</VcpkgLibDir>
     <VcpkgBinDir Condition="'$(VcpkgBinDir)'==''">$(VcpkgInstalledRoot)\bin</VcpkgBinDir>
 
+    <!-- SFML debug import libraries use the conventional -d suffix. -->
+    <SfmlLibrarySuffix Condition="'$(Configuration)'=='Debug'">-d</SfmlLibrarySuffix>
+    <SfmlLibrarySuffix Condition="'$(SfmlLibrarySuffix)'==''"></SfmlLibrarySuffix>
+
     <!-- vcpkg's RmlUi port currently installs lowercase rmlui.lib/rmlui.dll. -->
     <RmlUiLibraryName Condition="Exists('$(VcpkgLibDir)\rmlui.lib')">rmlui.lib</RmlUiLibraryName>
     <RmlUiLibraryName Condition="'$(RmlUiLibraryName)'=='' And Exists('$(VcpkgLibDir)\RmlUi.lib')">RmlUi.lib</RmlUiLibraryName>
@@ -43,13 +47,15 @@
       <AdditionalDependencies>
         lua51.lib;
         $(RmlUiLibraryName);
+        sfml-audio$(SfmlLibrarySuffix).lib;
+        sfml-window$(SfmlLibrarySuffix).lib;
+        sfml-system$(SfmlLibrarySuffix).lib;
         %(AdditionalDependencies)
       </AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
 
-  <!-- Do not use PostBuildEvent here. The .vcxproj also emits an SFML PostBuildEvent;
-       this standalone target runs in addition to it and copies DLLs to the actual exe dir. -->
+  <!-- Copy runtime DLLs to the actual exe dir. -->
   <Target Name="CopyVcpkgRuntimeDlls"
           AfterTargets="Build"
           Condition="'$(Platform)'=='x64' And Exists('$(VcpkgBinDir)')">

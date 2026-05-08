@@ -76,6 +76,7 @@ ROOT_FILES = ["main.cpp"]
 # Root-level None files to include in the project view
 ROOT_NONE_FILES = [
     "VcpkgLua.props",
+    "FbxSdk.props",
 ]
 
 # Include paths
@@ -96,35 +97,18 @@ LIBRARY_PATHS = []
 # ──────────────────────────────────────────────
 # SFML configuration
 # ──────────────────────────────────────────────
-# SFML modules in use (no graphics/network because the engine uses its own
-# DirectX-based renderer and doesn't need SFML networking).
-SFML_MODULES = ["audio", "window", "system"]
-
-# Base paths inside the project directory
-SFML_LIB_BASE = "$(ProjectDir)ThirdParty\\SFML\\lib"
-SFML_BIN_BASE = "$(ProjectDir)ThirdParty\\SFML\\bin"
-
-# Maps a project Configuration name to the SFML build flavor folder
-# ("Debug" or "Release"). Configurations not in this map are skipped (no
-# SFML link / DLL copy). Win32 configs are intentionally excluded — SFML is
-# x64-only in this project.
-SFML_CONFIG_FLAVOR = {
-    "Debug":         "Debug",
-    "Release":       "Release",
-    "ObjViewDebug":  "Release",
-    "Demo":          "Release",
-    "GameClient":    "Release",
-}
-
-# Platforms eligible for SFML linkage
-SFML_PLATFORMS = {"x64"}
-
 # Lua / vcpkg property sheet
 USE_VCPKG_LUA_PROPS = True
 VCPKG_LUA_PROPS_FILE = "VcpkgLua.props"
 VCPKG_LUA_PROPS = f"$(MSBuildProjectDirectory)\\{VCPKG_LUA_PROPS_FILE}"
 VCPKG_LUA_PLATFORMS = {"x64"}
 GENERATE_VCPKG_LUA_PROPS = True
+
+# Autodesk FBX SDK property sheet
+USE_FBX_SDK_PROPS = True
+FBX_SDK_PROPS_FILE = "FbxSdk.props"
+FBX_SDK_PROPS = f"$(MSBuildProjectDirectory)\\{FBX_SDK_PROPS_FILE}"
+FBX_SDK_PLATFORMS = {"x64"}
 
 # NuGet packages
 NUGET_PACKAGES = [
@@ -230,34 +214,18 @@ def collect_all_filters(files: dict[str, list[str]]) -> set[str]:
 # SFML helpers
 # ──────────────────────────────────────────────
 def sfml_flavor_for(cfg: str, plat: str) -> str | None:
-    """Return 'Debug' or 'Release' for a given (cfg, plat), or None if SFML
-    should not be applied to this configuration."""
-    if plat not in SFML_PLATFORMS:
-        return None
-    return SFML_CONFIG_FLAVOR.get(cfg)
+    """Deprecated: SFML linkage is handled by VcpkgLua.props."""
+    return None
 
 
 def sfml_lib_names(flavor: str) -> list[str]:
-    """Return the .lib filenames for a given flavor.
-    Debug builds use the '-d' suffix per SFML naming convention."""
-    suffix = "-d" if flavor == "Debug" else ""
-    return [f"sfml-{m}{suffix}.lib" for m in SFML_MODULES]
+    """Deprecated: SFML linkage is handled by VcpkgLua.props."""
+    return []
 
 
 def sfml_post_build_command(flavor: str) -> str:
-    """Return the xcopy command that copies all SFML DLLs (and their
-    dependencies like OpenAL32.dll, libsndfile-1.dll) from the matching
-    bin\\<flavor>\\ folder to $(OutDir).
-
-    xcopy flags:
-      /Y  : overwrite existing files without prompting
-      /D  : copy only files whose source is newer than the destination
-      /I  : if destination doesn't exist and multiple files, treat as dir
-    The trailing '*' on $(OutDir) forces xcopy to treat it as a directory
-    (avoids the 'File or Directory?' interactive prompt).
-    """
-    src = f"{SFML_BIN_BASE}\\{flavor}\\*.dll"
-    return f'xcopy /Y /D /I "{src}" "$(OutDir)"'
+    """Deprecated: runtime DLL copy is handled by VcpkgLua.props."""
+    return ""
 
 
 # ──────────────────────────────────────────────
@@ -310,8 +278,8 @@ def generate_vcpkg_lua_props():
 
     This intentionally keeps vcpkg/RmlUi in a property sheet instead of
     emitting it into each configuration block. The .vcxproj imports this sheet
-    for every x64 configuration, and the CopyVcpkgRuntimeDlls target avoids
-    fighting with the per-config SFML PostBuildEvent generated below.
+    for every x64 configuration. The CopyVcpkgRuntimeDlls target copies Lua,
+    RmlUi, SFML, and transitive runtime DLLs from the selected vcpkg bin dir.
     """
     props_path = PROJECT_DIR / VCPKG_LUA_PROPS_FILE
 
@@ -326,6 +294,10 @@ def generate_vcpkg_lua_props():
     <VcpkgBinDir Condition="'$(Configuration)'=='Debug'">$(VcpkgInstalledRoot)\debug\bin</VcpkgBinDir>
     <VcpkgLibDir Condition="'$(VcpkgLibDir)'==''">$(VcpkgInstalledRoot)\lib</VcpkgLibDir>
     <VcpkgBinDir Condition="'$(VcpkgBinDir)'==''">$(VcpkgInstalledRoot)\bin</VcpkgBinDir>
+
+    <!-- SFML debug import libraries use the conventional -d suffix. -->
+    <SfmlLibrarySuffix Condition="'$(Configuration)'=='Debug'">-d</SfmlLibrarySuffix>
+    <SfmlLibrarySuffix Condition="'$(SfmlLibrarySuffix)'==''"></SfmlLibrarySuffix>
 
     <!-- vcpkg's RmlUi port currently installs lowercase rmlui.lib/rmlui.dll. -->
     <RmlUiLibraryName Condition="Exists('$(VcpkgLibDir)\rmlui.lib')">rmlui.lib</RmlUiLibraryName>
@@ -360,13 +332,15 @@ def generate_vcpkg_lua_props():
       <AdditionalDependencies>
         lua51.lib;
         $(RmlUiLibraryName);
+        sfml-audio$(SfmlLibrarySuffix).lib;
+        sfml-window$(SfmlLibrarySuffix).lib;
+        sfml-system$(SfmlLibrarySuffix).lib;
         %(AdditionalDependencies)
       </AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
 
-  <!-- Do not use PostBuildEvent here. The .vcxproj also emits an SFML PostBuildEvent;
-       this standalone target runs in addition to it and copies DLLs to the actual exe dir. -->
+  <!-- Copy runtime DLLs to the actual exe dir. -->
   <Target Name="CopyVcpkgRuntimeDlls"
           AfterTargets="Build"
           Condition="'$(Platform)'=='x64' And Exists('$(VcpkgBinDir)')">
@@ -459,6 +433,14 @@ def generate_vcxproj(files: dict[str, list[str]]):
                 Condition=f"exists('{VCPKG_LUA_PROPS}')",
             )
 
+        if USE_FBX_SDK_PROPS and plat in FBX_SDK_PLATFORMS:
+            ET.SubElement(
+                ig,
+                "Import",
+                Project=FBX_SDK_PROPS,
+                Condition=f"exists('{FBX_SDK_PROPS}')",
+            )
+
     ET.SubElement(proj, "PropertyGroup", Label="UserMacros")
 
     # OutDir, IntDir, IncludePath, LibraryPath, WorkingDirectory
@@ -480,18 +462,7 @@ def generate_vcxproj(files: dict[str, list[str]]):
         ET.SubElement(pg, "IntDir").text = "$(ProjectDir)Build\\$(Configuration)\\"
         ET.SubElement(pg, "IncludePath").text = include_path_value
 
-        # Per-config LibraryPath: prepend SFML lib folder for eligible configs.
-        # We hardcode the flavor (Debug/Release) instead of using
-        # $(Configuration), because configs like ObjViewDebug/Demo/GameClient
-        # have no matching folder under SFML\lib\.
-        flavor = sfml_flavor_for(cfg, plat)
-        if flavor is not None:
-            sfml_lib_path = f"{SFML_LIB_BASE}\\{flavor}"
-            library_path_value = f"{sfml_lib_path};{base_library_path}"
-        else:
-            library_path_value = base_library_path
-
-        ET.SubElement(pg, "LibraryPath").text = library_path_value
+        ET.SubElement(pg, "LibraryPath").text = base_library_path
         ET.SubElement(pg, "LocalDebuggerWorkingDirectory").text = "$(ProjectDir)"
 
     # ItemDefinitionGroups
@@ -544,25 +515,6 @@ def generate_vcxproj(files: dict[str, list[str]]):
 
         ET.SubElement(link, "SubSystem").text = subsystem
         ET.SubElement(link, "GenerateDebugInformation").text = "true"
-
-        # ── SFML linkage (per-config) ─────────────────────────────
-        # For x64 configs that map to a SFML flavor, append SFML's .lib
-        # files to AdditionalDependencies and emit a PostBuildEvent that
-        # copies the matching DLLs (and their dependencies such as
-        # OpenAL32.dll, libsndfile-1.dll) next to the built .exe.
-        sfml_flavor = sfml_flavor_for(cfg, plat)
-        if sfml_flavor is not None:
-            libs = sfml_lib_names(sfml_flavor)
-            # %(AdditionalDependencies) preserves any libs inherited from
-            # property sheets / Microsoft defaults (e.g. kernel32.lib).
-            deps_text = ";".join(libs) + ";%(AdditionalDependencies)"
-            ET.SubElement(link, "AdditionalDependencies").text = deps_text
-
-            pbe = ET.SubElement(idg, "PostBuildEvent")
-            ET.SubElement(pbe, "Command").text = sfml_post_build_command(sfml_flavor)
-            ET.SubElement(pbe, "Message").text = (
-                f"Copying SFML {sfml_flavor} DLLs to $(OutDir)"
-            )
 
     # ClCompile items
     ig = ET.SubElement(proj, "ItemGroup")
