@@ -2,10 +2,9 @@
 
 #include "Core/CoreTypes.h"
 #include "Math/Vector.h"
+#include "Mesh/MeshCommonTypes.h"
 
 struct FStaticMesh;
-struct FStaticMeshSection;
-struct FStaticMaterial;
 
 // Raw Data — OBJ 파싱 직후 상태
 struct FObjInfo

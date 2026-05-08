@@ -1507,11 +1507,10 @@ bool FEditorPropertyWidget::RenderPropertyWidget(TArray<FPropertyDescriptor>& Pr
 		int32          ElemIdx = (strncmp(Prop.Name.c_str(), "Element ", 8) == 0) ? atoi(&Prop.Name[8]) : -1;
 
 		FString SlotName = "None";
-		if (ElemIdx != -1 && SelectedComponent && SelectedComponent->IsA<UStaticMeshComponent>())
+		if (ElemIdx != -1 && SelectedComponent && SelectedComponent->IsA<UMeshComponent>())
 		{
-			UStaticMeshComponent* SMC = static_cast<UStaticMeshComponent*>(SelectedComponent);
-			if (SMC->GetStaticMesh() && ElemIdx < (int32)SMC->GetStaticMesh()->GetStaticMaterials().size())
-				SlotName = SMC->GetStaticMesh()->GetStaticMaterials()[ElemIdx].MaterialSlotName;
+			UMeshComponent* MeshComp = static_cast<UMeshComponent*>(SelectedComponent);
+			SlotName = MeshComp->GetMaterialSlotName(ElemIdx);
 		}
 
 		// 좌측: Element 인덱스 + 슬롯 이름

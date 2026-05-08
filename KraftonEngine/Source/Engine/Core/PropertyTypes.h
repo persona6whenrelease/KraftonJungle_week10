@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <vector>
 #include <string>
+#include "Serialization/Archive.h"
 
 // 에디터에서 자동 위젯 매핑에 사용되는 프로퍼티 타입
 enum class EPropertyType : uint8_t
@@ -30,6 +31,12 @@ struct FMaterialSlot
 {
 	std::string Path;
 };
+
+inline FArchive& operator<<(FArchive& Ar, FMaterialSlot& Slot)
+{
+	Ar << Slot.Path;
+	return Ar;
+}
 
 // 컴포넌트가 노출하는 편집 가능한 프로퍼티 디스크립터
 struct FPropertyDescriptor
