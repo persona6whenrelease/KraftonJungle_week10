@@ -12,12 +12,6 @@ struct FStaticMesh;
 struct FImportOptions;
 class UStaticMesh;
 
-struct FMeshAssetListItem
-{
-	FString DisplayName;
-	FString FullPath;
-};
-
 class FObjManager
 {
 	// path → UStaticMesh* 캐시 (소유권은 UObjectManager)

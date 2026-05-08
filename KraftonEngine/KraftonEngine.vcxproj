@@ -321,6 +321,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Source\Engine\Mesh\FBXImporter.cpp" />
+    <ClCompile Include="Source\Engine\Mesh\FBXManager.cpp" />
     <ClCompile Include="Source\Editor\EditorEngine.cpp" />
     <ClCompile Include="Source\Editor\EditorRenderPipeline.cpp" />
     <ClCompile Include="Source\Editor\Packaging\GamePackageAssetCollector.cpp" />
@@ -575,6 +576,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Source\Engine\Mesh\FBXImporter.h" />
+    <ClInclude Include="Source\Engine\Mesh\FBXManager.h" />
     <ClInclude Include="Source\Editor\EditorEngine.h" />
     <ClInclude Include="Source\Editor\EditorRenderPipeline.h" />
     <ClInclude Include="Source\Editor\PIE\PIETypes.h" />

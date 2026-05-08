@@ -6,6 +6,12 @@
 #include "Materials/MaterialManager.h"
 #include "Serialization/Archive.h"
 
+struct FMeshAssetListItem
+{
+	FString DisplayName;
+	FString FullPath;
+};
+
 struct FMeshSection
 {
 	int32 MaterialIndex = -1;

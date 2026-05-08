@@ -683,6 +683,9 @@
     <ClCompile Include="Source\Engine\Mesh\FBXImporter.cpp">
       <Filter>Source\Engine\Mesh</Filter>
     </ClCompile>
+    <ClCompile Include="Source\Engine\Mesh\FBXManager.cpp">
+      <Filter>Source\Engine\Mesh</Filter>
+    </ClCompile>
     <ClCompile Include="Source\Engine\Mesh\SkeletalMesh.cpp">
       <Filter>Source\Engine\Mesh</Filter>
     </ClCompile>
@@ -1494,6 +1497,9 @@
       <Filter>Source\Engine\Mesh</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Mesh\FBXImporter.h">
+      <Filter>Source\Engine\Mesh</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Mesh\FBXManager.h">
       <Filter>Source\Engine\Mesh</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Mesh\MeshCommonTypes.h">

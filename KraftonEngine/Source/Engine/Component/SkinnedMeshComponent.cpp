@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cstring>
 #include "Engine/Runtime/Engine.h"
+#include "Mesh/FBXManager.h"
 #include "Object/ObjectFactory.h"
 #include "Render/Proxy/SkeletalMeshSceneProxy.h"
 #include "Serialization/Archive.h"
@@ -105,6 +106,22 @@ void USkinnedMeshComponent::Serialize(FArchive& Ar)
 void USkinnedMeshComponent::PostDuplicate()
 {
 	UMeshComponent::PostDuplicate();
+
+	if (!SkeletalMeshPath.empty() && SkeletalMeshPath != "None")
+	{
+		USkeletalMesh* Loaded = FFBXManager::LoadSkeletalMesh(SkeletalMeshPath);
+		if (Loaded)
+		{
+			TArray<FMaterialSlot> SavedSlots = MaterialSlots;
+			SetSkeletalMesh(Loaded);
+
+			for (int32 i = 0; i < static_cast<int32>(MaterialSlots.size()) && i < static_cast<int32>(SavedSlots.size()); ++i)
+			{
+				MaterialSlots[i] = SavedSlots[i];
+			}
+		}
+	}
+
 	RestoreOverrideMaterialsFromSlots();
 	CacheLocalBounds();
 	BuildReferencePoseMatrices();
@@ -127,7 +144,15 @@ void USkinnedMeshComponent::PostEditProperty(const char* PropertyName)
 
 	if (std::strcmp(PropertyName, "Skeletal Mesh") == 0)
 	{
-		// Asset loading is intentionally left to the skeletal asset pipeline.
+		if (SkeletalMeshPath.empty() || SkeletalMeshPath == "None")
+		{
+			SetSkeletalMesh(nullptr);
+		}
+		else
+		{
+			USkeletalMesh* Loaded = FFBXManager::LoadSkeletalMesh(SkeletalMeshPath);
+			SetSkeletalMesh(Loaded);
+		}
 		CacheLocalBounds();
 		MarkWorldBoundsDirty();
 	}
