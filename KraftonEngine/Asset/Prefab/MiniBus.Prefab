@@ -1,0 +1,63 @@
+{
+  "Name" : "MiniBus",
+  "RootActor" : {
+    "ActorUUID" : 30705,
+    "ClassName" : "AActor",
+    "NonSceneComponents" : [{
+        "ClassName" : "UProjectileMovementComponent",
+        "Properties" : {
+          "Auto Register Updated" : true,
+          "Controller Input Priority" : 0,
+          "Initial Speed" : 0.000000,
+          "Last Controller Delta" : [0.000000, 0.000000, 0.000000],
+          "Last Controller Direction" : [0.000000, 0.000000, 0.000000],
+          "Max Speed" : 100.000000,
+          "Receive Controller Input" : false,
+          "Updated Component" : "",
+          "Velocity" : [0.000000, 0.000000, 0.000000],
+          "bEditorOnly" : false,
+          "bTickEnable" : true
+        }
+      }],
+    "RootComponent" : {
+      "Children" : [{
+          "Children" : [],
+          "ClassName" : "UBoxComponent",
+          "Properties" : {
+            "Blocks Movement" : true,
+            "Box Extent" : [0.500000, 0.500000, 0.500000],
+            "Cast Shadow" : true,
+            "Generate Overlap Events" : true,
+            "Location" : [-0.010674, -0.013205, 0.463967],
+            "Rotation" : [0.000000, 90.000000, 0.000000],
+            "Scale" : [2.471906, 0.897289, 0.934706],
+            "Two Sided Shadow" : false,
+            "Visible" : true,
+            "bEditorOnly" : false,
+            "bTickEnable" : true
+          }
+        }],
+      "ClassName" : "UStaticMeshComponent",
+      "Properties" : {
+        "Blocks Movement" : true,
+        "Cast Shadow" : true,
+        "Element 0" : {
+          "Path" : "Asset/Materials/Auto/miniBusMTL.mat"
+        },
+        "Generate Overlap Events" : true,
+        "Location" : [0.000000, 0.000000, 0.000000],
+        "Rotation" : [0.000000, 0.000000, 0.000000],
+        "Scale" : [1.000000, 1.000000, 1.000000],
+        "Static Mesh" : "Data/VoxelCars/minibus.obj",
+        "Two Sided Shadow" : false,
+        "Visible" : true,
+        "bEditorOnly" : false,
+        "bTickEnable" : true
+      }
+    },
+    "Tags" : ["Vehicle"],
+    "bVisible" : true
+  },
+  "Type" : "ActorPrefab",
+  "Version" : 1
+}

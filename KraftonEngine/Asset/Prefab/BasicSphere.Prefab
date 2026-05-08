@@ -1,0 +1,47 @@
+{
+  "Name" : "BasicSphere",
+  "RootActor" : {
+    "ActorUUID" : 529,
+    "ClassName" : "AActor",
+    "NonSceneComponents" : [],
+    "RootComponent" : {
+      "Children" : [{
+          "Children" : [],
+          "ClassName" : "USphereComponent",
+          "Properties" : {
+            "Blocks Movement" : true,
+            "Cast Shadow" : true,
+            "Generate Overlap Events" : true,
+            "Location" : [0.000000, 0.000000, 0.000000],
+            "Rotation" : [-0.000000, 0.000000, 0.000000],
+            "Scale" : [1.000000, 1.000000, 1.000000],
+            "Sphere Radius" : 1.000000,
+            "Two Sided Shadow" : false,
+            "Visible" : true,
+            "bEditorOnly" : false,
+            "bTickEnable" : true
+          }
+        }],
+      "ClassName" : "UStaticMeshComponent",
+      "Properties" : {
+        "Blocks Movement" : true,
+        "Cast Shadow" : true,
+        "Element 0" : {
+          "Path" : "Asset/Materials/Auto/BasicShapeMaterial.mat"
+        },
+        "Generate Overlap Events" : true,
+        "Location" : [8.887383, 10.242723, 1.570795],
+        "Rotation" : [-0.000000, 0.000000, 0.000000],
+        "Scale" : [1.000000, 1.000000, 1.000000],
+        "Static Mesh" : "Data/BasicShape/Sphere.OBJ",
+        "Two Sided Shadow" : false,
+        "Visible" : true,
+        "bEditorOnly" : false,
+        "bTickEnable" : true
+      }
+    },
+    "bVisible" : true
+  },
+  "Type" : "ActorPrefab",
+  "Version" : 1
+}

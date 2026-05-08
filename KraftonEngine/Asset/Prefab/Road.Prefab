@@ -1,0 +1,31 @@
+{
+  "Name" : "Road",
+  "RootActor" : {
+    "ActorUUID" : 273,
+    "ClassName" : "AActor",
+    "NonSceneComponents" : [],
+    "RootComponent" : {
+      "Children" : [],
+      "ClassName" : "UStaticMeshComponent",
+      "Properties" : {
+        "Blocks Movement" : true,
+        "Cast Shadow" : false,
+        "Element 0" : {
+          "Path" : "Asset/Materials/Auto/isl_Expo.mat"
+        },
+        "Generate Overlap Events" : true,
+        "Location" : [1.000000, 5.000000, 1.000000],
+        "Rotation" : [-0.000000, 0.000000, 0.000000],
+        "Scale" : [2.000000, 2.000000, 1.000000],
+        "Static Mesh" : "Data/Floor/Road.obj",
+        "Two Sided Shadow" : false,
+        "Visible" : true,
+        "bEditorOnly" : false,
+        "bTickEnable" : true
+      }
+    },
+    "bVisible" : true
+  },
+  "Type" : "ActorPrefab",
+  "Version" : 1
+}

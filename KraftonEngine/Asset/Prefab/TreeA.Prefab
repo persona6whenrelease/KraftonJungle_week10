@@ -1,0 +1,64 @@
+{
+  "Name" : "TreeA",
+  "RootActor" : {
+    "ActorUUID" : 21261,
+    "ClassName" : "AActor",
+    "NonSceneComponents" : [],
+    "RootComponent" : {
+      "Children" : [{
+          "Children" : [],
+          "ClassName" : "UBoxComponent",
+          "Properties" : {
+            "Blocks Movement" : true,
+            "Box Extent" : [0.500000, 0.500000, 0.500000],
+            "Cast Shadow" : true,
+            "Generate Overlap Events" : true,
+            "Location" : [0.047824, -0.156921, 0.485547],
+            "Rotation" : [0.000000, 0.000000, 0.000000],
+            "Scale" : [0.594817, 0.604542, 1.000000],
+            "Two Sided Shadow" : false,
+            "Visible" : true,
+            "bEditorOnly" : false,
+            "bTickEnable" : true
+          }
+        }, {
+          "Children" : [],
+          "ClassName" : "UBoxComponent",
+          "Properties" : {
+            "Blocks Movement" : true,
+            "Box Extent" : [0.500000, 0.500000, 0.500000],
+            "Cast Shadow" : true,
+            "Generate Overlap Events" : true,
+            "Location" : [-0.108513, 0.000000, 1.832060],
+            "Rotation" : [0.000000, 0.000000, 0.000000],
+            "Scale" : [2.058692, 2.076035, 1.604878],
+            "Two Sided Shadow" : false,
+            "Visible" : true,
+            "bEditorOnly" : false,
+            "bTickEnable" : true
+          }
+        }],
+      "ClassName" : "UStaticMeshComponent",
+      "Properties" : {
+        "Blocks Movement" : true,
+        "Cast Shadow" : true,
+        "Element 0" : {
+          "Path" : "Asset/Materials/Auto/VoxelTreeA.mat"
+        },
+        "Generate Overlap Events" : true,
+        "Location" : [-7.438996, 6.951361, 6.933516],
+        "Rotation" : [0.000000, 0.000000, 0.000000],
+        "Scale" : [0.900000, 0.900000, 0.900000],
+        "Static Mesh" : "Data/VoxelTrees/VoxelTreeA.obj",
+        "Two Sided Shadow" : false,
+        "Visible" : true,
+        "bEditorOnly" : false,
+        "bTickEnable" : true
+      }
+    },
+    "Tags" : [],
+    "bVisible" : true
+  },
+  "Type" : "ActorPrefab",
+  "Version" : 1
+}

@@ -1,0 +1,21 @@
+#gameover-panel {
+    left: 50%;
+    top: 50%;
+    width: 420px;
+    margin-left: -210px;
+    margin-top: -270px;
+}
+
+.rank-block {
+    margin-top: 12px;
+    padding: 12px 14px;
+    background-color: rgba(11, 17, 29, 210);
+    border-radius: 8px;
+}
+
+.rank-value {
+    margin-top: 8px;
+    color: #f8fafc;
+    font-size: 18px;
+    line-height: 24px;
+}

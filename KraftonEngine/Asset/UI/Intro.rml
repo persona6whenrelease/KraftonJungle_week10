@@ -1,0 +1,30 @@
+<rml>
+<head>
+    <link type="text/rcss" href="Common.rcss"/>
+    <link type="text/rcss" href="Intro.rcss"/>
+</head>
+<body>
+    <div id="intro-root" class="screen-root">
+        <div id="intro-panel" class="glass-panel">
+            <div class="panel-eyebrow">Team 7</div>
+            <div id="game-title">마당을 나온 치킨</div>
+            <div id="game-subtitle">오늘 저녁은 치킨이닭!</div>
+
+            <div id="intro-main-panel">
+                <div id="ui-start" class="menu-button primary">플레이</div>
+                <div id="ui-settings" class="menu-button">설정</div>
+                <div id="ui-exit" class="menu-button danger">종료</div>
+            </div>
+
+            <div id="intro-options-panel">
+                <div class="option-button" id="ui-intro-toggle-fullscreen">전체화면</div>
+                <div class="option-button" id="ui-intro-toggle-fxaa">FXAA: 꺼짐</div>
+                <div id="ui-intro-back" class="menu-button slim">뒤로</div>
+            </div>
+        </div>
+
+        <div id="intro-soft-top" class="soft-overlay-top"></div>
+        <div id="intro-soft-bottom" class="soft-overlay-bottom"></div>
+    </div>
+</body>
+</rml>

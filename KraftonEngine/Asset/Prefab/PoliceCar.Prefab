@@ -1,0 +1,168 @@
+{
+  "Name" : "PoliceCar",
+  "RootActor" : {
+    "ActorUUID" : 1,
+    "ClassName" : "AActor",
+    "NonSceneComponents" : [{
+        "ClassName" : "UProjectileMovementComponent",
+        "Properties" : {
+          "Auto Register Updated" : true,
+          "Controller Input Priority" : 0,
+          "Initial Speed" : 0.000000,
+          "Last Controller Delta" : [0.000000, 0.000000, 0.000000],
+          "Last Controller Direction" : [0.000000, 0.000000, 0.000000],
+          "Max Speed" : 100.000000,
+          "Receive Controller Input" : false,
+          "Updated Component" : "",
+          "Velocity" : [0.000000, 0.000000, 0.000000],
+          "bEditorOnly" : false,
+          "bTickEnable" : true
+        }
+      }],
+    "RootComponent" : {
+      "Children" : [{
+          "Children" : [],
+          "ClassName" : "UBoxComponent",
+          "Properties" : {
+            "Blocks Movement" : true,
+            "Box Extent" : [0.500000, 0.500000, 0.500000],
+            "Cast Shadow" : true,
+            "Generate Overlap Events" : true,
+            "Location" : [0.000000, 0.000000, 0.414430],
+            "Rotation" : [0.000000, 0.000000, 0.000000],
+            "Scale" : [1.692289, 3.252820, 0.816252],
+            "Two Sided Shadow" : false,
+            "Visible" : true,
+            "bEditorOnly" : false,
+            "bTickEnable" : true
+          }
+        }],
+      "ClassName" : "UStaticMeshComponent",
+      "Properties" : {
+        "Blocks Movement" : true,
+        "Cast Shadow" : true,
+        "Element 0" : {
+          "Path" : "Asset/Materials/Auto/Police_Car_Black_Part.mat"
+        },
+        "Element 1" : {
+          "Path" : "Asset/Materials/Auto/Police_front_grill.mat"
+        },
+        "Element 10" : {
+          "Path" : "Asset/Materials/Auto/Police_Grill_Back_Design.mat"
+        },
+        "Element 11" : {
+          "Path" : "Asset/Materials/Auto/Police_Material.003.mat"
+        },
+        "Element 12" : {
+          "Path" : "Asset/Materials/Auto/Police_Mirrror_Border.mat"
+        },
+        "Element 13" : {
+          "Path" : "Asset/Materials/Auto/Police_Mirror_Glass.mat"
+        },
+        "Element 14" : {
+          "Path" : "Asset/Materials/Auto/Police_back_design.001.mat"
+        },
+        "Element 15" : {
+          "Path" : "Asset/Materials/Auto/Police_back_design.mat"
+        },
+        "Element 16" : {
+          "Path" : "Asset/Materials/Auto/Police_yellow_light.mat"
+        },
+        "Element 17" : {
+          "Path" : "Asset/Materials/Auto/Police_material_0.mat"
+        },
+        "Element 18" : {
+          "Path" : "Asset/Materials/Auto/Police_Tyre_Outer_Design.mat"
+        },
+        "Element 19" : {
+          "Path" : "Asset/Materials/Auto/Police_Tyre__part.mat"
+        },
+        "Element 2" : {
+          "Path" : "Asset/Materials/Auto/Police_material.mat"
+        },
+        "Element 20" : {
+          "Path" : "Asset/Materials/Auto/Police_Tyre_design.mat"
+        },
+        "Element 21" : {
+          "Path" : "Asset/Materials/Auto/Police_default.mat"
+        },
+        "Element 22" : {
+          "Path" : "Asset/Materials/Auto/Police_back_bottom_metal.mat"
+        },
+        "Element 23" : {
+          "Path" : "Asset/Materials/Auto/Police_Material.002.mat"
+        },
+        "Element 24" : {
+          "Path" : "Asset/Materials/Auto/Police_front_bar_design.mat"
+        },
+        "Element 25" : {
+          "Path" : "Asset/Materials/Auto/Police_Material.005.mat"
+        },
+        "Element 26" : {
+          "Path" : "Asset/Materials/Auto/Police_HeadLight_Border.mat"
+        },
+        "Element 27" : {
+          "Path" : "Asset/Materials/Auto/Police_Headlight.mat"
+        },
+        "Element 28" : {
+          "Path" : "Asset/Materials/Auto/Police_Police_Siren.mat"
+        },
+        "Element 29" : {
+          "Path" : "Asset/Materials/Auto/Police_siren_midden_part.mat"
+        },
+        "Element 3" : {
+          "Path" : "Asset/Materials/Auto/Police_Remaining_black_side_part.mat"
+        },
+        "Element 30" : {
+          "Path" : "Asset/Materials/Auto/Police_siren_red_light.mat"
+        },
+        "Element 31" : {
+          "Path" : "Asset/Materials/Auto/Police_Siren_Blue_light.mat"
+        },
+        "Element 32" : {
+          "Path" : "Asset/Materials/Auto/Police_siren_bottom.mat"
+        },
+        "Element 33" : {
+          "Path" : "Asset/Materials/Auto/Police_star_design.mat"
+        },
+        "Element 34" : {
+          "Path" : "Asset/Materials/Auto/Police_tail_lightt.mat"
+        },
+        "Element 35" : {
+          "Path" : "Asset/Materials/Auto/Police_til_light_border.mat"
+        },
+        "Element 4" : {
+          "Path" : "Asset/Materials/Auto/Police_Headlight_back.mat"
+        },
+        "Element 5" : {
+          "Path" : "Asset/Materials/Auto/Police_Car_Glass.mat"
+        },
+        "Element 6" : {
+          "Path" : "Asset/Materials/Auto/Police_upper_yre_border.mat"
+        },
+        "Element 7" : {
+          "Path" : "Asset/Materials/Auto/Police_Material.007.mat"
+        },
+        "Element 8" : {
+          "Path" : "Asset/Materials/Auto/Police_Material.008.mat"
+        },
+        "Element 9" : {
+          "Path" : "Asset/Materials/Auto/Police_car_black_remaining.mat"
+        },
+        "Generate Overlap Events" : true,
+        "Location" : [0.000000, 0.000000, 0.000000],
+        "Rotation" : [0.000000, 0.000000, 0.000000],
+        "Scale" : [1.000000, 1.000000, 1.000000],
+        "Static Mesh" : "Data/VoxelCars/PoliceCar.obj",
+        "Two Sided Shadow" : false,
+        "Visible" : true,
+        "bEditorOnly" : false,
+        "bTickEnable" : true
+      }
+    },
+    "Tags" : ["Vehicle"],
+    "bVisible" : true
+  },
+  "Type" : "ActorPrefab",
+  "Version" : 1
+}

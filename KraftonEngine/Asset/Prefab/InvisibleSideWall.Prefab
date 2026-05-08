@@ -1,0 +1,29 @@
+{
+  "Name" : "InvisibleSideWall",
+  "RootActor" : {
+    "ActorUUID" : 240515,
+    "ClassName" : "AActor",
+    "NonSceneComponents" : [],
+    "RootComponent" : {
+      "Children" : [],
+      "ClassName" : "UBoxComponent",
+      "Properties" : {
+        "Blocks Movement" : true,
+        "Box Extent" : [1.000000, 0.500000, 2.000000],
+        "Cast Shadow" : false,
+        "Generate Overlap Events" : true,
+        "Location" : [0.000000, 0.000000, 1.000000],
+        "Rotation" : [0.000000, 0.000000, 0.000000],
+        "Scale" : [1.000000, 1.000000, 1.000000],
+        "Two Sided Shadow" : false,
+        "Visible" : false,
+        "bEditorOnly" : false,
+        "bTickEnable" : true
+      }
+    },
+    "Tags" : [],
+    "bVisible" : true
+  },
+  "Type" : "ActorPrefab",
+  "Version" : 1
+}

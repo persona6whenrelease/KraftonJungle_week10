@@ -1,0 +1,125 @@
+{
+  "Name" : "ChickenPlayer",
+  "RootActor" : {
+    "ActorUUID" : 108,
+    "ClassName" : "APawn",
+    "NonSceneComponents" : [{
+        "ClassName" : "UHopMovementComponent",
+        "Properties" : {
+          "Acceleration" : 2048.000000,
+          "Auto Register Updated" : false,
+          "Braking Deceleration" : 4096.000000,
+          "Controller Input Priority" : 10,
+          "Dash Duration" : 0.150000,
+          "Dash Speed" : 85.000000,
+          "Hop Coefficient" : 1.000000,
+          "Hop Frequency" : 6.000000,
+          "Hop Height" : 0.150000,
+          "Hop Only When Moving" : true,
+          "Initial Speed" : 10.000000,
+          "Last Controller Delta" : [0.000000, 0.000000, 0.000000],
+          "Last Controller Direction" : [0.000000, 0.000000, 0.000000],
+          "Max Speed" : 15.000000,
+          "Receive Controller Input" : true,
+          "Reset Hop When Idle" : true,
+          "Simulating" : true,
+          "Updated Component" : "Root",
+          "Velocity" : [0.000000, 0.000000, 0.000000],
+          "Visual Hop Component" : "Root/0",
+          "bEditorOnly" : false,
+          "bTickEnable" : true
+        }
+      }, {
+        "ClassName" : "UPawnMovementComponent",
+        "Properties" : {
+          "Auto Register Updated" : true,
+          "Controller Input Priority" : 0,
+          "Last Controller Delta" : [0.000000, 0.000000, 0.000000],
+          "Last Controller Direction" : [0.000000, 0.000000, 0.000000],
+          "Receive Controller Input" : false,
+          "Updated Component" : "",
+          "bEditorOnly" : false,
+          "bTickEnable" : true
+        }
+      }, {
+        "ClassName" : "UPawnOrientationComponent",
+        "Properties" : {
+          "Custom Facing Direction" : [1.000000, 0.000000, 0.000000],
+          "Facing Mode" : 1,
+          "Min Facing Input Size" : 0.010000,
+          "Min Facing Speed" : 1.000000,
+          "Rotation Speed" : 720.000000,
+          "Yaw Only" : true,
+          "bEditorOnly" : false,
+          "bTickEnable" : true
+        }
+      }, {
+        "ClassName" : "ULuaScriptComponent",
+        "Properties" : {
+          "ScriptPath" : "Game/IntroCameraController.lua",
+          "bEditorOnly" : false,
+          "bTickEnable" : true
+        }
+      }, {
+        "ClassName" : "ULuaScriptComponent",
+        "Properties" : {
+          "ScriptPath" : "Game/GameManager.lua",
+          "bEditorOnly" : false,
+          "bTickEnable" : true
+        }
+      }, {
+        "ClassName" : "UParryComponent",
+        "Properties" : {
+          "bEditorOnly" : false,
+          "bTickEnable" : true
+        }
+      }, {
+        "ClassName" : "ULuaScriptComponent",
+        "Properties" : {
+          "ScriptPath" : "Game/Player.lua",
+          "bEditorOnly" : false,
+          "bTickEnable" : true
+        }
+      }],
+    "RootComponent" : {
+      "Children" : [{
+          "Children" : [],
+          "ClassName" : "UStaticMeshComponent",
+          "Properties" : {
+            "Blocks Movement" : true,
+            "Cast Shadow" : true,
+            "Element 0" : {
+              "Path" : "Asset/Materials/Auto/ChickenBaseColor.mat"
+            },
+            "Generate Overlap Events" : true,
+            "Location" : [0.000000, 0.000000, 0.000000],
+            "Rotation" : [0.000000, 0.000000, 0.000000],
+            "Scale" : [1.000000, 1.000000, 1.000000],
+            "Static Mesh" : "Data/Chicken/Chicken.obj",
+            "Two Sided Shadow" : false,
+            "Visible" : true,
+            "bEditorOnly" : false,
+            "bTickEnable" : true
+          }
+        }],
+      "ClassName" : "UBoxComponent",
+      "Properties" : {
+        "Blocks Movement" : true,
+        "Box Extent" : [0.500000, 0.300000, 0.500000],
+        "Cast Shadow" : true,
+        "Generate Overlap Events" : true,
+        "Location" : [0.000000, 0.501545, 0.300000],
+        "Rotation" : [0.000000, 0.000000, 0.000000],
+        "Scale" : [0.402405, 0.402405, 0.402405],
+        "Two Sided Shadow" : false,
+        "Visible" : true,
+        "bEditorOnly" : false,
+        "bTickEnable" : true
+      }
+    },
+    "Tags" : [],
+    "bVisible" : true
+  },
+  "Type" : "ActorPrefab",
+  "Version" : 1
+}

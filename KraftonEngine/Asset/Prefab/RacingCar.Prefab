@@ -1,0 +1,126 @@
+{
+  "Name" : "RacingCar",
+  "RootActor" : {
+    "ActorUUID" : 312,
+    "ClassName" : "AActor",
+    "NonSceneComponents" : [{
+        "ClassName" : "UProjectileMovementComponent",
+        "Properties" : {
+          "Auto Register Updated" : true,
+          "Controller Input Priority" : 0,
+          "Initial Speed" : 0.000000,
+          "Last Controller Delta" : [0.000000, 0.000000, 0.000000],
+          "Last Controller Direction" : [0.000000, 0.000000, 0.000000],
+          "Max Speed" : 100.000000,
+          "Receive Controller Input" : false,
+          "Updated Component" : "",
+          "Velocity" : [0.000000, 0.000000, 0.000000],
+          "bEditorOnly" : false,
+          "bTickEnable" : true
+        }
+      }],
+    "RootComponent" : {
+      "Children" : [{
+          "Children" : [],
+          "ClassName" : "UBoxComponent",
+          "Properties" : {
+            "Blocks Movement" : true,
+            "Box Extent" : [0.500000, 0.500000, 0.500000],
+            "Cast Shadow" : true,
+            "Generate Overlap Events" : true,
+            "Location" : [0.000000, 0.000000, 0.229398],
+            "Rotation" : [0.000000, 0.000000, 0.000000],
+            "Scale" : [0.880399, 1.813011, 0.466532],
+            "Two Sided Shadow" : false,
+            "Visible" : true,
+            "bEditorOnly" : false,
+            "bTickEnable" : true
+          }
+        }],
+      "ClassName" : "UStaticMeshComponent",
+      "Properties" : {
+        "Blocks Movement" : true,
+        "Cast Shadow" : true,
+        "Element 0" : {
+          "Path" : "Asset/Materials/Auto/gt3Vehicle_Exterior_mm_badges1.mat"
+        },
+        "Element 1" : {
+          "Path" : "Asset/Materials/Auto/livery.mat"
+        },
+        "Element 10" : {
+          "Path" : "Asset/Materials/Auto/glass_surr.mat"
+        },
+        "Element 11" : {
+          "Path" : "Asset/Materials/Auto/light_glass.mat"
+        },
+        "Element 12" : {
+          "Path" : "Asset/Materials/Auto/mirrors.mat"
+        },
+        "Element 13" : {
+          "Path" : "Asset/Materials/Auto/red_glass.mat"
+        },
+        "Element 14" : {
+          "Path" : "Asset/Materials/Auto/gt3Vehicle_Exterior_mm_rotor_009.mat"
+        },
+        "Element 15" : {
+          "Path" : "Asset/Materials/Auto/gt3Vehicle_Exterior_mm_tyre_009.mat"
+        },
+        "Element 16" : {
+          "Path" : "Asset/Materials/Auto/gt3Vehicle_Exterior_mm_wheel_009.mat"
+        },
+        "Element 17" : {
+          "Path" : "Asset/Materials/Auto/intVehicle_Interior_mm_int1.mat"
+        },
+        "Element 18" : {
+          "Path" : "Asset/Materials/Auto/intVehicle_Interior_mm_mat01.mat"
+        },
+        "Element 19" : {
+          "Path" : "Asset/Materials/Auto/intVehicle_Interior_mm_mat05.mat"
+        },
+        "Element 2" : {
+          "Path" : "Asset/Materials/Auto/gt3Vehicle_Exterior_mm_ext1.mat"
+        },
+        "Element 20" : {
+          "Path" : "Asset/Materials/Auto/intVehicle_Interior_mm_mat07.mat"
+        },
+        "Element 21" : {
+          "Path" : "Asset/Materials/Auto/intVehicle_Interior_mm_sw1.mat"
+        },
+        "Element 3" : {
+          "Path" : "Asset/Materials/Auto/gt3Vehicle_Exterior_mm_lights1.mat"
+        },
+        "Element 4" : {
+          "Path" : "Asset/Materials/Auto/gt3Vehicle_Exterior_mm_misc1.mat"
+        },
+        "Element 5" : {
+          "Path" : "Asset/Materials/Auto/gt3Vehicle_Exterior_mm_windows1.mat"
+        },
+        "Element 6" : {
+          "Path" : "Asset/Materials/Auto/grille.mat"
+        },
+        "Element 7" : {
+          "Path" : "Asset/Materials/Auto/light_emissive.mat"
+        },
+        "Element 8" : {
+          "Path" : "Asset/Materials/Auto/gt3Vehicle_Exterior_mm_chassis1.mat"
+        },
+        "Element 9" : {
+          "Path" : "Asset/Materials/Auto/gt3Vehicle_Exterior_mm_cab1.mat"
+        },
+        "Generate Overlap Events" : true,
+        "Location" : [9.936308, 0.000000, 0.000000],
+        "Rotation" : [0.000000, 0.000000, 0.000000],
+        "Scale" : [1.200000, 1.200000, 1.200000],
+        "Static Mesh" : "Data/VoxelCars/RacingCar.obj",
+        "Two Sided Shadow" : false,
+        "Visible" : true,
+        "bEditorOnly" : false,
+        "bTickEnable" : true
+      }
+    },
+    "Tags" : ["Vehicle"],
+    "bVisible" : true
+  },
+  "Type" : "ActorPrefab",
+  "Version" : 1
+}

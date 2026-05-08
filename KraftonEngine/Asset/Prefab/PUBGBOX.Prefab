@@ -1,0 +1,47 @@
+{
+  "Name" : "PUBGBOX",
+  "RootActor" : {
+    "ActorUUID" : 284,
+    "ClassName" : "AActor",
+    "NonSceneComponents" : [],
+    "RootComponent" : {
+      "Children" : [{
+          "Children" : [],
+          "ClassName" : "UBoxComponent",
+          "Properties" : {
+            "Blocks Movement" : true,
+            "Box Extent" : [0.500000, 0.500000, 0.500000],
+            "Cast Shadow" : true,
+            "Generate Overlap Events" : true,
+            "Location" : [0.000967, 0.000000, 1.002765],
+            "Rotation" : [-0.000000, 0.000000, 0.000000],
+            "Scale" : [1.823446, 1.829153, 1.975432],
+            "Two Sided Shadow" : false,
+            "Visible" : true,
+            "bEditorOnly" : false,
+            "bTickEnable" : true
+          }
+        }],
+      "ClassName" : "UStaticMeshComponent",
+      "Properties" : {
+        "Blocks Movement" : true,
+        "Cast Shadow" : true,
+        "Element 0" : {
+          "Path" : "Asset/Materials/Auto/pubgBox.mat"
+        },
+        "Generate Overlap Events" : true,
+        "Location" : [7.228954, 6.605073, -0.103528],
+        "Rotation" : [-0.000000, 0.000000, 0.000000],
+        "Scale" : [0.500000, 0.500000, 0.500000],
+        "Static Mesh" : "Data/PUBGBox/PUBGBox.obj",
+        "Two Sided Shadow" : false,
+        "Visible" : true,
+        "bEditorOnly" : false,
+        "bTickEnable" : true
+      }
+    },
+    "bVisible" : true
+  },
+  "Type" : "ActorPrefab",
+  "Version" : 1
+}

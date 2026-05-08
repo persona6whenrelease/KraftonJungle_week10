@@ -1,0 +1,57 @@
+﻿#include "DecalActor.h"
+#include "Component/DecalComponent.h"
+#include "Component/BillboardComponent.h"
+#include "Component/TextRenderComponent.h"
+#include "Materials/MaterialManager.h"
+
+IMPLEMENT_CLASS(ADecalActor, AActor)
+
+ADecalActor::ADecalActor()
+	: DecalComponent(nullptr)
+{
+	bNeedsTick = true;
+	bTickInEditor = true;
+}
+
+void ADecalActor::InitDefaultComponents()
+{
+	if (DecalComponent && GetRootComponent() == DecalComponent)
+	{
+		BillboardComponent = DecalComponent->EnsureEditorBillboard();
+		return;
+	}
+
+	if (UDecalComponent* RootDecal = Cast<UDecalComponent>(GetRootComponent()))
+	{
+		DecalComponent = RootDecal;
+		BillboardComponent = DecalComponent->EnsureEditorBillboard();
+		return;
+	}
+
+	for (UActorComponent* Component : GetComponents())
+	{
+		if (UDecalComponent* Decal = Cast<UDecalComponent>(Component))
+		{
+			DecalComponent = Decal;
+			BillboardComponent = DecalComponent->EnsureEditorBillboard();
+			return;
+		}
+	}
+
+	if (!GetRootComponent())
+	{
+		DecalComponent = AddComponent<UDecalComponent>();
+		auto Material = FMaterialManager::Get().GetOrCreateMaterial(DefaultDecalMaterialPath);
+		DecalComponent->SetMaterial(Material);
+		SetRootComponent(DecalComponent);
+
+		BillboardComponent = DecalComponent->EnsureEditorBillboard();
+		
+		//// UUID 텍스트 표시
+		//TextRenderComponent = AddComponent<UTextRenderComponent>();
+		//TextRenderComponent->SetRelativeLocation(FVector(0.0f, 0.0f, 1.3f));
+		//TextRenderComponent->SetText("UUID : " + TextRenderComponent->GetOwnerUUIDToString());
+		//TextRenderComponent->AttachToComponent(DecalComponent);
+		//TextRenderComponent->SetFont(FName("Default"));
+	}
+}

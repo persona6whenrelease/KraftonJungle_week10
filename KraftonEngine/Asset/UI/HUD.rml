@@ -1,0 +1,23 @@
+<rml>
+<head>
+    <link type="text/rcss" href="Common.rcss"/>
+    <link type="text/rcss" href="HUD.rcss"/>
+</head>
+<body>
+    <div id="hud-root" class="screen-root">
+        <div id="gauge">
+
+            <div id="gauge-score-area">
+                <div id="gauge-score-label">현재 점수</div>
+                <div id="score-value">0</div>
+            </div>
+
+            <div id="gauge-best-area">
+                <div id="gauge-best-label">최고 점수</div>
+                <div id="best-score-value">0</div>
+            </div>
+
+        </div>
+    </div>
+</body>
+</rml>

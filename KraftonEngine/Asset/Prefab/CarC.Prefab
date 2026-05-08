@@ -1,0 +1,90 @@
+{
+  "Name" : "CarC",
+  "RootActor" : {
+    "ActorUUID" : 141,
+    "ClassName" : "AActor",
+    "NonSceneComponents" : [{
+        "ClassName" : "UProjectileMovementComponent",
+        "Properties" : {
+          "Auto Register Updated" : true,
+          "Controller Input Priority" : 0,
+          "Initial Speed" : 0.000000,
+          "Last Controller Delta" : [0.000000, 0.000000, 0.000000],
+          "Last Controller Direction" : [0.000000, 0.000000, 0.000000],
+          "Max Speed" : 100.000000,
+          "Receive Controller Input" : false,
+          "Updated Component" : "",
+          "Velocity" : [0.000000, 0.000000, 0.000000],
+          "bEditorOnly" : false,
+          "bTickEnable" : true
+        }
+      }],
+    "RootComponent" : {
+      "Children" : [{
+          "Children" : [],
+          "ClassName" : "UBoxComponent",
+          "Properties" : {
+            "Blocks Movement" : true,
+            "Box Extent" : [0.500000, 0.500000, 0.500000],
+            "Cast Shadow" : true,
+            "Generate Overlap Events" : true,
+            "Location" : [0.000000, 0.000000, 0.504003],
+            "Rotation" : [0.000000, 90.000000, 0.000000],
+            "Scale" : [1.946280, 0.914204, 1.000000],
+            "Two Sided Shadow" : false,
+            "Visible" : true,
+            "bEditorOnly" : false,
+            "bTickEnable" : true
+          }
+        }],
+      "ClassName" : "UStaticMeshComponent",
+      "Properties" : {
+        "Blocks Movement" : true,
+        "Cast Shadow" : true,
+        "Element 0" : {
+          "Path" : "Asset/Materials/Auto/red_mat1.005.mat"
+        },
+        "Element 1" : {
+          "Path" : "Asset/Materials/Auto/red_mat3.004.mat"
+        },
+        "Element 2" : {
+          "Path" : "Asset/Materials/Auto/red_mat4.004.mat"
+        },
+        "Element 3" : {
+          "Path" : "Asset/Materials/Auto/red_mat5.004.mat"
+        },
+        "Element 4" : {
+          "Path" : "Asset/Materials/Auto/red_mat7.004.mat"
+        },
+        "Element 5" : {
+          "Path" : "Asset/Materials/Auto/red_mat8.002.mat"
+        },
+        "Element 6" : {
+          "Path" : "Asset/Materials/Auto/red_mat11.001.mat"
+        },
+        "Element 7" : {
+          "Path" : "Asset/Materials/Auto/red_mat12.001.mat"
+        },
+        "Element 8" : {
+          "Path" : "Asset/Materials/Auto/red_mat13.001.mat"
+        },
+        "Element 9" : {
+          "Path" : "Asset/Materials/Auto/red_mat14.001.mat"
+        },
+        "Generate Overlap Events" : true,
+        "Location" : [-13.409752, 12.221790, 11.335864],
+        "Rotation" : [0.000000, 0.000000, 0.000000],
+        "Scale" : [1.000000, 1.000000, 1.000000],
+        "Static Mesh" : "Data/VoxelCars/VoxelCarC.obj",
+        "Two Sided Shadow" : false,
+        "Visible" : true,
+        "bEditorOnly" : false,
+        "bTickEnable" : true
+      }
+    },
+    "Tags" : ["Vehicle"],
+    "bVisible" : true
+  },
+  "Type" : "ActorPrefab",
+  "Version" : 1
+}

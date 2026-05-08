@@ -1,0 +1,161 @@
+# 마우스 우클릭 입력이 Lua까지 전달되지 않는 문제 디버깅
+
+## 목표
+`HopMovementComponent`에 새로 추가한 `Dash()` 함수가 마우스 우클릭으로 트리거되도록 하는 것.
+Lua 측 바인딩(`Player.lua`)은 마우스 우클릭을 감지해 `Player.hopMovement:Dash()`를 호출하도록 작성됨.
+**증상: 우클릭을 해도 Lua 측 `Input.GetKey("MOUSE2")` / `Input.GetKeyDown("MOUSE2")`가 영영 false를 반환.**
+
+## 확정된 사실 (이미 확인 완료)
+
+1. **Lua 바인딩 자체는 정상 등록되어 있음**
+   - `LuaMovementBindings.cpp`의 `RegisterHopMovementComponentBinding`에 `"Dash"` 메서드가 `LUA_COMPONENT_METHOD` 매크로로 등록되어 있음
+   - `LuaInputLibrary.cpp`의 `NameToVK` 함수의 `KeyMap`에 `"MOUSE2" → VK_RBUTTON` 매핑이 정상 존재
+   - 따라서 `Input.GetKey("MOUSE2")`가 `FInputFrame::IsDown(VK_RBUTTON)`까지 도달하는 경로는 정상
+
+2. **Lua 측 진단 결과**
+   - `Player.lua`의 `BuildInputState`에서 `GetKey("MOUSE2")`, `GetKeyDown("MOUSE2")`, `Input.GetMouseButton`, `Input.GetMouseButtonDown` 등 모든 변형을 시도했지만 영영 false
+   - `Input.IsGuiUsingMouse()`는 `false` 반환 (즉 `FGameplayInputRouter::ApplyGuiCapture`의 `ConsumeMouse()`가 호출되지 않음 → `bMouseConsumed`는 false인 상태)
+   - 따라서 GUI 마우스 캡처가 원인이 **아님**
+
+3. **WASD 키보드 입력은 동작함 (단 PIE 첫 진입 시 첫 몇 프레임은 안 됨, 두 번째 PIE 진입부터는 정상)**
+   - 이는 `InputSystem::Tick()`의 윈도우 포커스 체크(`GetForegroundWindow() == OwnerHWnd`)가 PIE 첫 진입 직후 실패하면서 `ResetAllKeyStates()`를 부르는 타이밍 문제로 추정됨 (별개 이슈)
+
+4. **`InputSystem::Tick()`은 `GetAsyncKeyState`로 폴링**
+   - `for (int i = 0; i < 256; ++i) { CurrentStates[i] = (GetAsyncKeyState(i) & 0x8000) != 0; }`
+   - 즉 키보드와 마우스 버튼이 **같은 경로**로 폴링됨 → 구조상으로는 마우스 버튼도 정상 캡처되어야 함
+
+## 확인해야 할 가설 (우선순위 순)
+
+### 가설 A: `OwnerHWnd` 미설정/오설정
+- `InputSystem::SetOwnerWindow(HWND)`가 어디서 호출되는지 추적 필요
+- 만약 `OwnerHWnd`가 PIE 윈도우와 다른 윈도우(예: 에디터 메인 윈도우)로 세팅되어 있다면, PIE 윈도우가 foreground일 때 `GetForegroundWindow() != OwnerHWnd`가 되어 매 프레임 `ResetAllKeyStates()` 호출됨
+- 하지만 이 가설이 맞다면 WASD도 영영 안 되어야 함 → 가설 단독으로는 설명 불충분
+
+### 가설 B: `FGameplayInputRouter::Route`가 호출되지 않거나, 호출되어도 PIE 컨텍스트와 다른 InputFrame이 Lua에 전달
+- `Route` 호출부를 grep 해서 누가 어디서 호출하는지 확인
+- 특히 `bAllowScriptInput`, `bAllowViewportInput`, `World`, `ViewportClient` 인자가 PIE 모드에서 정상 세팅되는지
+- `FLuaInputLibrary::SetCurrentFrame`이 호출되는 지점이 단 하나인지, 혹시 다른 경로에서 nullptr로 클리어하는 코드가 있는지 (특히 `FLuaInputLibrary::ClearCurrentFrame()`)
+
+### 가설 C: ViewportClient의 입력 처리가 마우스 버튼만 소비
+- `UGameViewportClient::Tick(DeltaTime, InputFrame)` 안에서 `InputFrame.ConsumeKey(VK_RBUTTON)` 또는 `InputFrame.ConsumeMouse()` 류 호출이 있는지 확인
+- `ControllerInputComponent::ApplyLookInput`은 `Mouse Delta`만 보고 마우스 버튼은 안 건드림 → 이쪽은 무관해 보임. 다만 `ApplyLookInput` 외 다른 곳에서 우클릭을 직접 소비하는 코드가 있는지 확인 필요
+
+### 가설 D: 호출 순서 문제 — Lua가 보는 시점에는 이미 Frame이 소비됨
+- `FGameplayInputRouter::Route` 본문을 보면 `SetCurrentFrame` → Lua Input 호출 → ViewportClient Tick → `ClearCurrentFrame` 순서임
+- 즉 Lua가 먼저 보는 게 맞음 → 순서 문제는 아닐 가능성이 높지만, Lua의 어떤 다른 시스템(예: 다른 LuaScriptComponent)이 더 먼저 실행되어 `ConsumeMouse()`를 부르고 있을 수 있음
+- `Player.lua`의 `BuildInputState`가 호출되는 시점에 `IsKeyConsumed(VK_RBUTTON)`이 true인지 확인 필요
+
+## 진단 작업 요청
+
+다음 순서로 진행해주세요:
+
+### Step 1. C++ 측 임시 진단 로그 삽입
+
+`InputSystem.cpp`의 `UpdateCurrentSnapshot()` 함수 마지막 (`CurrentSnapshot = Snapshot;` 직전):
+
+```cpp
+// 임시 진단: 우클릭 상태가 Snapshot까지 도달하는지 확인
+static bool sLastRBtn = false;
+const bool bRBtnNow = Snapshot.KeyDown[VK_RBUTTON];
+if (bRBtnNow != sLastRBtn)
+{
+    UE_LOG("[DIAG-IS] RBUTTON KeyDown=%d, GuiMouse=%d, Focused=%d, RawMouse=%d, OwnerHWnd=%p, FG=%p",
+        bRBtnNow ? 1 : 0,
+        Snapshot.bGuiUsingMouse ? 1 : 0,
+        Snapshot.bWindowFocused ? 1 : 0,
+        Snapshot.bUsingRawMouse ? 1 : 0,
+        OwnerHWnd,
+        GetForegroundWindow());
+    sLastRBtn = bRBtnNow;
+}
+```
+
+`GameplayInputRouter.cpp`의 `Route` 함수, `FLuaInputLibrary::SetCurrentFrame(&InputFrame);` 직전:
+
+```cpp
+// 임시 진단: Lua가 보는 시점의 RBUTTON 상태와 소비 여부
+static bool sLastRBtn = false;
+const bool bRBtnIsDown = InputFrame.IsDown(VK_RBUTTON);
+const bool bRawSnapshot = InputFrame.GetSnapshot().KeyDown[VK_RBUTTON];
+const bool bConsumed = InputFrame.IsKeyConsumed(VK_RBUTTON);
+if (bRawSnapshot != sLastRBtn)
+{
+    UE_LOG("[DIAG-Router] IsDown=%d, RawSnapshot=%d, Consumed=%d, MouseConsumed=%d, KbdConsumed=%d",
+        bRBtnIsDown ? 1 : 0,
+        bRawSnapshot ? 1 : 0,
+        bConsumed ? 1 : 0,
+        InputFrame.IsMouseConsumed() ? 1 : 0,
+        InputFrame.IsKeyboardConsumed() ? 1 : 0);
+    sLastRBtn = bRawSnapshot;
+}
+```
+
+`UE_LOG` 매크로 시그니처는 프로젝트의 다른 사용 예시에 맞춰주세요 (`Core/Log.h` 참고).
+
+### Step 2. PIE 진입 후 우클릭 시 콘솔 로그 패턴 확인
+
+| 패턴 | 끊긴 지점 | 다음 조치 |
+|---|---|---|
+| `[DIAG-IS]`도 안 찍힘 | `Snapshot.KeyDown[VK_RBUTTON]` 자체가 false | `OwnerHWnd`/`GetForegroundWindow()` 값 확인. `bWindowFocused`가 false가 아닌지. PIE 윈도우 핸들과 일치하는지 |
+| `[DIAG-IS] KeyDown=1` 찍히지만 `[DIAG-Router] RawSnapshot=0` | InputFrame 생성 시 다른 Snapshot 사용 | `FInputFrame` 생성자 호출부 추적. 어떤 Snapshot이 InputFrame에 전달되는지 |
+| `[DIAG-Router] RawSnapshot=1`, `Consumed=1` | 누가 ConsumeKey(VK_RBUTTON) 호출 중 | `ConsumeKey`/`ConsumeMouse`/`ConsumeKeyboard` 호출부 grep |
+| `[DIAG-Router] RawSnapshot=1`, `IsDown=1`, `Consumed=0` | C++까지 정상, Lua 측 문제 | `Player.lua`의 `BuildInputState`가 같은 프레임에 호출되는지, `GCurrentFrame`이 nullptr이 아닌지 추가 확인 |
+| `[DIAG-IS] Focused=0` | 윈도우 포커스 미확보 | `OwnerHWnd` 설정부 추적 |
+
+### Step 3. 끊긴 지점에 따라 코드 추적
+
+각 패턴별로 다음 파일/심볼을 grep:
+- `InputSystem::SetOwnerWindow` 호출부 (전체 프로젝트)
+- `FGameplayInputRouter::Route` 호출부 (전체 프로젝트)
+- `FInputFrame` 생성자 호출부 (전체 프로젝트)
+- `ConsumeKey(VK_RBUTTON)`, `ConsumeMouse()`, `ConsumeKeyboard()`, `ConsumeAll()` 호출부 (전체 프로젝트)
+- `FLuaInputLibrary::SetCurrentFrame` / `ClearCurrentFrame` 호출부 (전체 프로젝트)
+
+### Step 4. 원인 확정 후 수정
+
+원인이 확정되면 가장 작은 변경으로 수정. 진단 로그는 모두 제거.
+
+## 참고: HopMovementComponent의 Dash 구현은 이미 완료
+
+- `HopMovementComponent::Dash()` 함수는 작성 완료 (캐릭터 Forward로 Velocity 주입 + DashTimeRemaining 타이머 설정)
+- `TickComponent`에 Dash 타이머 분기 추가됨 (Dash 중에는 MoveTowards 우회)
+- Dash 자체는 정상 동작할 것으로 예상되며, **현재 막혀 있는 건 입력이 함수까지 도달하지 못하는 것**
+
+## 참고: 사용 중인 입력 시스템 구조 요약
+
+```
+[Windows 메시지 펌프]
+    ↓
+InputSystem::Tick()
+    - GetAsyncKeyState로 키보드/마우스 폴링
+    - bWindowFocused 체크 (GetForegroundWindow() == OwnerHWnd)
+    - !bWindowFocused면 ResetAllKeyStates 후 return
+    - UpdateCurrentSnapshot()으로 FInputSystemSnapshot 갱신
+    ↓
+FInputFrame 생성 (Snapshot 받음)
+    ↓
+FGameplayInputRouter::Route(InputFrame, Context)
+    - ApplyGuiCapture (GUI가 키보드/마우스 잡으면 Consume)
+    - FLuaInputLibrary::SetCurrentFrame(&InputFrame)
+    - LuaScriptSubsystem::CallInput → Player.lua의 Tick 실행
+    - ViewportClient->Tick(InputFrame) → ControllerInputComponent::ApplyInput
+    - FLuaInputLibrary::ClearCurrentFrame()
+```
+
+## 첨부할 파일들
+
+이 디버깅에 필요한 파일들 (사용자가 이미 가지고 있음):
+- HopMovementComponent.h/cpp, MovementComponent.h/cpp
+- Player.lua
+- LuaBindings.h/cpp, LuaBindingHelper.h, LuaComponentBindings.cpp, LuaMovementBindings.cpp, LuaPlayerControllerBindings.cpp
+- LuaInputLibrary.h/cpp
+- ControllerInputComponent.h/cpp
+- GameplayInputRouter.h/cpp
+- InputFrame.h, InputSystem.h/cpp
+
+추가로 필요할 가능성이 높은 파일들 (Claude Code가 직접 grep해서 찾아야 함):
+- `InputSystem::SetOwnerWindow`를 호출하는 파일 (PIE 시작/엔진 부팅부)
+- `FGameplayInputRouter::Route`를 호출하는 파일
+- `FInputFrame`을 생성하는 파일
+- `UGameViewportClient::Tick`의 마우스 버튼 처리부
+- `LuaScriptSubsystem`의 `CallInput` 구현

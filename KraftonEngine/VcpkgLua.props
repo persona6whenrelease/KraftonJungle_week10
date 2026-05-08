@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <VcpkgTriplet>x64-windows</VcpkgTriplet>
+    <VcpkgInstalledRoot>$(MSBuildProjectDirectory)\..\vcpkg_installed\$(VcpkgTriplet)</VcpkgInstalledRoot>
+
+    <!-- Debug uses vcpkg debug libs/dlls. All release-like custom configs use release. -->
+    <VcpkgLibDir Condition="'$(Configuration)'=='Debug'">$(VcpkgInstalledRoot)\debug\lib</VcpkgLibDir>
+    <VcpkgBinDir Condition="'$(Configuration)'=='Debug'">$(VcpkgInstalledRoot)\debug\bin</VcpkgBinDir>
+    <VcpkgLibDir Condition="'$(VcpkgLibDir)'==''">$(VcpkgInstalledRoot)\lib</VcpkgLibDir>
+    <VcpkgBinDir Condition="'$(VcpkgBinDir)'==''">$(VcpkgInstalledRoot)\bin</VcpkgBinDir>
+
+    <!-- vcpkg's RmlUi port currently installs lowercase rmlui.lib/rmlui.dll. -->
+    <RmlUiLibraryName Condition="Exists('$(VcpkgLibDir)\rmlui.lib')">rmlui.lib</RmlUiLibraryName>
+    <RmlUiLibraryName Condition="'$(RmlUiLibraryName)'=='' And Exists('$(VcpkgLibDir)\RmlUi.lib')">RmlUi.lib</RmlUiLibraryName>
+    <RmlUiLibraryName Condition="'$(RmlUiLibraryName)'=='' And Exists('$(VcpkgLibDir)\RmlCore.lib')">RmlCore.lib</RmlUiLibraryName>
+
+    <!-- RmlUi code is compiled only when the import library is actually present. -->
+    <WithRmlUiDefine Condition="'$(RmlUiLibraryName)'!=''">WITH_RMLUI=1</WithRmlUiDefine>
+    <WithRmlUiDefine Condition="'$(RmlUiLibraryName)'==''">WITH_RMLUI=0</WithRmlUiDefine>
+  </PropertyGroup>
+
+  <ItemDefinitionGroup Condition="'$(Platform)'=='x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>
+        $(VcpkgInstalledRoot)\include\luajit;
+        $(VcpkgInstalledRoot)\include;
+        %(AdditionalIncludeDirectories)
+      </AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>
+        SOL_ALL_SAFETIES_ON=1;
+        SOL_LUAJIT=1;
+        $(WithRmlUiDefine);
+        %(PreprocessorDefinitions)
+      </PreprocessorDefinitions>
+    </ClCompile>
+
+    <Link>
+      <AdditionalLibraryDirectories>
+        $(VcpkgLibDir);
+        %(AdditionalLibraryDirectories)
+      </AdditionalLibraryDirectories>
+      <AdditionalDependencies>
+        lua51.lib;
+        $(RmlUiLibraryName);
+        %(AdditionalDependencies)
+      </AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+
+  <!-- Do not use PostBuildEvent here. The .vcxproj also emits an SFML PostBuildEvent;
+       this standalone target runs in addition to it and copies DLLs to the actual exe dir. -->
+  <Target Name="CopyVcpkgRuntimeDlls"
+          AfterTargets="Build"
+          Condition="'$(Platform)'=='x64' And Exists('$(VcpkgBinDir)')">
+    <ItemGroup>
+      <VcpkgRuntimeDll Include="$(VcpkgBinDir)\*.dll" />
+    </ItemGroup>
+    <Message Importance="High"
+             Text="Copying vcpkg runtime DLLs from $(VcpkgBinDir) to $(TargetDir)" />
+    <Copy SourceFiles="@(VcpkgRuntimeDll)"
+          DestinationFolder="$(TargetDir)"
+          SkipUnchangedFiles="true" />
+  </Target>
+</Project>

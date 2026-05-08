@@ -1,0 +1,11 @@
+#pause-panel {
+    left: 50%;
+    top: 50%;
+    width: 420px;
+    margin-left: -210px;
+    margin-top: -235px;
+}
+
+#options-panel {
+    display: none;
+}

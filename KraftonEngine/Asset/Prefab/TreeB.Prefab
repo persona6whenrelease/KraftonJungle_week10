@@ -1,0 +1,80 @@
+{
+  "Name" : "TreeB",
+  "RootActor" : {
+    "ActorUUID" : 21267,
+    "ClassName" : "AActor",
+    "NonSceneComponents" : [],
+    "RootComponent" : {
+      "Children" : [{
+          "Children" : [],
+          "ClassName" : "UBoxComponent",
+          "Properties" : {
+            "Blocks Movement" : true,
+            "Box Extent" : [0.500000, 0.500000, 0.500000],
+            "Cast Shadow" : true,
+            "Generate Overlap Events" : true,
+            "Location" : [0.000000, 0.076862, 0.340300],
+            "Rotation" : [0.000000, 0.000000, 0.000000],
+            "Scale" : [0.761122, 0.744484, 0.677335],
+            "Two Sided Shadow" : false,
+            "Visible" : true,
+            "bEditorOnly" : false,
+            "bTickEnable" : true
+          }
+        }, {
+          "Children" : [],
+          "ClassName" : "UBoxComponent",
+          "Properties" : {
+            "Blocks Movement" : true,
+            "Box Extent" : [0.500000, 0.500000, 0.500000],
+            "Cast Shadow" : true,
+            "Generate Overlap Events" : true,
+            "Location" : [0.000000, 0.081730, 1.415659],
+            "Rotation" : [0.000000, 0.000000, 0.000000],
+            "Scale" : [2.203831, 2.217384, 1.285832],
+            "Two Sided Shadow" : false,
+            "Visible" : true,
+            "bEditorOnly" : false,
+            "bTickEnable" : true
+          }
+        }, {
+          "Children" : [],
+          "ClassName" : "UBoxComponent",
+          "Properties" : {
+            "Blocks Movement" : true,
+            "Box Extent" : [0.500000, 0.500000, 0.500000],
+            "Cast Shadow" : true,
+            "Generate Overlap Events" : true,
+            "Location" : [0.000000, 0.062151, 2.589615],
+            "Rotation" : [0.000000, 0.000000, 0.000000],
+            "Scale" : [0.760952, 0.760777, 0.830838],
+            "Two Sided Shadow" : false,
+            "Visible" : true,
+            "bEditorOnly" : false,
+            "bTickEnable" : true
+          }
+        }],
+      "ClassName" : "UStaticMeshComponent",
+      "Properties" : {
+        "Blocks Movement" : true,
+        "Cast Shadow" : true,
+        "Element 0" : {
+          "Path" : "Asset/Materials/Auto/VoxelTreeB.mat"
+        },
+        "Generate Overlap Events" : true,
+        "Location" : [-8.278685, 1.548151, 6.180996],
+        "Rotation" : [0.000000, 0.000000, 0.000000],
+        "Scale" : [0.750000, 0.750000, 0.750000],
+        "Static Mesh" : "Data/VoxelTrees/VoxelTreeB.obj",
+        "Two Sided Shadow" : false,
+        "Visible" : true,
+        "bEditorOnly" : false,
+        "bTickEnable" : true
+      }
+    },
+    "Tags" : [],
+    "bVisible" : true
+  },
+  "Type" : "ActorPrefab",
+  "Version" : 1
+}

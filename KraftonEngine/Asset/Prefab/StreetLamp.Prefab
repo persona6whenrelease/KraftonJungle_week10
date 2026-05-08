@@ -1,0 +1,97 @@
+{
+  "Name" : "StreetLamp",
+  "RootActor" : {
+    "ActorUUID" : 245,
+    "ClassName" : "AActor",
+    "NonSceneComponents" : [],
+    "RootComponent" : {
+      "Children" : [{
+          "Children" : [{
+              "Children" : [],
+              "ClassName" : "UBillboardComponent",
+              "Properties" : {
+                "Blocks Movement" : true,
+                "Cast Shadow" : true,
+                "Generate Overlap Events" : true,
+                "Height" : 1.000000,
+                "Location" : [0.000000, 0.000000, 0.000000],
+                "Material" : {
+                  "Path" : "Asset/Materials/Editor/SpotLight.mat"
+                },
+                "Rotation" : [-0.000000, 0.000000, 0.000000],
+                "Scale" : [1.000000, 1.000000, 1.000000],
+                "Two Sided Shadow" : false,
+                "Visible" : true,
+                "Width" : 1.000000,
+                "bEditorOnly" : true,
+                "bTickEnable" : true
+              },
+              "bEditorOnly" : true,
+              "bHiddenInComponentTree" : true
+            }],
+          "ClassName" : "USpotLightComponent",
+          "Properties" : {
+            "AttenuationRadius" : 5.000000,
+            "Cast Shadows" : false,
+            "Color" : [1.000000, 1.000000, 1.000000, 1.000000],
+            "InnerConeAngle" : 5.000000,
+            "Intensity" : 1.000000,
+            "LightFalloffExponent" : 0.250000,
+            "Location" : [0.000000, 0.000000, 4.000000],
+            "OuterConeAngle" : 25.000000,
+            "Rotation" : [89.899994, 0.000000, 0.000000],
+            "Scale" : [1.000000, 1.000000, 1.000000],
+            "Shadow Bias" : -0.000100,
+            "Shadow Normal Bias" : -0.002000,
+            "Shadow Resolution Scale" : 1.000000,
+            "Shadow Sharpen" : 0.500000,
+            "Shadow Slope Bias" : 0.000100,
+            "Visible" : true,
+            "bEditorOnly" : false,
+            "bTickEnable" : true
+          }
+        }],
+      "ClassName" : "UStaticMeshComponent",
+      "Properties" : {
+        "Blocks Movement" : true,
+        "Cast Shadow" : true,
+        "Element 0" : {
+          "Path" : "Asset/Materials/Auto/streetlamp_metalInto.mat"
+        },
+        "Element 1" : {
+          "Path" : "Asset/Materials/Auto/streetlamp_luz_lamp.mat"
+        },
+        "Element 2" : {
+          "Path" : "Asset/Materials/Auto/streetlamp_plasticblanc2.mat"
+        },
+        "Element 3" : {
+          "Path" : "Asset/Materials/Auto/streetlamp_plasticnegret.mat"
+        },
+        "Element 4" : {
+          "Path" : "Asset/Materials/Auto/streetlamp_plasticblanc.mat"
+        },
+        "Element 5" : {
+          "Path" : "Asset/Materials/Auto/streetlamp_metal_lamp.mat"
+        },
+        "Element 6" : {
+          "Path" : "Asset/Materials/Auto/streetlamp_cristal_blanco.mat"
+        },
+        "Element 7" : {
+          "Path" : "Asset/Materials/Auto/streetlamp_negrobombi.mat"
+        },
+        "Generate Overlap Events" : true,
+        "Location" : [-2.247747, -1.993313, -0.500000],
+        "Rotation" : [-0.000000, 0.000000, 0.000000],
+        "Scale" : [1.000000, 1.000000, 1.000000],
+        "Static Mesh" : "Data/Lamp/streelamp.obj",
+        "Two Sided Shadow" : false,
+        "Visible" : true,
+        "bEditorOnly" : false,
+        "bTickEnable" : true
+      }
+    },
+    "bVisible" : true
+  },
+  "Type" : "ActorPrefab",
+  "Version" : 1
+}

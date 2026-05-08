@@ -1,0 +1,58 @@
+#gauge {
+    position: absolute;
+    left: 10px;
+    bottom: -60px;
+    width: 240px;
+    height: 240px;
+    border-radius: 120px;
+    background-color: rgba(6, 10, 16, 235);
+    border-width: 2px;
+    border-color: rgba(240, 190, 96, 130);
+    overflow: hidden;
+}
+
+/* 우상단 - 현재 점수 크게 */
+#gauge-score-area {
+    position: absolute;
+    right: 72px;
+    top: 42px;
+    text-align: right;
+}
+
+#gauge-score-label {
+    display: block;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.45);
+    margin-bottom: 2px;
+}
+
+#score-value {
+    display: block;
+    font-size: 58px;
+    font-weight: bold;
+    color: #ffffff;
+    line-height: 62px;
+}
+
+/* 좌하단 - 최고 점수 작게 */
+#gauge-best-area {
+    position: absolute;
+    left: 42px;
+    bottom: 78px;
+    text-align: left;
+}
+
+#gauge-best-label {
+    display: block;
+    font-size: 10px;
+    color: rgba(240, 190, 96, 160);
+    margin-bottom: 2px;
+}
+
+#best-score-value {
+    display: block;
+    font-size: 22px;
+    font-weight: bold;
+    color: rgba(240, 190, 96, 215);
+    line-height: 26px;
+}

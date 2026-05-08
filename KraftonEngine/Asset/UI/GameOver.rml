@@ -1,0 +1,37 @@
+<rml>
+<head>
+    <link type="text/rcss" href="Common.rcss"/>
+    <link type="text/rcss" href="GameOver.rcss"/>
+</head>
+<body>
+    <div id="gameover-root" class="screen-root">
+        <div class="dim-bg"></div>
+        <div id="gameover-panel" class="panel">
+            <div class="panel-eyebrow">RUN SUMMARY</div>
+            <div class="panel-title">게임 오버</div>
+            <div class="panel-subtitle">이번 기록을 정리하고 바로 다시 시작할 수 있습니다.</div>
+
+            <div class="stat-block">
+                <div class="stat-label">최종 점수</div>
+                <div id="final-score-value" class="stat-value">0</div>
+            </div>
+
+            <div class="stat-block">
+                <div class="stat-label">최고 점수</div>
+                <div id="final-best-value" class="stat-value">0</div>
+            </div>
+
+            <div class="rank-block">
+                <div class="stat-label">상위 기록</div>
+                <div id="top-scores-value" class="rank-value">기록 없음</div>
+            </div>
+
+            <div class="button-row">
+                <div id="ui-restart" class="row-button-left">재시작</div>
+                <div id="ui-gameover-exit" class="row-button-right">종료</div>
+            </div>
+            <div id="ui-main-menu" class="menu-button slim">타이틀로</div>
+        </div>
+    </div>
+</body>
+</rml>

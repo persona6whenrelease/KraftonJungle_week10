@@ -1,0 +1,59 @@
+{
+  "Name" : "AStaticMeshActor_1",
+  "RootActor" : {
+    "ClassName" : "AStaticMeshActor",
+    "NonSceneComponents" : [],
+    "RootComponent" : {
+      "Children" : [{
+          "Children" : [],
+          "ClassName" : "UBoxComponent",
+          "Properties" : {
+            "Box Extent" : [0.500000, 0.500000, 0.500000],
+            "Cast Shadow" : true,
+            "Location" : [0.000000, 0.000000, 0.000000],
+            "Rotation" : [-0.000000, 0.000000, 0.000000],
+            "Scale" : [3.000000, 3.000000, 2.000000],
+            "Two Sided Shadow" : false,
+            "Visible" : true,
+            "bEditorOnly" : false,
+            "bTickEnable" : true
+          }
+        }, {
+          "Children" : [],
+          "ClassName" : "UStaticMeshComponent",
+          "Properties" : {
+            "Cast Shadow" : true,
+            "Element 0" : {
+              "Path" : "Asset/Materials/Auto/BasicShapeMaterial.mat"
+            },
+            "Location" : [0.000000, 0.000000, 1.020537],
+            "Rotation" : [-0.000000, 0.000000, 0.000000],
+            "Scale" : [4.000000, 4.000000, 0.400000],
+            "Static Mesh" : "Data/BasicShape/Sphere.OBJ",
+            "Two Sided Shadow" : false,
+            "Visible" : true,
+            "bEditorOnly" : false,
+            "bTickEnable" : true
+          }
+        }],
+      "ClassName" : "UStaticMeshComponent",
+      "Properties" : {
+        "Cast Shadow" : true,
+        "Element 0" : {
+          "Path" : "Asset/Materials/Auto/BasicShapeMaterial.mat"
+        },
+        "Location" : [9.195351, -4.820687, 2.000000],
+        "Rotation" : [-0.000000, 0.000000, 0.000000],
+        "Scale" : [0.200000, 0.200000, 2.000000],
+        "Static Mesh" : "Data/BasicShape/Cube.OBJ",
+        "Two Sided Shadow" : false,
+        "Visible" : true,
+        "bEditorOnly" : false,
+        "bTickEnable" : true
+      }
+    },
+    "bVisible" : true
+  },
+  "Type" : "ActorPrefab",
+  "Version" : 1
+}
