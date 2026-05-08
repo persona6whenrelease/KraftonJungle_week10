@@ -113,6 +113,9 @@ struct FMatrix {
 	struct FQuat ToQuat() const;
 	struct FRotator ToRotator() const;
 	void SetAxes(const FVector& Right, const FVector& Up, const FVector& Forward);
+
+	//skeletal mesh
+	FVector TransformPosition(const FVector& v) const;
 };
 
 FVector operator* (const FVector& vector, const FMatrix& matrix);

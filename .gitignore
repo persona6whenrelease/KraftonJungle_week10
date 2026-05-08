@@ -462,3 +462,18 @@ CMakeLists.txt
 
 # Vcpkg installed
 /vcpkg_installed
+
+
+# ==========================================
+# My Custom Engine & FBX SDK Settings
+# ==========================================
+
+# 1. 최상위 빌드 결과물 폴더 무시 (exe 및 복사된 dll들이 깃허브에 올라가는 것 방지)
+/x64/
+/x86/
+
+# 2. ThirdParty 폴더 내의 FBX SDK 파일들은 깃허브에 무조건 포함하도록 예외 처리(!)
+# (혹시라도 다른 무시 규칙에 의해 SDK 파일이 누락되는 것을 완벽히 방지합니다)
+!/ThirdParty/FBXSDK/**/*.h
+!/ThirdParty/FBXSDK/**/*.lib
+!/ThirdParty/FBXSDK/**/*.dll
