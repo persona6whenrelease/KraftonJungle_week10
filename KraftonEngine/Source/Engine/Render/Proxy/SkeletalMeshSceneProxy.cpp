@@ -3,6 +3,7 @@
 #include <algorithm>
 #include "Component/SkinnedMeshComponent.h"
 #include "Materials/Material.h"
+#include "Materials/MaterialManager.h"
 #include "Mesh/SkeletalMesh.h"
 
 namespace
@@ -54,6 +55,7 @@ void FSkeletalMeshSceneProxy::RebuildSectionDraws()
 	const TArray<FMeshMaterial>& Slots = Mesh->GetMaterials();
 	const TArray<UMaterial*>& Overrides = SkinnedComp->GetOverrideMaterials();
 	const TArray<FMeshSection>& Sections = Mesh->GetSections();
+	UMaterial* FallbackMaterial = FMaterialManager::Get().GetOrCreateMaterial("None");
 
 	SectionDraws.clear();
 	SectionDraws.reserve(Sections.size());
@@ -71,6 +73,11 @@ void FSkeletalMeshSceneProxy::RebuildSectionDraws()
 				Draw.Material = Overrides[MaterialIndex];
 			else if (Slots[MaterialIndex].MaterialInterface)
 				Draw.Material = Slots[MaterialIndex].MaterialInterface;
+		}
+
+		if (!Draw.Material)
+		{
+			Draw.Material = FallbackMaterial;
 		}
 
 		SectionDraws.push_back(Draw);

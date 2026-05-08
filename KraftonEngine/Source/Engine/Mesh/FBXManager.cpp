@@ -2,6 +2,7 @@
 
 #include "Core/Log.h"
 #include "Engine/Platform/Paths.h"
+#include "Materials/MaterialManager.h"
 #include "Mesh/FBXImporter.h"
 #include "Mesh/SkeletalMesh.h"
 #include "Object/Object.h"
@@ -146,6 +147,7 @@ namespace
 	{
 		TArray<FMeshMaterial> Materials;
 		TSet<FString> AddedSlotNames;
+		UMaterial* FallbackMaterial = FMaterialManager::Get().GetOrCreateMaterial("None");
 
 		for (const FMeshSection& Section : Mesh.Sections)
 		{
@@ -157,7 +159,7 @@ namespace
 
 			FMeshMaterial Material;
 			Material.MaterialSlotName = SlotName;
-			Material.MaterialInterface = nullptr;
+			Material.MaterialInterface = FallbackMaterial;
 			Materials.push_back(Material);
 			AddedSlotNames.insert(std::move(SlotName));
 		}
@@ -166,6 +168,7 @@ namespace
 		{
 			FMeshMaterial Material;
 			Material.MaterialSlotName = "None";
+			Material.MaterialInterface = FallbackMaterial;
 			Materials.push_back(Material);
 		}
 
