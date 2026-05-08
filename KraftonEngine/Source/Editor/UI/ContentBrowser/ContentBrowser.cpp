@@ -307,6 +307,11 @@ void FEditorContentBrowserWidget::RefreshContent()
 			element = std::make_shared<CurveElement>();
 			element.get()->SetIcon(ICons["Default"].Get());
 		}
+		else if (Content.Path.extension() == ".fbx")
+		{
+			element = std::make_shared<FBXElement>();
+			element.get()->SetIcon(ICons["Default"].Get());
+		}
 		else if (Content.Path.extension() == ".png" || Content.Path.extension() == ".PNG")
 		{
 			element = std::make_shared<PNGElement>();

@@ -1,4 +1,4 @@
-#include "Editor/Viewport/FLevelViewportLayout.h"
+﻿#include "Editor/Viewport/FLevelViewportLayout.h"
 
 #include "Editor/EditorEngine.h"
 #include "Editor/Viewport/LevelEditorViewportClient.h"
@@ -39,7 +39,8 @@
 #include "Serialization/PrefabSaveManager.h"
 
 #include "GameFramework/StaticMeshActor.h"
-
+#include "Engine/Mesh/FBXManager.h"
+#include "Component/SkeletalMeshComponent.h"
 #include <algorithm>
 
 namespace
@@ -1051,7 +1052,29 @@ void FLevelViewportLayout::RenderViewportUI(float DeltaTime)
 					SelectionManager->Select(NewActor);
 				}
 			}
-			if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("PrefabContentItem"))
+			else if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("FBXContentItem"))
+			{
+				FContentItem ContentItem = *reinterpret_cast<const FContentItem*>(payload->Data);
+
+				auto SkeletalMesh = FFBXManager::LoadSkeletalMesh(FPaths::ToUtf8(ContentItem.Path));
+				auto NewActor = Cast<AActor>(FObjectFactory::Get().Create(AActor::StaticClass()->GetName(), Editor->GetWorld()));
+				auto SkeletalMeshComponent = NewActor->AddComponent<USkeletalMeshComponent>();
+				SkeletalMeshComponent->SetSkeletalMesh(SkeletalMesh);
+				NewActor->SetRootComponent(SkeletalMeshComponent);
+				Editor->GetWorld()->AddActor(NewActor);
+
+				FVector SpawnLocation(0, 0, 0);
+				FPoint MP = { ImGui::GetIO().MousePos.x, ImGui::GetIO().MousePos.y };
+				if (TryComputePlacementLocation(GetActiveViewportSlotIndex(), MP, SpawnLocation))
+				{
+					NewActor->SetActorLocation(SpawnLocation);
+				}
+				if (SelectionManager)
+				{
+					SelectionManager->Select(NewActor);
+				}
+			}
+			else if(const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("PrefabContentItem"))
 			{
 				FContentItem ContentItem = *reinterpret_cast<const FContentItem*>(payload->Data);
 				FString PrefabPath = FPaths::ToUtf8(ContentItem.Path.wstring());
