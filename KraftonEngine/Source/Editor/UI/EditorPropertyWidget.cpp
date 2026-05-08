@@ -1165,7 +1165,7 @@ void FEditorPropertyWidget::RenderComponentProperties(AActor* Actor, const TArra
 			bAnyChanged = true;
 			PropagatePropertyChange(Props[i].Name, SelectedActors);
 
-			if (Props[i].Type == EPropertyType::StaticMeshRef)
+			if (Props[i].Type == EPropertyType::StaticMeshRef || Props[i].Type == EPropertyType::SkeletalMeshRef)
 				break;
 		}
 	}
@@ -1223,7 +1223,8 @@ void FEditorPropertyWidget::PropagatePropertyChange(const FString& PropName, con
 				case EPropertyType::Color4:         Size = sizeof(float) * 4; break;
 				case EPropertyType::String:
 				case EPropertyType::SceneComponentRef:
-				case EPropertyType::StaticMeshRef:  *static_cast<FString*>(DstProp.ValuePtr) = *static_cast<FString*>(SrcProp->ValuePtr); break;
+				case EPropertyType::StaticMeshRef:
+				case EPropertyType::SkeletalMeshRef: *static_cast<FString*>(DstProp.ValuePtr) = *static_cast<FString*>(SrcProp->ValuePtr); break;
 				case EPropertyType::Name:           *static_cast<FName*>(DstProp.ValuePtr) = *static_cast<FName*>(SrcProp->ValuePtr); break;
 				case EPropertyType::MaterialSlot:   *static_cast<FMaterialSlot*>(DstProp.ValuePtr) = *static_cast<FMaterialSlot*>(SrcProp->ValuePtr); break;
 				case EPropertyType::Enum:           Size = sizeof(int32); break;
@@ -1497,6 +1498,31 @@ bool FEditorPropertyWidget::RenderPropertyWidget(TArray<FPropertyDescriptor>& Pr
 					*Val = FObjManager::GetBinaryFilePath(ObjPath);
 					bChanged = true;
 				}
+			}
+		}
+		break;
+	}
+	case EPropertyType::SkeletalMeshRef:
+	{
+		FString* Val = static_cast<FString*>(Prop.ValuePtr);
+		FString Preview = Val->empty() ? "None" : GetStemFromPath(*Val);
+		if (*Val == "None") Preview = "None";
+
+		ImGui::Text("%s", Prop.Name.c_str());
+		ImGui::SameLine(120);
+		ImGui::SetNextItemWidth(-1);
+
+		char Buf[256];
+		strncpy_s(Buf, sizeof(Buf), Preview.c_str(), _TRUNCATE);
+		ImGui::InputText("##SkeletalMesh", Buf, sizeof(Buf), ImGuiInputTextFlags_ReadOnly);
+
+		if (!Val->empty() && *Val != "None")
+		{
+			ImGui::SameLine();
+			if (ImGui::Button("Clear"))
+			{
+				*Val = "None";
+				bChanged = true;
 			}
 		}
 		break;

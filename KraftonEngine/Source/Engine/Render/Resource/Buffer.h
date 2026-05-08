@@ -16,7 +16,9 @@ public:
 	FVertexBuffer& operator=(FVertexBuffer&&) noexcept;
 
 	void Create(ID3D11Device* InDevice, const void* InData, uint32 InVertexCount, uint32 InByteWidth, uint32 InStride);
+	void CreateDynamic(ID3D11Device* InDevice, uint32 InVertexCount, uint32 InStride);
 	void Release();
+	bool Update(ID3D11DeviceContext* InDeviceContext, const void* InData, uint32 InVertexCount);
 
 	uint32 GetVertexCount() const { return VertexCount; }
 	uint32 GetStride() const { return Stride; }
@@ -89,7 +91,11 @@ public:
 
 	template<typename VertexType>
 	void Create(ID3D11Device* InDevice, const TMeshData<VertexType>& InMeshData);
+	template<typename VertexType>
+	void CreateDynamic(ID3D11Device* InDevice, uint32 InVertexCount, const TArray<uint32>& InIndices);
 	void Release();
+	template<typename VertexType>
+	bool UpdateVertices(ID3D11DeviceContext* InDeviceContext, const TArray<VertexType>& InVertices);
 
 	FVertexBuffer& GetVertexBuffer() { return VertexBuffer; }
 	FIndexBuffer& GetIndexBuffer() { return IndexBuffer; }
@@ -184,4 +190,30 @@ void FMeshBuffer::Create(ID3D11Device* InDevice, const TMeshData<VertexType>& In
 
 		IndexBuffer.Create(InDevice, InMeshData.Indices.data(), IndexCount, IndexByteWidth);
 	}
+}
+
+template<typename VertexType>
+void FMeshBuffer::CreateDynamic(ID3D11Device* InDevice, uint32 InVertexCount, const TArray<uint32>& InIndices)
+{
+	Release();
+
+	if (!InDevice || InVertexCount == 0)
+	{
+		return;
+	}
+
+	VertexBuffer.CreateDynamic(InDevice, InVertexCount, sizeof(VertexType));
+
+	if (!InIndices.empty())
+	{
+		uint32 IndexCount = static_cast<uint32>(InIndices.size());
+		uint32 IndexByteWidth = IndexCount * sizeof(uint32);
+		IndexBuffer.Create(InDevice, InIndices.data(), IndexCount, IndexByteWidth);
+	}
+}
+
+template<typename VertexType>
+bool FMeshBuffer::UpdateVertices(ID3D11DeviceContext* InDeviceContext, const TArray<VertexType>& InVertices)
+{
+	return VertexBuffer.Update(InDeviceContext, InVertices.data(), static_cast<uint32>(InVertices.size()));
 }

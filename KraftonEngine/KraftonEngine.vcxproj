@@ -310,6 +310,7 @@
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="Source\Engine\Mesh\FBXImporter.cpp" />
     <ClCompile Include="Source\Editor\EditorEngine.cpp" />
     <ClCompile Include="Source\Editor\EditorRenderPipeline.cpp" />
     <ClCompile Include="Source\Editor\Packaging\GamePackageAssetCollector.cpp" />
@@ -377,6 +378,8 @@
     <ClCompile Include="Source\Engine\Component\Light\PointLightComponent.cpp" />
     <ClCompile Include="Source\Engine\Component\Light\SpotLightComponent.cpp" />
     <ClCompile Include="Source\Engine\Component\MeshComponent.cpp" />
+    <ClCompile Include="Source\Engine\Component\SkeletalMeshComponent.cpp" />
+    <ClCompile Include="Source\Engine\Component\SkinnedMeshComponent.cpp" />
     <ClCompile Include="Source\Engine\Component\Movement\InterpToMovementComponent.cpp" />
     <ClCompile Include="Source\Engine\Component\Movement\MovementComponent.cpp" />
     <ClCompile Include="Source\Engine\Component\Movement\PawnMovementComponent.cpp" />
@@ -425,6 +428,7 @@
     <ClCompile Include="Source\Engine\Mesh\MeshSimplifier.cpp" />
     <ClCompile Include="Source\Engine\Mesh\ObjImporter.cpp" />
     <ClCompile Include="Source\Engine\Mesh\ObjManager.cpp" />
+    <ClCompile Include="Source\Engine\Mesh\SkeletalMesh.cpp" />
     <ClCompile Include="Source\Engine\Mesh\StaticMesh.cpp" />
     <ClCompile Include="Source\Engine\Object\FName.cpp" />
     <ClCompile Include="Source\Engine\Object\Object.cpp" />
@@ -454,6 +458,7 @@
     <ClCompile Include="Source\Engine\Render\Proxy\DecalSceneProxy.cpp" />
     <ClCompile Include="Source\Engine\Render\Proxy\GizmoSceneProxy.cpp" />
     <ClCompile Include="Source\Engine\Render\Proxy\PrimitiveSceneProxy.cpp" />
+    <ClCompile Include="Source\Engine\Render\Proxy\SkeletalMeshSceneProxy.cpp" />
     <ClCompile Include="Source\Engine\Render\Proxy\StaticMeshSceneProxy.cpp" />
     <ClCompile Include="Source\Engine\Render\Proxy\SubUVSceneProxy.cpp" />
     <ClCompile Include="Source\Engine\Render\Proxy\TextRenderSceneProxy.cpp" />
@@ -559,6 +564,7 @@
     <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Source\Engine\Mesh\FBXImporter.h" />
     <ClInclude Include="Source\Editor\EditorEngine.h" />
     <ClInclude Include="Source\Editor\EditorRenderPipeline.h" />
     <ClInclude Include="Source\Editor\PIE\PIETypes.h" />
@@ -635,6 +641,8 @@
     <ClInclude Include="Source\Engine\Component\Light\PointLightComponent.h" />
     <ClInclude Include="Source\Engine\Component\Light\SpotLightComponent.h" />
     <ClInclude Include="Source\Engine\Component\MeshComponent.h" />
+    <ClInclude Include="Source\Engine\Component\SkeletalMeshComponent.h" />
+    <ClInclude Include="Source\Engine\Component\SkinnedMeshComponent.h" />
     <ClInclude Include="Source\Engine\Component\Movement\InterpToMovementComponent.h" />
     <ClInclude Include="Source\Engine\Component\Movement\MovementComponent.h" />
     <ClInclude Include="Source\Engine\Component\Movement\PawnMovementComponent.h" />
@@ -694,6 +702,8 @@
     <ClInclude Include="Source\Engine\Mesh\MeshCommonTypes.h" />
     <ClInclude Include="Source\Engine\Mesh\ObjImporter.h" />
     <ClInclude Include="Source\Engine\Mesh\ObjManager.h" />
+    <ClInclude Include="Source\Engine\Mesh\SkeletalMesh.h" />
+    <ClInclude Include="Source\Engine\Mesh\SkeletalMeshAsset.h" />
     <ClInclude Include="Source\Engine\Mesh\StaticMesh.h" />
     <ClInclude Include="Source\Engine\Mesh\StaticMeshAsset.h" />
     <ClInclude Include="Source\Engine\Object\FName.h" />
@@ -732,6 +742,7 @@
     <ClInclude Include="Source\Engine\Render\Proxy\DirtyFlag.h" />
     <ClInclude Include="Source\Engine\Render\Proxy\GizmoSceneProxy.h" />
     <ClInclude Include="Source\Engine\Render\Proxy\PrimitiveSceneProxy.h" />
+    <ClInclude Include="Source\Engine\Render\Proxy\SkeletalMeshSceneProxy.h" />
     <ClInclude Include="Source\Engine\Render\Proxy\StaticMeshSceneProxy.h" />
     <ClInclude Include="Source\Engine\Render\Proxy\SubUVSceneProxy.h" />
     <ClInclude Include="Source\Engine\Render\Proxy\TextRenderSceneProxy.h" />
