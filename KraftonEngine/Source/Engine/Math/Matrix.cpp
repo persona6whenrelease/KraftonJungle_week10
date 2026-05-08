@@ -404,13 +404,20 @@ void FMatrix::Print() const
 	}
 }
 
+/**
+ * 1. TransformVector
+ * [용도] 방향(Direction), 법선(Normal), 속도 등 '이동'이 필요 없는 벡터 변환 시 사용.
+ * [특징] 행렬의 4행(row[3]/Translation)을 무시하여 순수하게 회전과 스케일만 적용함.
+ */
 FVector FMatrix::TransformVector(const FVector& vector) const
 {
 #if defined(_XM_SSE_INTRINSICS_) || defined(__SSE__)
+	// 방향 벡터는 이동(Translation)의 영향을 받지 않으므로 row[0~2]만 사용
 	__m128 vX = _mm_set1_ps(vector.X);
 	__m128 vY = _mm_set1_ps(vector.Y);
 	__m128 vZ = _mm_set1_ps(vector.Z);
 
+	// 결과 = (X * Basis_X) + (Y * Basis_Y) + (Z * Basis_Z)
 	__m128 res = _mm_add_ps(
 		_mm_mul_ps(vX, row[0]),
 		_mm_add_ps(_mm_mul_ps(vY, row[1]), _mm_mul_ps(vZ, row[2]))
@@ -422,6 +429,7 @@ FVector FMatrix::TransformVector(const FVector& vector) const
 	Out.Z = _mm_cvtss_f32(_mm_shuffle_ps(res, res, _MM_SHUFFLE(2, 2, 2, 2)));
 	return Out;
 #else
+	// 스칼라: 이동 성분인 M[3]을 연산에서 제외
 	return FVector(
 		vector.X * M[0][0] + vector.Y * M[1][0] + vector.Z * M[2][0],
 		vector.X * M[0][1] + vector.Y * M[1][1] + vector.Z * M[2][1],
@@ -429,7 +437,43 @@ FVector FMatrix::TransformVector(const FVector& vector) const
 	);
 #endif
 }
+/**
+ * 2. TransformPosition
+ * [용도] 캐릭터 위치, 정점 좌표 등 공간상의 '점(Point)'을 변환할 때 사용.
+ * [특징] 행렬의 4행(row[3]/Translation)을 더하여 실제 좌표를 이동시킴 (w=1인 아핀 변환).
+ */
+FVector FMatrix::TransformPosition(const FVector& V) const
+{
+#if defined(_XM_SSE_INTRINSICS_) || defined(__SSE__)
+	__m128 vX = _mm_set1_ps(V.X);
+	__m128 vY = _mm_set1_ps(V.Y);
+	__m128 vZ = _mm_set1_ps(V.Z);
 
+	// 이동 성분인 row[3]을 명시적으로 더하여 위치를 이동시킴
+	__m128 res = _mm_add_ps(
+		_mm_add_ps(_mm_mul_ps(vX, row[0]), _mm_mul_ps(vY, row[1])),
+		_mm_add_ps(_mm_mul_ps(vZ, row[2]), row[3])
+	);
+
+	FVector Out;
+	Out.X = _mm_cvtss_f32(res);
+	Out.Y = _mm_cvtss_f32(_mm_shuffle_ps(res, res, _MM_SHUFFLE(1, 1, 1, 1)));
+	Out.Z = _mm_cvtss_f32(_mm_shuffle_ps(res, res, _MM_SHUFFLE(2, 2, 2, 2)));
+	return Out;
+#else
+	// 스칼라: M[3][0~2] (Translation) 값을 최종 결과에 합산
+	return FVector(
+		V.X * M[0][0] + V.Y * M[1][0] + V.Z * M[2][0] + M[3][0],
+		V.X * M[0][1] + V.Y * M[1][1] + V.Z * M[2][1] + M[3][1],
+		V.X * M[0][2] + V.Y * M[1][2] + V.Z * M[2][2] + M[3][2]
+	);
+#endif
+}
+/**
+ * 3. TransformPositionWithW
+ * [용도] 카메라 원근 투영(Projection) 변환 등 W 성분의 처리가 필요한 경우 사용.
+ * [특징] 이동을 포함한 변환 후, W값으로 나누는 'Perspective Divide'를 수행하여 NDC 좌표를 산출함.
+ */
 FVector FMatrix::TransformPositionWithW(const FVector& Vector) const
 {
 #if defined(_XM_SSE_INTRINSICS_) || defined(__SSE__)
@@ -437,16 +481,19 @@ FVector FMatrix::TransformPositionWithW(const FVector& Vector) const
 	__m128 vY = _mm_set1_ps(Vector.Y);
 	__m128 vZ = _mm_set1_ps(Vector.Z);
 
+	// 전체 4x4 행렬 곱 연산 수행 (이동 성분 포함)
 	__m128 res = _mm_add_ps(
 		_mm_add_ps(_mm_mul_ps(vX, row[0]), _mm_mul_ps(vY, row[1])),
 		_mm_add_ps(_mm_mul_ps(vZ, row[2]), row[3])
 	);
 
+	// 결과 레지스터의 4번째 성분(W)을 추출 (Shuffle 3,3,3,3)
 	__m128 vW = _mm_shuffle_ps(res, res, _MM_SHUFFLE(3, 3, 3, 3));
 
 	float W_Val;
 	_mm_store_ss(&W_Val, vW);
 
+	// W가 1이 아니거나 0이 아닐 경우(원근 행렬일 때), X/W, Y/W, Z/W 수행 (Perspective Divide)
 	if (std::abs(W_Val) > 0.0001f && std::abs(W_Val - 1.0f) > 0.0001f)
 	{
 		res = _mm_div_ps(res, vW);
@@ -458,10 +505,11 @@ FVector FMatrix::TransformPositionWithW(const FVector& Vector) const
 	Out.Z = _mm_cvtss_f32(_mm_shuffle_ps(res, res, _MM_SHUFFLE(2, 2, 2, 2)));
 	return Out;
 #else
-	float X = Vector.X * M[0][0] + Vector.Y * M[1][0] + Vector.Z * M[2][0] + 1.0f * M[3][0];
-	float Y = Vector.X * M[0][1] + Vector.Y * M[1][1] + Vector.Z * M[2][1] + 1.0f * M[3][1];
-	float Z = Vector.X * M[0][2] + Vector.Y * M[1][2] + Vector.Z * M[2][2] + 1.0f * M[3][2];
-	float W = Vector.X * M[0][3] + Vector.Y * M[1][3] + Vector.Z * M[2][3] + 1.0f * M[3][3];
+	// 4번째 성분 W를 계산하여 정규화(Normalization) 수행
+	float X = Vector.X * M[0][0] + Vector.Y * M[1][0] + Vector.Z * M[2][0] + M[3][0];
+	float Y = Vector.X * M[0][1] + Vector.Y * M[1][1] + Vector.Z * M[2][1] + M[3][1];
+	float Z = Vector.X * M[0][2] + Vector.Y * M[1][2] + Vector.Z * M[2][2] + M[3][2];
+	float W = Vector.X * M[0][3] + Vector.Y * M[1][3] + Vector.Z * M[2][3] + M[3][3];
 
 	if (W != 0.0f && W != 1.0f)
 	{
@@ -472,6 +520,7 @@ FVector FMatrix::TransformPositionWithW(const FVector& Vector) const
 	return FVector(X, Y, Z);
 #endif
 }
+
 
 FVector FMatrix::GetEuler() const
 {

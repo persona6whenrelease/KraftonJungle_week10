@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "Math/Vector.h"
+#include "Math/Matrix.h"
 #include "Render/Types/RenderTypes.h"
 #include <cassert>
 
@@ -40,6 +41,18 @@ struct FVertexPNCTT
 	FVector4 Color;
 	FVector2 UV;
 	FVector4 Tangent;
+};
+
+struct FSkeletalMeshVertex
+{
+	FVector Position;
+	int boneIndices[4] = {0,0,0,0};
+	float boneWeights[4] = { 0.0f,0.0f,0.0f,0.0f };
+};
+
+struct FBone
+{
+	FMatrix skinningMatrix ; // = BoneTransform * InverseBindPose
 };
 
 template<typename VertexType>

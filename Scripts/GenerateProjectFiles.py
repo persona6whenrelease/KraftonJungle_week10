@@ -110,6 +110,12 @@ ENGINE_EXCLUDE_PREFIXES = [
     # Keep them out of regenerated projects even if stale files remain on disk.
     "Source\\Engine\\Runtime\\ObjectPoolSystem.cpp",
     "Source\\Engine\\Runtime\\ObjectPoolSystem.h",
+    "Source\\Engine\\Runtime\\RowManager.cpp",
+    "Source\\Engine\\Runtime\\RowManager.h",
+    "Source\\Engine\\Scripting\\LuaRowManagerBindings.cpp",
+    "Source\\Engine\\Scripting\\LuaSaveGameBindings.cpp",
+    "Source\\Engine\\Scripting\\LuaUiBindings.cpp",
+    "Source\\Engine\\Scripting\\LuaParryComponentBindings.cpp",
 ]
 
 # Files removed by the refactor. Delete them before scanning so local stale copies
@@ -117,6 +123,12 @@ ENGINE_EXCLUDE_PREFIXES = [
 OBSOLETE_FILES = [
     "Source\\Engine\\Runtime\\ObjectPoolSystem.cpp",
     "Source\\Engine\\Runtime\\ObjectPoolSystem.h",
+    "Source\\Engine\\Runtime\\RowManager.cpp",
+    "Source\\Engine\\Runtime\\RowManager.h",
+    "Source\\Engine\\Scripting\\LuaRowManagerBindings.cpp",
+    "Source\\Engine\\Scripting\\LuaSaveGameBindings.cpp",
+    "Source\\Engine\\Scripting\\LuaUiBindings.cpp",
+    "Source\\Engine\\Scripting\\LuaParryComponentBindings.cpp",
 ]
 
 # Directories to recursively scan for the Crossy static library project.
@@ -140,6 +152,7 @@ INCLUDE_PATHS = [
     "Source",
     "ThirdParty",
     "ThirdParty\\ImGui",
+    "ThirdParty\\FBX\\include",
     "Source\\Editor",
     "Source\\ObjViewer",
     "Source\\GameClient",
@@ -165,6 +178,12 @@ LIBRARY_PATHS: list[str] = []
 SFML_MODULES = ["audio", "window", "system"]
 SFML_LIB_BASE = "$(ProjectDir)ThirdParty\\SFML\\lib"
 SFML_BIN_BASE = "$(ProjectDir)ThirdParty\\SFML\\bin"
+
+# ──────────────────────────────────────────────
+# FBX configuration
+# ──────────────────────────────────────────────
+FBX_LIB_BASE = "$(ProjectDir)ThirdParty\\FBX\\lib"
+FBX_LIBS = ["libfbxsdk.lib"]
 SFML_CONFIG_FLAVOR = {
     "Debug": "Debug",
     "Release": "Release",
@@ -550,7 +569,11 @@ def generate_vcxproj(
         library_path_value = base_library_path
         flavor = sfml_flavor_for(cfg, plat) if include_sfml else None
         if flavor is not None:
-            library_path_value = f"{SFML_LIB_BASE}\\{flavor};{base_library_path}"
+            lib_paths = [f"{SFML_LIB_BASE}\\{flavor}"]
+            if application_project and plat == "x64":
+                # FBX uses lowercase folder names: debug, release
+                lib_paths.append(f"{FBX_LIB_BASE}\\{flavor.lower()}")
+            library_path_value = ";".join(lib_paths) + ";" + base_library_path
         ET.SubElement(pg, "LibraryPath").text = library_path_value
 
         if application_project:
@@ -606,7 +629,10 @@ def generate_vcxproj(
 
             sfml_flavor = sfml_flavor_for(cfg, plat) if include_sfml else None
             if sfml_flavor is not None:
-                libs = sfml_lib_names(sfml_flavor)
+                libs = []
+                if application_project and plat == "x64":
+                    libs.extend(FBX_LIBS)
+                libs.extend(sfml_lib_names(sfml_flavor))
                 ET.SubElement(link, "AdditionalDependencies").text = ";".join(libs) + ";%(AdditionalDependencies)"
 
                 pbe = ET.SubElement(idg, "PostBuildEvent")

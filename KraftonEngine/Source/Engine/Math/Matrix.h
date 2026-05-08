@@ -104,6 +104,8 @@ struct FMatrix {
 
 	FVector TransformVector(const FVector& vector) const;
 	FVector TransformPositionWithW(const FVector& V) const;
+	FVector TransformPosition(const FVector& V) const;
+
 
 	FVector GetEuler() const;
 	FVector GetLocation() const;
