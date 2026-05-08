@@ -250,6 +250,7 @@ void FResourceManager::ReleaseGPUResources()
 		}
 		if (Resource.SRV) { Resource.SRV->Release(); Resource.SRV = nullptr; }
 	}
+	LoadedResource.clear();
 }
 
 // --- Font ---
