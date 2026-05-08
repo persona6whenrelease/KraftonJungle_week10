@@ -17,6 +17,7 @@ public:
 
 	void Init(FWindowsWindow* InWindow) override;
 	void Shutdown() override;
+	void BeginPlay() override;
 	void Tick(float DeltaTime) override;
 	void OnWindowResized(uint32 Width, uint32 Height) override;
 
@@ -42,8 +43,8 @@ public:
 	void RequestExit() override;
 
 private:
-	void TickAlways(float DeltaTime);
-	void TickInGame(float DeltaTime);
+	void TickAlways(float RawDeltaTime);
+	void TickInGame(float GameDeltaTime, float RawDeltaTime);
 	void ProcessPendingCommands();
 	bool RestartGame();
 	void InitCameraManager();

@@ -76,12 +76,6 @@ namespace
 		return pIt == p.end(); // parent 끝까지 다 맞았으면 포함됨
 	}
 
-	constexpr const wchar_t* LuaTemplateContent =
-		L"function BeginPlay() print(\"[BeginPlay] \" .. obj.UUID) obj:PrintLocation() end\n"
-		L"function EndPlay() print(\"[EndPlay] \" .. obj.UUID) obj:PrintLocation() end\n"
-		L"function OnOverlap(OtherActor) OtherActor:PrintLocation(); end\n"
-		L"function Tick(dt) obj.Location = obj.Location + obj.Velocity * dt obj:PrintLocation() end\n";
-
 	std::filesystem::path MakeUniqueLuaTemplatePath(const std::filesystem::path& Directory)
 	{
 		std::filesystem::path Candidate = Directory / L"template.lua";
@@ -115,6 +109,46 @@ namespace
 			"function EndPlay()\n    print(\"[EndPlay] \" .. obj.UUID)\n    obj:PrintLocation()\nend\n\n"
 			"function OnOverlap(OtherActor)\n    OtherActor:PrintLocation();\nend\n\n"
 			"function Tick(dt)\n    obj.Location = obj.Location + obj.Velocity * dt\n    obj:PrintLocation()\nend\n\n";
+
+		return true;
+	}
+
+	std::filesystem::path MakeUniqueCurveTemplatePath(const std::filesystem::path& Directory)
+	{
+		std::filesystem::path Candidate = Directory / L"template.curve";
+		int32 Index = 1;
+
+		while (std::filesystem::exists(Candidate))
+		{
+			Candidate = Directory / (L"template" + std::to_wstring(Index) + L".curve");
+			++Index;
+		}
+
+		return Candidate;
+	}
+
+	bool CreateCurveTemplateScript(const std::filesystem::path& Directory)
+	{
+		if (!std::filesystem::exists(Directory) || !std::filesystem::is_directory(Directory))
+		{
+			return false;
+		}
+
+		const std::filesystem::path TargetPath = MakeUniqueCurveTemplatePath(Directory);
+		std::ofstream File(TargetPath, std::ios::out);
+		if (!File.is_open())
+		{
+			return false;
+		}
+
+		File <<
+			"{\n"
+			"    \"ControlPoints\" : [0.000000, 0.000000, 1.000000, 1.000000],\n"
+			"    \"Kind\" : \"CubicBezier01\",\n"
+			"    \"PresetIndex\" : 9,\n"
+			"    \"Type\" : \"KraftonCurve\",\n"
+			"    \"Version\" : 1\n"
+			"};";
 
 		return true;
 	}
@@ -268,6 +302,11 @@ void FEditorContentBrowserWidget::RefreshContent()
 			element = std::make_shared<LuaScriptElement>();
 			element.get()->SetIcon(ICons["Default"].Get());
 		}
+		else if (Content.Path.extension() == ".curve")
+		{
+			element = std::make_shared<CurveElement>();
+			element.get()->SetIcon(ICons["Default"].Get());
+		}
 		else if (Content.Path.extension() == ".png" || Content.Path.extension() == ".PNG")
 		{
 			element = std::make_shared<PNGElement>();
@@ -358,6 +397,14 @@ void FEditorContentBrowserWidget::DrawContents()
 		if (ImGui::MenuItem("Create Lua Script"))
 		{
 			if (CreateLuaTemplateScript(std::filesystem::path(BrowserContext.CurrentPath)))
+			{
+				BrowserContext.bIsNeedRefresh = true;
+			}
+		}
+
+		if (ImGui::MenuItem("Create Curve"))
+		{
+			if (CreateCurveTemplateScript(std::filesystem::path(BrowserContext.CurrentPath)))
 			{
 				BrowserContext.bIsNeedRefresh = true;
 			}

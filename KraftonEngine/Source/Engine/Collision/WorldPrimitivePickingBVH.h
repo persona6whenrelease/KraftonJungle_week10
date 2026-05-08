@@ -31,7 +31,7 @@ public:
 	bool ContainsObject(UPrimitiveComponent* Primitive) const;
 	void CollectDebugAABBs(TArray<FDebugAABB>& OutAABBs, bool bIncludeFatBounds = false) const;
 
-	bool Raycast(const FRay& Ray, FHitResult& OutHitResult, AActor*& OutActor) const;
+	bool Raycast(const FRay& Ray, FHitResult& OutHitResult, AActor*& OutActor, const FRaycastQueryParams& Params = FRaycastQueryParams()) const;
 
 private:
 	struct FPickingUserData

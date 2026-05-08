@@ -1,15 +1,26 @@
 """
-GenerateProjectFiles.py — Auto-generate .vcxproj, .vcxproj.filters
-for KraftonEngine from the on-disk folder structure.
+GenerateProjectFiles.py — Auto-generate Visual Studio project files for KraftonEngine.
+
+This generator preserves the engine/game split:
+
+    KraftonEngine.vcxproj  -> application target: Engine + Editor/ObjViewer/GameClient
+    CrossyGame.vcxproj     -> static library target: Source/Games/Crossy only
+
+The main project references CrossyGame only for GameClient|x64, so regenerating project
+files no longer pulls Source/Games/Crossy back into the engine/application project.
 
 Usage:
     python Scripts/GenerateProjectFiles.py
 """
 
+from __future__ import annotations
+
 import hashlib
 import os
 import xml.etree.ElementTree as ET
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Iterable
 
 # ──────────────────────────────────────────────
 # Constants
@@ -17,9 +28,26 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 
 PROJECT_NAME = "KraftonEngine"
-PROJECT_DIR = ROOT / PROJECT_NAME
+CROSSY_PROJECT_NAME = "CrossyGame"
+
+# Supports both layouts:
+#   repo/KraftonEngine/Source/...
+#   repo/Source/...
+def resolve_project_dir() -> Path:
+    nested = ROOT / PROJECT_NAME
+    if (nested / "Source").exists():
+        return nested
+    if (ROOT / "Source").exists():
+        return ROOT
+    return nested
+
+PROJECT_DIR = resolve_project_dir()
+PROJECT_REL_DIR = PROJECT_DIR.relative_to(ROOT) if PROJECT_DIR != ROOT else Path(".")
+
 PROJECT_GUID = "{55068e81-c0a0-49f9-ab7b-54aea968722b}"
+CROSSY_PROJECT_GUID = "{a6df3d49-15ce-49c6-b594-d9b89de3c83b}"
 ROOT_NAMESPACE = "Week2"
+CROSSY_ROOT_NAMESPACE = "CrossyGame"
 
 SOLUTION_GUID = "{4EBC5DD2-CECA-4722-9D19-87C7CB5F481B}"
 VS_PROJECT_TYPE = "{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}"
@@ -34,7 +62,13 @@ CONFIGURATIONS = [
     ("GameClient", "x64"),
 ]
 
-# Per-configuration overrides
+CROSSY_LINK_CONFIGURATIONS = {
+    ("Debug", "x64"),
+    ("Release", "x64"),
+    ("GameClient", "x64"),
+}
+
+# Per-configuration overrides for the application project
 CONFIG_PROPS = {
     "ObjViewDebug": {
         "release_like": True,
@@ -55,30 +89,52 @@ CONFIG_PROPS = {
     },
 }
 
-# Directories to recursively scan for source files
-SCAN_DIRS = ["Source", "ThirdParty"]
+# Crossy is built as a game runtime module. Keep its defines stable across configs;
+# the executable decides whether it links/loads this module.
+CROSSY_CONFIG_PROPS = {
+    cfg: {
+        "release_like": CONFIG_PROPS.get(cfg, {}).get("release_like", cfg == "Release"),
+        "with_editor": False,
+        "is_obj_viewer": False,
+        "is_game_client": True,
+        "extra_defines": ["STATS=0"],
+    }
+    for cfg, _ in CONFIGURATIONS
+}
 
-# Directories to scan for shader files
+# Directories to recursively scan for the main application project.
+ENGINE_SCAN_DIRS = ["Source", "ThirdParty"]
+ENGINE_EXCLUDE_PREFIXES = [
+    "Source\\Games\\Crossy",
+    # Legacy pool files were renamed to ActorPoolSystem.
+    # Keep them out of regenerated projects even if stale files remain on disk.
+    "Source\\Engine\\Runtime\\ObjectPoolSystem.cpp",
+    "Source\\Engine\\Runtime\\ObjectPoolSystem.h",
+]
+
+# Files removed by the refactor. Delete them before scanning so local stale copies
+# cannot be pulled back into the generated project or cause duplicate definitions.
+OBSOLETE_FILES = [
+    "Source\\Engine\\Runtime\\ObjectPoolSystem.cpp",
+    "Source\\Engine\\Runtime\\ObjectPoolSystem.h",
+]
+
+# Directories to recursively scan for the Crossy static library project.
+CROSSY_SCAN_DIRS = ["Source\\Games\\Crossy"]
+
+# Directories to scan for shader files. Shaders stay with the main project.
 SHADER_DIRS = ["Shaders"]
 
-# File extensions to include
 SOURCE_EXTS = {".cpp", ".c", ".cc", ".cxx"}
 HEADER_EXTS = {".h", ".hpp", ".hxx", ".inl"}
 SHADER_EXTS = {".hlsl", ".hlsli"}
 NATVIS_EXTS = {".natvis"}
 NONE_EXTS = {".natstepfilter", ".config", ".props"}
 
-RC_EXTS = {".rc"}
-
-# Root-level files to include
 ROOT_FILES = ["main.cpp"]
+ROOT_NONE_FILES = ["VcpkgLua.props"]
 
-# Root-level None files to include in the project view
-ROOT_NONE_FILES = [
-    "VcpkgLua.props",
-]
-
-# Include paths
+# Include paths for the application project.
 INCLUDE_PATHS = [
     "Source\\Engine",
     "Source",
@@ -90,33 +146,32 @@ INCLUDE_PATHS = [
     ".",
 ]
 
-# Library paths (common to all configurations)
-LIBRARY_PATHS = []
+# Include paths for the Crossy module. Do not add Source/Games/Crossy as a
+# required include path; includes should continue to go through Source/, e.g.
+#   #include "Games/Crossy/CrossyGameModule.h"
+CROSSY_INCLUDE_PATHS = [
+    "Source\\Engine",
+    "Source",
+    "ThirdParty",
+    "ThirdParty\\ImGui",
+    ".",
+]
+
+LIBRARY_PATHS: list[str] = []
 
 # ──────────────────────────────────────────────
-# SFML configuration
+# SFML configuration — application project only
 # ──────────────────────────────────────────────
-# SFML modules in use (no graphics/network because the engine uses its own
-# DirectX-based renderer and doesn't need SFML networking).
 SFML_MODULES = ["audio", "window", "system"]
-
-# Base paths inside the project directory
 SFML_LIB_BASE = "$(ProjectDir)ThirdParty\\SFML\\lib"
 SFML_BIN_BASE = "$(ProjectDir)ThirdParty\\SFML\\bin"
-
-# Maps a project Configuration name to the SFML build flavor folder
-# ("Debug" or "Release"). Configurations not in this map are skipped (no
-# SFML link / DLL copy). Win32 configs are intentionally excluded — SFML is
-# x64-only in this project.
 SFML_CONFIG_FLAVOR = {
-    "Debug":         "Debug",
-    "Release":       "Release",
-    "ObjViewDebug":  "Release",
-    "Demo":          "Release",
-    "GameClient":    "Release",
+    "Debug": "Debug",
+    "Release": "Release",
+    "ObjViewDebug": "Release",
+    "Demo": "Release",
+    "GameClient": "Release",
 }
-
-# Platforms eligible for SFML linkage
 SFML_PLATFORMS = {"x64"}
 
 # Lua / vcpkg property sheet
@@ -126,7 +181,7 @@ VCPKG_LUA_PROPS = f"$(MSBuildProjectDirectory)\\{VCPKG_LUA_PROPS_FILE}"
 VCPKG_LUA_PLATFORMS = {"x64"}
 GENERATE_VCPKG_LUA_PROPS = True
 
-# NuGet packages
+# NuGet packages — application project only
 NUGET_PACKAGES = [
     ("directxtk_desktop_win10", "2025.10.28.2"),
 ]
@@ -135,10 +190,45 @@ NS = "http://schemas.microsoft.com/developer/msbuild/2003"
 
 
 # ──────────────────────────────────────────────
+# Data structures
+# ──────────────────────────────────────────────
+@dataclass(frozen=True)
+class ProjectReference:
+    include: str
+    guid: str
+    condition: str | None = None
+
+
+# ──────────────────────────────────────────────
 # Helpers
 # ──────────────────────────────────────────────
-def scan_files(project_dir: Path) -> dict[str, list[str]]:
-    """Scan directories and collect files grouped by type."""
+def normalize_rel(path: Path) -> str:
+    return str(path).replace("/", "\\")
+
+
+def should_exclude(rel_str: str, exclude_prefixes: Iterable[str]) -> bool:
+    rel_norm = rel_str.replace("/", "\\")
+    return any(
+        rel_norm == prefix or rel_norm.startswith(prefix.rstrip("\\") + "\\")
+        for prefix in exclude_prefixes
+    )
+
+
+def scan_files(
+    project_dir: Path,
+    *,
+    scan_dirs: list[str],
+    exclude_prefixes: list[str] | None = None,
+    include_shaders: bool = False,
+    root_files: list[str] | None = None,
+    root_none_files: list[str] | None = None,
+    include_resources: bool = False,
+) -> dict[str, list[str]]:
+    """Scan directories and collect files grouped by MSBuild item type."""
+    exclude_prefixes = exclude_prefixes or []
+    root_files = root_files or []
+    root_none_files = root_none_files or []
+
     result = {
         "ClCompile": [],
         "ClInclude": [],
@@ -148,8 +238,8 @@ def scan_files(project_dir: Path) -> dict[str, list[str]]:
         "None": [],
     }
 
-    for scan_dir in SCAN_DIRS:
-        full_dir = project_dir / scan_dir
+    for scan_dir in scan_dirs:
+        full_dir = project_dir / Path(scan_dir.replace("\\", os.sep))
         if not full_dir.exists():
             continue
 
@@ -157,9 +247,11 @@ def scan_files(project_dir: Path) -> dict[str, list[str]]:
             for fname in sorted(filenames):
                 full = Path(dirpath) / fname
                 rel = full.relative_to(project_dir)
-                rel_str = str(rel).replace("/", "\\")
-                ext = full.suffix.lower()
+                rel_str = normalize_rel(rel)
+                if should_exclude(rel_str, exclude_prefixes):
+                    continue
 
+                ext = full.suffix.lower()
                 if ext in SOURCE_EXTS:
                     result["ClCompile"].append(rel_str)
                 elif ext in HEADER_EXTS:
@@ -169,33 +261,34 @@ def scan_files(project_dir: Path) -> dict[str, list[str]]:
                 elif ext in NONE_EXTS:
                     result["None"].append(rel_str)
 
-    for shader_dir in SHADER_DIRS:
-        full_dir = project_dir / shader_dir
-        if not full_dir.exists():
-            continue
+    if include_shaders:
+        for shader_dir in SHADER_DIRS:
+            full_dir = project_dir / shader_dir
+            if not full_dir.exists():
+                continue
 
-        for dirpath, _, filenames in os.walk(full_dir):
-            for fname in sorted(filenames):
-                full = Path(dirpath) / fname
-                rel = full.relative_to(project_dir)
-                rel_str = str(rel).replace("/", "\\")
-                ext = full.suffix.lower()
+            for dirpath, _, filenames in os.walk(full_dir):
+                for fname in sorted(filenames):
+                    full = Path(dirpath) / fname
+                    rel = full.relative_to(project_dir)
+                    rel_str = normalize_rel(rel)
+                    ext = full.suffix.lower()
+                    if ext in SHADER_EXTS:
+                        result["FxCompile"].append(rel_str)
 
-                if ext in SHADER_EXTS:
-                    result["FxCompile"].append(rel_str)
-
-    for root_file in ROOT_FILES:
+    for root_file in root_files:
         full = project_dir / root_file
         if full.exists():
             result["ClCompile"].append(root_file.replace("/", "\\"))
 
-    for root_none_file in ROOT_NONE_FILES:
+    for root_none_file in root_none_files:
         full = project_dir / root_none_file
         if full.exists():
             result["None"].append(root_none_file.replace("/", "\\"))
 
-    for f in sorted(project_dir.glob("*.rc")):
-        result["ResourceCompile"].append(f.name)
+    if include_resources:
+        for f in sorted(project_dir.glob("*.rc")):
+            result["ResourceCompile"].append(f.name)
 
     for key in result:
         result[key] = sorted(set(result[key]))
@@ -204,13 +297,11 @@ def scan_files(project_dir: Path) -> dict[str, list[str]]:
 
 
 def get_filter(rel_path: str) -> str:
-    """Return the filter path from a relative path."""
     parts = rel_path.replace("/", "\\").rsplit("\\", 1)
     return parts[0] if len(parts) > 1 else ""
 
 
 def collect_all_filters(files: dict[str, list[str]]) -> set[str]:
-    """Collect all unique filter paths including parent paths."""
     filters = set()
 
     for file_list in files.values():
@@ -218,7 +309,6 @@ def collect_all_filters(files: dict[str, list[str]]) -> set[str]:
             filt = get_filter(f)
             if not filt:
                 continue
-
             parts = filt.split("\\")
             for i in range(1, len(parts) + 1):
                 filters.add("\\".join(parts[:i]))
@@ -226,45 +316,31 @@ def collect_all_filters(files: dict[str, list[str]]) -> set[str]:
     return filters
 
 
-# ──────────────────────────────────────────────
-# SFML helpers
-# ──────────────────────────────────────────────
 def sfml_flavor_for(cfg: str, plat: str) -> str | None:
-    """Return 'Debug' or 'Release' for a given (cfg, plat), or None if SFML
-    should not be applied to this configuration."""
     if plat not in SFML_PLATFORMS:
         return None
     return SFML_CONFIG_FLAVOR.get(cfg)
 
 
 def sfml_lib_names(flavor: str) -> list[str]:
-    """Return the .lib filenames for a given flavor.
-    Debug builds use the '-d' suffix per SFML naming convention."""
     suffix = "-d" if flavor == "Debug" else ""
     return [f"sfml-{m}{suffix}.lib" for m in SFML_MODULES]
 
 
 def sfml_post_build_command(flavor: str) -> str:
-    """Return the xcopy command that copies all SFML DLLs (and their
-    dependencies like OpenAL32.dll, libsndfile-1.dll) from the matching
-    bin\\<flavor>\\ folder to $(OutDir).
-
-    xcopy flags:
-      /Y  : overwrite existing files without prompting
-      /D  : copy only files whose source is newer than the destination
-      /I  : if destination doesn't exist and multiple files, treat as dir
-    The trailing '*' on $(OutDir) forces xcopy to treat it as a directory
-    (avoids the 'File or Directory?' interactive prompt).
-    """
     src = f"{SFML_BIN_BASE}\\{flavor}\\*.dll"
     return f'xcopy /Y /D /I "{src}" "$(OutDir)"'
 
 
+def project_include_path(path: Path) -> str:
+    rel = path.relative_to(ROOT)
+    return normalize_rel(rel)
+
+
 # ──────────────────────────────────────────────
-# XML Generation
+# XML helpers
 # ──────────────────────────────────────────────
 def indent_xml(elem, level=0):
-    """Add indentation to XML tree."""
     i = "\n" + "  " * level
 
     if len(elem):
@@ -287,32 +363,21 @@ def indent_xml(elem, level=0):
         elem.tail = "\n"
 
 
-def write_xml(root_elem, filepath: Path, bom=False):
-    """Write XML tree to file with declaration."""
+def write_xml(root_elem, filepath: Path, bom: bool = False):
     indent_xml(root_elem)
-
     tree = ET.ElementTree(root_elem)
 
     with open(filepath, "w", encoding="utf-8", newline="\r\n") as f:
         if bom:
             f.write("\ufeff")
-
         f.write('<?xml version="1.0" encoding="utf-8"?>\n')
         tree.write(f, encoding="unicode", xml_declaration=False)
-
 
 
 # ──────────────────────────────────────────────
 # Vcpkg property sheet
 # ──────────────────────────────────────────────
 def generate_vcpkg_lua_props():
-    """Generate the shared vcpkg property sheet used by all x64 configs.
-
-    This intentionally keeps vcpkg/RmlUi in a property sheet instead of
-    emitting it into each configuration block. The .vcxproj imports this sheet
-    for every x64 configuration, and the CopyVcpkgRuntimeDlls target avoids
-    fighting with the per-config SFML PostBuildEvent generated below.
-    """
     props_path = PROJECT_DIR / VCPKG_LUA_PROPS_FILE
 
     content = r'''<?xml version="1.0" encoding="utf-8"?>
@@ -387,14 +452,31 @@ def generate_vcpkg_lua_props():
 
 
 # ──────────────────────────────────────────────
-# .vcxproj
+# .vcxproj generation
 # ──────────────────────────────────────────────
-def generate_vcxproj(files: dict[str, list[str]]):
+def generate_vcxproj(
+    *,
+    name: str,
+    guid: str,
+    root_namespace: str,
+    files: dict[str, list[str]],
+    output_path: Path,
+    configuration_type: str,
+    config_props: dict[str, dict],
+    include_paths: list[str],
+    int_dir_prefix: str | None = None,
+    application_project: bool = False,
+    static_library_project: bool = False,
+    include_sfml: bool = False,
+    include_nuget: bool = False,
+    project_references: list[ProjectReference] | None = None,
+):
+    project_references = project_references or []
+
     proj = ET.Element("Project", DefaultTargets="Build", xmlns=NS)
 
     # ProjectConfigurations
     ig = ET.SubElement(proj, "ItemGroup", Label="ProjectConfigurations")
-
     for cfg, plat in CONFIGURATIONS:
         pc = ET.SubElement(ig, "ProjectConfiguration", Include=f"{cfg}|{plat}")
         ET.SubElement(pc, "Configuration").text = cfg
@@ -404,44 +486,34 @@ def generate_vcxproj(files: dict[str, list[str]]):
     pg = ET.SubElement(proj, "PropertyGroup", Label="Globals")
     ET.SubElement(pg, "VCProjectVersion").text = "17.0"
     ET.SubElement(pg, "Keyword").text = "Win32Proj"
-    ET.SubElement(pg, "ProjectGuid").text = PROJECT_GUID
-    ET.SubElement(pg, "RootNamespace").text = ROOT_NAMESPACE
+    ET.SubElement(pg, "ProjectGuid").text = guid
+    ET.SubElement(pg, "RootNamespace").text = root_namespace
     ET.SubElement(pg, "WindowsTargetPlatformVersion").text = "10.0"
 
     ET.SubElement(proj, "Import", Project="$(VCTargetsPath)\\Microsoft.Cpp.Default.props")
 
     # Configuration properties
     for cfg, plat in CONFIGURATIONS:
-        props = CONFIG_PROPS.get(cfg, {})
+        props = config_props.get(cfg, {})
         cond = f"'$(Configuration)|$(Platform)'=='{cfg}|{plat}'"
-
         pg = ET.SubElement(proj, "PropertyGroup", Condition=cond, Label="Configuration")
-
         is_release = props.get("release_like", cfg == "Release")
 
-        ET.SubElement(pg, "ConfigurationType").text = "Application"
+        ET.SubElement(pg, "ConfigurationType").text = configuration_type
         ET.SubElement(pg, "UseDebugLibraries").text = "false" if is_release else "true"
         ET.SubElement(pg, "PlatformToolset").text = "v143"
-
         if is_release:
             ET.SubElement(pg, "WholeProgramOptimization").text = "true"
-
         ET.SubElement(pg, "CharacterSet").text = "Unicode"
 
     ET.SubElement(proj, "Import", Project="$(VCTargetsPath)\\Microsoft.Cpp.props")
     ET.SubElement(proj, "ImportGroup", Label="ExtensionSettings")
     ET.SubElement(proj, "ImportGroup", Label="Shared")
 
-    # PropertySheets
+    # Property sheets
     for cfg, plat in CONFIGURATIONS:
         cond = f"'$(Configuration)|$(Platform)'=='{cfg}|{plat}'"
-
-        ig = ET.SubElement(
-            proj,
-            "ImportGroup",
-            Label="PropertySheets",
-            Condition=cond,
-        )
+        ig = ET.SubElement(proj, "ImportGroup", Label="PropertySheets", Condition=cond)
 
         ET.SubElement(
             ig,
@@ -461,46 +533,34 @@ def generate_vcxproj(files: dict[str, list[str]]):
 
     ET.SubElement(proj, "PropertyGroup", Label="UserMacros")
 
-    # OutDir, IntDir, IncludePath, LibraryPath, WorkingDirectory
-    include_path_value = ";".join(INCLUDE_PATHS) + ";$(IncludePath)"
-
-    # Build a base library path (common to all configs). SFML's per-config
-    # path is appended below inside the configuration loop.
-    if LIBRARY_PATHS:
-        base_library_path = ";".join(LIBRARY_PATHS) + ";$(LibraryPath)"
-    else:
-        base_library_path = "$(LibraryPath)"
+    include_path_value = ";".join(include_paths) + ";$(IncludePath)"
+    base_library_path = ";".join(LIBRARY_PATHS) + ";$(LibraryPath)" if LIBRARY_PATHS else "$(LibraryPath)"
 
     for cfg, plat in CONFIGURATIONS:
         cond = f"'$(Configuration)|$(Platform)'=='{cfg}|{plat}'"
-
         pg = ET.SubElement(proj, "PropertyGroup", Condition=cond)
 
         ET.SubElement(pg, "OutDir").text = "$(ProjectDir)Bin\\$(Configuration)\\"
-        ET.SubElement(pg, "IntDir").text = "$(ProjectDir)Build\\$(Configuration)\\"
+        if int_dir_prefix:
+            ET.SubElement(pg, "IntDir").text = f"$(ProjectDir)Build\\{int_dir_prefix}\\$(Configuration)\\"
+        else:
+            ET.SubElement(pg, "IntDir").text = "$(ProjectDir)Build\\$(Configuration)\\"
         ET.SubElement(pg, "IncludePath").text = include_path_value
 
-        # Per-config LibraryPath: prepend SFML lib folder for eligible configs.
-        # We hardcode the flavor (Debug/Release) instead of using
-        # $(Configuration), because configs like ObjViewDebug/Demo/GameClient
-        # have no matching folder under SFML\lib\.
-        flavor = sfml_flavor_for(cfg, plat)
+        library_path_value = base_library_path
+        flavor = sfml_flavor_for(cfg, plat) if include_sfml else None
         if flavor is not None:
-            sfml_lib_path = f"{SFML_LIB_BASE}\\{flavor}"
-            library_path_value = f"{sfml_lib_path};{base_library_path}"
-        else:
-            library_path_value = base_library_path
-
+            library_path_value = f"{SFML_LIB_BASE}\\{flavor};{base_library_path}"
         ET.SubElement(pg, "LibraryPath").text = library_path_value
-        ET.SubElement(pg, "LocalDebuggerWorkingDirectory").text = "$(ProjectDir)"
+
+        if application_project:
+            ET.SubElement(pg, "LocalDebuggerWorkingDirectory").text = "$(ProjectDir)"
 
     # ItemDefinitionGroups
     for cfg, plat in CONFIGURATIONS:
-        props = CONFIG_PROPS.get(cfg, {})
+        props = config_props.get(cfg, {})
         cond = f"'$(Configuration)|$(Platform)'=='{cfg}|{plat}'"
-
         idg = ET.SubElement(proj, "ItemDefinitionGroup", Condition=cond)
-
         cl = ET.SubElement(idg, "ClCompile")
 
         ET.SubElement(cl, "WarningLevel").text = "Level3"
@@ -516,108 +576,78 @@ def generate_vcxproj(files: dict[str, list[str]]):
         ET.SubElement(cl, "SDLCheck").text = "true"
 
         base_defs = []
-
         if is_win32:
             base_defs.append("WIN32")
-
         base_defs.append("NDEBUG" if is_release else "_DEBUG")
-        base_defs.append("_CONSOLE")
+        base_defs.append("_CONSOLE" if application_project else "_LIB")
         base_defs.append(f"WITH_EDITOR={1 if props.get('with_editor', True) else 0}")
         base_defs.append(f"IS_OBJ_VIEWER={1 if props.get('is_obj_viewer', False) else 0}")
         base_defs.append(f"IS_GAME_CLIENT={1 if props.get('is_game_client', False) else 0}")
+        if application_project:
+            base_defs.append(f"WITH_CROSSY_GAME_MODULE={1 if (cfg, plat) in CROSSY_LINK_CONFIGURATIONS else 0}")
         base_defs.extend(props.get("extra_defines", []))
         base_defs.append("%(PreprocessorDefinitions)")
-
         ET.SubElement(cl, "PreprocessorDefinitions").text = ";".join(base_defs)
 
         ET.SubElement(cl, "ConformanceMode").text = "true"
         ET.SubElement(cl, "AdditionalOptions").text = "/bigobj /utf-8 %(AdditionalOptions)"
         ET.SubElement(cl, "ExceptionHandling").text = "Async"
         ET.SubElement(cl, "MultiProcessorCompilation").text = "true"
-
         if is_x64:
             ET.SubElement(cl, "LanguageStandard").text = "stdcpp20"
 
-        link = ET.SubElement(idg, "Link")
+        if static_library_project:
+            ET.SubElement(idg, "Lib")
+        else:
+            link = ET.SubElement(idg, "Link")
+            subsystem = props.get("subsystem", "Windows" if is_x64 else "Console")
+            ET.SubElement(link, "SubSystem").text = subsystem
+            ET.SubElement(link, "GenerateDebugInformation").text = "true"
 
-        subsystem = props.get("subsystem", "Windows" if is_x64 else "Console")
+            sfml_flavor = sfml_flavor_for(cfg, plat) if include_sfml else None
+            if sfml_flavor is not None:
+                libs = sfml_lib_names(sfml_flavor)
+                ET.SubElement(link, "AdditionalDependencies").text = ";".join(libs) + ";%(AdditionalDependencies)"
 
-        ET.SubElement(link, "SubSystem").text = subsystem
-        ET.SubElement(link, "GenerateDebugInformation").text = "true"
+                pbe = ET.SubElement(idg, "PostBuildEvent")
+                ET.SubElement(pbe, "Command").text = sfml_post_build_command(sfml_flavor)
+                ET.SubElement(pbe, "Message").text = f"Copying SFML {sfml_flavor} DLLs to $(OutDir)"
 
-        # ── SFML linkage (per-config) ─────────────────────────────
-        # For x64 configs that map to a SFML flavor, append SFML's .lib
-        # files to AdditionalDependencies and emit a PostBuildEvent that
-        # copies the matching DLLs (and their dependencies such as
-        # OpenAL32.dll, libsndfile-1.dll) next to the built .exe.
-        sfml_flavor = sfml_flavor_for(cfg, plat)
-        if sfml_flavor is not None:
-            libs = sfml_lib_names(sfml_flavor)
-            # %(AdditionalDependencies) preserves any libs inherited from
-            # property sheets / Microsoft defaults (e.g. kernel32.lib).
-            deps_text = ";".join(libs) + ";%(AdditionalDependencies)"
-            ET.SubElement(link, "AdditionalDependencies").text = deps_text
-
-            pbe = ET.SubElement(idg, "PostBuildEvent")
-            ET.SubElement(pbe, "Command").text = sfml_post_build_command(sfml_flavor)
-            ET.SubElement(pbe, "Message").text = (
-                f"Copying SFML {sfml_flavor} DLLs to $(OutDir)"
-            )
-
-    # ClCompile items
-    ig = ET.SubElement(proj, "ItemGroup")
-
-    for f in files["ClCompile"]:
-        ET.SubElement(ig, "ClCompile", Include=f)
-
-    # ClInclude items
-    ig = ET.SubElement(proj, "ItemGroup")
-
-    for f in files["ClInclude"]:
-        ET.SubElement(ig, "ClInclude", Include=f)
-
-    # FxCompile items
-    if files["FxCompile"]:
+    # Items
+    for item_name in ["ClCompile", "ClInclude", "FxCompile", "ResourceCompile", "Natvis", "None"]:
+        item_files = files.get(item_name, [])
+        if not item_files:
+            continue
         ig = ET.SubElement(proj, "ItemGroup")
+        for f in item_files:
+            elem = ET.SubElement(ig, item_name, Include=f)
+            if item_name == "FxCompile":
+                for cfg, plat in CONFIGURATIONS:
+                    if plat == "x64":
+                        cond = f"'$(Configuration)|$(Platform)'=='{cfg}|{plat}'"
+                        ET.SubElement(elem, "ExcludedFromBuild", Condition=cond).text = "true"
 
-        for f in files["FxCompile"]:
-            elem = ET.SubElement(ig, "FxCompile", Include=f)
-
-            for cfg, plat in CONFIGURATIONS:
-                if plat == "x64":
-                    cond = f"'$(Configuration)|$(Platform)'=='{cfg}|{plat}'"
-                    ET.SubElement(elem, "ExcludedFromBuild", Condition=cond).text = "true"
-
-    # ResourceCompile items
-    if files["ResourceCompile"]:
+    # Project references before targets is the conventional location and ensures
+    # CrossyGame.lib is available to the GameClient application link step.
+    if project_references:
         ig = ET.SubElement(proj, "ItemGroup")
-
-        for f in files["ResourceCompile"]:
-            ET.SubElement(ig, "ResourceCompile", Include=f)
-
-    # Natvis items
-    if files["Natvis"]:
-        ig = ET.SubElement(proj, "ItemGroup")
-
-        for f in files["Natvis"]:
-            ET.SubElement(ig, "Natvis", Include=f)
-
-    # None items
-    if files["None"]:
-        ig = ET.SubElement(proj, "ItemGroup")
-
-        for f in files["None"]:
-            ET.SubElement(ig, "None", Include=f)
+        for ref in project_references:
+            kwargs = {"Include": ref.include}
+            if ref.condition:
+                kwargs["Condition"] = ref.condition
+            pr = ET.SubElement(ig, "ProjectReference", **kwargs)
+            ET.SubElement(pr, "Project").text = ref.guid.lower()
+            ET.SubElement(pr, "LinkLibraryDependencies").text = "true"
+            ET.SubElement(pr, "UseLibraryDependencyInputs").text = "false"
+            ET.SubElement(pr, "ReferenceOutputAssembly").text = "false"
 
     ET.SubElement(proj, "Import", Project="$(VCTargetsPath)\\Microsoft.Cpp.targets")
 
-    # NuGet package imports
-    if NUGET_PACKAGES:
+    # NuGet package imports — application project only
+    if include_nuget and NUGET_PACKAGES:
         ext_targets = ET.SubElement(proj, "ImportGroup", Label="ExtensionTargets")
-
         for pkg_id, pkg_ver in NUGET_PACKAGES:
             targets_path = f"packages\\{pkg_id}.{pkg_ver}\\build\\native\\{pkg_id}.targets"
-
             ET.SubElement(
                 ext_targets,
                 "Import",
@@ -625,24 +655,15 @@ def generate_vcxproj(files: dict[str, list[str]]):
                 Condition=f"Exists('{targets_path}')",
             )
 
-        ensure = ET.SubElement(
-            proj,
-            "Target",
-            Name="EnsureNuGetPackageBuildImports",
-            BeforeTargets="PrepareForBuild",
-        )
-
+        ensure = ET.SubElement(proj, "Target", Name="EnsureNuGetPackageBuildImports", BeforeTargets="PrepareForBuild")
         pg = ET.SubElement(ensure, "PropertyGroup")
-
         ET.SubElement(pg, "ErrorText").text = (
             "This project references NuGet package(s) that are missing on this computer. "
             "Use NuGet Package Restore to download them. For more information, see "
             "http://go.microsoft.com/fwlink/?LinkID=322105. The missing file is {0}."
         )
-
         for pkg_id, pkg_ver in NUGET_PACKAGES:
             targets_path = f"packages\\{pkg_id}.{pkg_ver}\\build\\native\\{pkg_id}.targets"
-
             ET.SubElement(
                 ensure,
                 "Error",
@@ -652,175 +673,226 @@ def generate_vcxproj(files: dict[str, list[str]]):
     else:
         ET.SubElement(proj, "ImportGroup", Label="ExtensionTargets")
 
-    write_xml(proj, PROJECT_DIR / f"{PROJECT_NAME}.vcxproj")
+    write_xml(proj, output_path)
 
 
 # ──────────────────────────────────────────────
 # .vcxproj.filters
 # ──────────────────────────────────────────────
-def generate_filters(files: dict[str, list[str]]):
+def generate_filters(files: dict[str, list[str]], *, project_name: str, output_path: Path, bom: bool = True):
     proj = ET.Element("Project", ToolsVersion="4.0", xmlns=NS)
-
     all_filters = collect_all_filters(files)
 
     if all_filters:
         ig = ET.SubElement(proj, "ItemGroup")
-
         for filt in sorted(all_filters):
             f_elem = ET.SubElement(ig, "Filter", Include=filt)
-            h = hashlib.md5(f"{PROJECT_NAME}:{filt}".encode()).hexdigest()
+            h = hashlib.md5(f"{project_name}:{filt}".encode()).hexdigest()
             uid = f"{{{h[:8]}-{h[8:12]}-{h[12:16]}-{h[16:20]}-{h[20:32]}}}"
             ET.SubElement(f_elem, "UniqueIdentifier").text = uid
 
-    if files["FxCompile"]:
+    for item_name in ["FxCompile", "ClCompile", "ClInclude", "ResourceCompile", "None", "Natvis"]:
+        item_files = files.get(item_name, [])
+        if not item_files:
+            continue
         ig = ET.SubElement(proj, "ItemGroup")
-
-        for f in files["FxCompile"]:
+        for f in item_files:
             filt = get_filter(f)
-            elem = ET.SubElement(ig, "FxCompile", Include=f)
-
+            elem = ET.SubElement(ig, item_name, Include=f)
             if filt:
                 ET.SubElement(elem, "Filter").text = filt
 
-    if files["ClCompile"]:
-        ig = ET.SubElement(proj, "ItemGroup")
-
-        for f in files["ClCompile"]:
-            filt = get_filter(f)
-            elem = ET.SubElement(ig, "ClCompile", Include=f)
-
-            if filt:
-                ET.SubElement(elem, "Filter").text = filt
-
-    if files["ClInclude"]:
-        ig = ET.SubElement(proj, "ItemGroup")
-
-        for f in files["ClInclude"]:
-            filt = get_filter(f)
-            elem = ET.SubElement(ig, "ClInclude", Include=f)
-
-            if filt:
-                ET.SubElement(elem, "Filter").text = filt
-
-    if files["ResourceCompile"]:
-        ig = ET.SubElement(proj, "ItemGroup")
-
-        for f in files["ResourceCompile"]:
-            filt = get_filter(f)
-            elem = ET.SubElement(ig, "ResourceCompile", Include=f)
-
-            if filt:
-                ET.SubElement(elem, "Filter").text = filt
-
-    if files["None"]:
-        ig = ET.SubElement(proj, "ItemGroup")
-
-        for f in files["None"]:
-            filt = get_filter(f)
-            elem = ET.SubElement(ig, "None", Include=f)
-
-            if filt:
-                ET.SubElement(elem, "Filter").text = filt
-
-    if files["Natvis"]:
-        ig = ET.SubElement(proj, "ItemGroup")
-
-        for f in files["Natvis"]:
-            filt = get_filter(f)
-            elem = ET.SubElement(ig, "Natvis", Include=f)
-
-            if filt:
-                ET.SubElement(elem, "Filter").text = filt
-
-    write_xml(proj, PROJECT_DIR / f"{PROJECT_NAME}.vcxproj.filters", bom=True)
+    write_xml(proj, output_path, bom=bom)
 
 
 # ──────────────────────────────────────────────
 # .sln
 # ──────────────────────────────────────────────
-def generate_sln():
-    lines = []
+def sln_project_path(vcxproj_name: str) -> str:
+    if PROJECT_REL_DIR == Path("."):
+        return vcxproj_name
+    return normalize_rel(PROJECT_REL_DIR / vcxproj_name)
 
+
+def generate_sln():
+    lines: list[str] = []
     lines.append("")
     lines.append("Microsoft Visual Studio Solution File, Format Version 12.00")
     lines.append("# Visual Studio Version 17")
     lines.append("VisualStudioVersion = 17.14.37012.4 d17.14")
     lines.append("MinimumVisualStudioVersion = 10.0.40219.1")
 
-    guid_upper = PROJECT_GUID.upper()
+    engine_guid = PROJECT_GUID.upper()
+    crossy_guid = CROSSY_PROJECT_GUID.upper()
 
     lines.append(
         f'Project("{VS_PROJECT_TYPE}") = "{PROJECT_NAME}", '
-        f'"{PROJECT_NAME}\\{PROJECT_NAME}.vcxproj", "{guid_upper}"'
+        f'"{sln_project_path(PROJECT_NAME + ".vcxproj")}", "{engine_guid}"'
+    )
+    lines.append("EndProject")
+
+    lines.append(
+        f'Project("{VS_PROJECT_TYPE}") = "{CROSSY_PROJECT_NAME}", '
+        f'"{sln_project_path(CROSSY_PROJECT_NAME + ".vcxproj")}", "{crossy_guid}"'
     )
     lines.append("EndProject")
 
     lines.append("Global")
-
     lines.append("\tGlobalSection(SolutionConfigurationPlatforms) = preSolution")
-
     for cfg, plat in CONFIGURATIONS:
         sln_plat = "x86" if plat == "Win32" else plat
         lines.append(f"\t\t{cfg}|{sln_plat} = {cfg}|{sln_plat}")
-
     lines.append("\tEndGlobalSection")
 
     lines.append("\tGlobalSection(ProjectConfigurationPlatforms) = postSolution")
-
     for cfg, plat in CONFIGURATIONS:
         sln_plat = "x86" if plat == "Win32" else plat
-        lines.append(f"\t\t{guid_upper}.{cfg}|{sln_plat}.ActiveCfg = {cfg}|{plat}")
-        lines.append(f"\t\t{guid_upper}.{cfg}|{sln_plat}.Build.0 = {cfg}|{plat}")
+        lines.append(f"\t\t{engine_guid}.{cfg}|{sln_plat}.ActiveCfg = {cfg}|{plat}")
+        lines.append(f"\t\t{engine_guid}.{cfg}|{sln_plat}.Build.0 = {cfg}|{plat}")
+
+    # CrossyGame is visible in the solution for all configurations, but it is
+    # built automatically only for configurations that can load game runtime modules:
+    # GameClient|x64, Debug|x64, and Release|x64. ObjViewer/Demo and Win32 configs
+    # do not build it by default.
+    for cfg, plat in CONFIGURATIONS:
+        sln_plat = "x86" if plat == "Win32" else plat
+        lines.append(f"\t\t{crossy_guid}.{cfg}|{sln_plat}.ActiveCfg = {cfg}|{plat}")
+        if (cfg, plat) in CROSSY_LINK_CONFIGURATIONS:
+            lines.append(f"\t\t{crossy_guid}.{cfg}|{sln_plat}.Build.0 = {cfg}|{plat}")
 
     lines.append("\tEndGlobalSection")
-
     lines.append("\tGlobalSection(SolutionProperties) = preSolution")
     lines.append("\t\tHideSolutionNode = FALSE")
     lines.append("\tEndGlobalSection")
-
     lines.append("\tGlobalSection(ExtensibilityGlobals) = postSolution")
     lines.append(f"\t\tSolutionGuid = {SOLUTION_GUID}")
     lines.append("\tEndGlobalSection")
-
     lines.append("EndGlobal")
     lines.append("")
 
     sln_path = ROOT / f"{PROJECT_NAME}.sln"
-
     with open(sln_path, "w", encoding="utf-8-sig", newline="\r\n") as f:
         f.write("\n".join(lines))
+
+
+# ──────────────────────────────────────────────
+# Cleanup
+# ──────────────────────────────────────────────
+def delete_obsolete_files():
+    removed = []
+    for rel in OBSOLETE_FILES:
+        path = PROJECT_DIR / Path(rel.replace("\\", os.sep))
+        if path.exists():
+            path.unlink()
+            removed.append(normalize_rel(path.relative_to(PROJECT_DIR)))
+    return removed
 
 
 # ──────────────────────────────────────────────
 # Main
 # ──────────────────────────────────────────────
 def main():
+    removed = delete_obsolete_files()
+    if removed:
+        print("Removed obsolete files:")
+        for rel in removed:
+            print(f"  {rel}")
+
     if GENERATE_VCPKG_LUA_PROPS and USE_VCPKG_LUA_PROPS:
         print("Generating vcpkg property sheet...")
         generate_vcpkg_lua_props()
-        print(f"  {VCPKG_LUA_PROPS_FILE}")
+        print(f"  {PROJECT_DIR / VCPKG_LUA_PROPS_FILE}")
 
-    print(f"Scanning project files in {PROJECT_DIR}...")
+    print(f"Scanning application project files in {PROJECT_DIR}...")
+    engine_files = scan_files(
+        PROJECT_DIR,
+        scan_dirs=ENGINE_SCAN_DIRS,
+        exclude_prefixes=ENGINE_EXCLUDE_PREFIXES,
+        include_shaders=True,
+        root_files=ROOT_FILES,
+        root_none_files=ROOT_NONE_FILES,
+        include_resources=True,
+    )
+    print(f"  {PROJECT_NAME} ClCompile:  {len(engine_files['ClCompile'])} files")
+    print(f"  {PROJECT_NAME} ClInclude:  {len(engine_files['ClInclude'])} files")
+    print(f"  {PROJECT_NAME} FxCompile:  {len(engine_files['FxCompile'])} files")
+    print(f"  {PROJECT_NAME} RC:         {len(engine_files['ResourceCompile'])} files")
+    print(f"  {PROJECT_NAME} Natvis:     {len(engine_files['Natvis'])} files")
+    print(f"  {PROJECT_NAME} None:       {len(engine_files['None'])} files")
 
-    files = scan_files(PROJECT_DIR)
-
-    print(f"  ClCompile:  {len(files['ClCompile'])} files")
-    print(f"  ClInclude:  {len(files['ClInclude'])} files")
-    print(f"  FxCompile:  {len(files['FxCompile'])} files")
-    print(f"  RC:         {len(files['ResourceCompile'])} files")
-    print(f"  Natvis:     {len(files['Natvis'])} files")
-    print(f"  None:       {len(files['None'])} files")
+    print(f"Scanning {CROSSY_PROJECT_NAME} module files in {PROJECT_DIR}...")
+    crossy_files = scan_files(
+        PROJECT_DIR,
+        scan_dirs=CROSSY_SCAN_DIRS,
+        include_shaders=False,
+        root_files=[],
+        root_none_files=[],
+        include_resources=False,
+    )
+    print(f"  {CROSSY_PROJECT_NAME} ClCompile: {len(crossy_files['ClCompile'])} files")
+    print(f"  {CROSSY_PROJECT_NAME} ClInclude: {len(crossy_files['ClInclude'])} files")
 
     print("Generating project files...")
 
-    generate_vcxproj(files)
-    print(f"  {PROJECT_NAME}.vcxproj")
+    generate_vcxproj(
+        name=PROJECT_NAME,
+        guid=PROJECT_GUID,
+        root_namespace=ROOT_NAMESPACE,
+        files=engine_files,
+        output_path=PROJECT_DIR / f"{PROJECT_NAME}.vcxproj",
+        configuration_type="Application",
+        config_props=CONFIG_PROPS,
+        include_paths=INCLUDE_PATHS,
+        application_project=True,
+        include_sfml=True,
+        include_nuget=True,
+        project_references=[
+            ProjectReference(
+                include=f"{CROSSY_PROJECT_NAME}.vcxproj",
+                guid=CROSSY_PROJECT_GUID,
+                condition=" Or ".join(
+                    f"'$(Configuration)|$(Platform)'=='{cfg}|{plat}'"
+                    for cfg, plat in sorted(CROSSY_LINK_CONFIGURATIONS)
+                ),
+            )
+        ],
+    )
+    print(f"  {PROJECT_DIR / (PROJECT_NAME + '.vcxproj')}")
 
-    generate_filters(files)
-    print(f"  {PROJECT_NAME}.vcxproj.filters")
+    generate_filters(
+        engine_files,
+        project_name=PROJECT_NAME,
+        output_path=PROJECT_DIR / f"{PROJECT_NAME}.vcxproj.filters",
+        bom=True,
+    )
+    print(f"  {PROJECT_DIR / (PROJECT_NAME + '.vcxproj.filters')}")
+
+    generate_vcxproj(
+        name=CROSSY_PROJECT_NAME,
+        guid=CROSSY_PROJECT_GUID,
+        root_namespace=CROSSY_ROOT_NAMESPACE,
+        files=crossy_files,
+        output_path=PROJECT_DIR / f"{CROSSY_PROJECT_NAME}.vcxproj",
+        configuration_type="StaticLibrary",
+        config_props=CROSSY_CONFIG_PROPS,
+        include_paths=CROSSY_INCLUDE_PATHS,
+        int_dir_prefix=CROSSY_PROJECT_NAME,
+        static_library_project=True,
+        include_sfml=False,
+        include_nuget=False,
+    )
+    print(f"  {PROJECT_DIR / (CROSSY_PROJECT_NAME + '.vcxproj')}")
+
+    generate_filters(
+        crossy_files,
+        project_name=CROSSY_PROJECT_NAME,
+        output_path=PROJECT_DIR / f"{CROSSY_PROJECT_NAME}.vcxproj.filters",
+        bom=True,
+    )
+    print(f"  {PROJECT_DIR / (CROSSY_PROJECT_NAME + '.vcxproj.filters')}")
 
     generate_sln()
-    print(f"  {PROJECT_NAME}.sln")
+    print(f"  {ROOT / (PROJECT_NAME + '.sln')}")
 
     print("Done!")
 

@@ -1,4 +1,4 @@
-﻿#include "SceneSaveManager.h"
+#include "SceneSaveManager.h"
 
 #include <iostream>
 #include <fstream>
@@ -41,17 +41,7 @@ namespace
 			return false;
 		}
 
-		// 런타임 맵/차량 액터는 씬에 다시 저장하지 않음
-		if (Actor->HasTag("__RuntimeSpawned") ||
-			Actor->HasTag("__RuntimeMap") ||
-			Actor->HasTag("__RowManaged") ||
-			Actor->HasTag("__RuntimeVehicle") ||
-			Actor->HasTag("Vehicle"))
-		{
-			return false;
-		}
-
-		return true;
+		return Actor->ShouldSerializeToScene();
 	}
 }
 

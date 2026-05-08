@@ -46,32 +46,6 @@ void RegisterWorldExtendedBinding(sol::state& Lua)
 		});
 
 
-
-	World.set_function("AcquirePrefab",
-		[](const std::string& PrefabName, sol::optional<FVector> MaybeLocation, sol::optional<FRotator> MaybeRotation, sol::this_state TS) -> sol::object
-		{
-			sol::state_view LuaView(TS);
-			FVector Location = MaybeLocation.value_or(FVector(0, 0, 0));
-			FRotator Rotation = MaybeRotation.value_or(FRotator());
-			AActor* Actor = FLuaWorldLibrary::AcquirePrefab(FString(PrefabName), Location, Rotation);
-
-			if (!Actor)
-			{
-				UE_LOG("[Lua] World.AcquirePrefab: Failed to acquire prefab %s", PrefabName.c_str());
-				return sol::nil;
-			}
-
-			FLuaGameObjectHandle Handle;
-			Handle.UUID = Actor->GetUUID();
-			return sol::make_object(LuaView, Handle);
-		});
-
-	World.set_function("WarmUpPrefabPool",
-		[](const std::string& PrefabName, int32 Count)
-		{
-			return FLuaWorldLibrary::WarmUpPrefabPool(FString(PrefabName), Count);
-		});
-
 	// World.GetPlayerController(index)
 	World.set_function("GetPlayerController",
 		[](int32 Index, sol::this_state TS) -> sol::object
@@ -308,6 +282,23 @@ void RegisterWorldExtendedBinding(sol::state& Lua)
 			return Result;
 		});
 
+	// Time Manager
+	World.set_function("SetGlobalTimeDilation", [](float Scale) { if (GEngine) GEngine->GetTimeManager().SetGlobalTimeDilation(Scale); });
+	World.set_function("GetGlobalTimeDilation", []() -> float { return GEngine ? GEngine->GetTimeManager().GetGlobalTimeDilation() : 1.0f; });
+	
+	World.set_function("StartHitStop", [](float Duration) { if (GEngine) GEngine->GetTimeManager().StartHitStop(Duration); });
+	World.set_function("StopHitStop", []() { if (GEngine) GEngine->GetTimeManager().StopHitStop(); });
+	World.set_function("IsHitStopActive", []() -> bool { return GEngine ? GEngine->GetTimeManager().IsHitStopActive() : false; });
+	
+	World.set_function("StartSlomo", [](float Scale, float Duration) { if (GEngine) GEngine->GetTimeManager().StartSlomo(Scale, Duration); });
+	World.set_function("StopSlomo", []() { if (GEngine) GEngine->GetTimeManager().StopSlomo(); });
+	World.set_function("IsSlomoActive", []() -> bool { return GEngine ? GEngine->GetTimeManager().IsSlomoActive() : false; });
+	
+	World.set_function("GetRawDeltaTime", []() -> float { return GEngine ? GEngine->GetTimeManager().GetRawDeltaTime() : 0.0f; });
+	World.set_function("GetGameDeltaTime", []() -> float { return GEngine ? GEngine->GetTimeManager().GetGameDeltaTime() : 0.0f; });
+	World.set_function("GetGameTime", []() -> float { return GEngine ? GEngine->GetTimeManager().GetGameTime() : 0.0f; });
+	World.set_function("GetUnscaledTime", []() -> float { return GEngine ? GEngine->GetTimeManager().GetUnscaledTime() : 0.0f; });
+
 	// Game 테이블
 	sol::table Game = Lua.get_or("Game", Lua.create_table());
 	Lua["Game"] = Game;
@@ -324,33 +315,25 @@ void RegisterWorldExtendedBinding(sol::state& Lua)
 			}
 		));
 
-	Game.set_function("Restart", []()
+	sol::table Application = Lua.get_or("Application", Lua.create_table());
+	Lua["Application"] = Application;
+
+	Application.set_function("RestartSession", []()
 	{
 		if (!GEngine)
 		{
-			UE_LOG("[Lua] Game.Restart() failed: GEngine is null.");
+			UE_LOG("[Lua] Application.RestartSession() failed: GEngine is null.");
 			return;
 		}
 
 		GEngine->RequestRestart();
 	});
 
-	Game.set_function("Exit", []()
+	Application.set_function("Exit", []()
 	{
 		if (!GEngine)
 		{
-			UE_LOG("[Lua] Game.Exit() failed: GEngine is null.");
-			return;
-		}
-
-		GEngine->RequestExit();
-	});
-
-	Game.set_function("Quit", []()
-	{
-		if (!GEngine)
-		{
-			UE_LOG("[Lua] Game.Quit() failed: GEngine is null.");
+			UE_LOG("[Lua] Application.Exit() failed: GEngine is null.");
 			return;
 		}
 

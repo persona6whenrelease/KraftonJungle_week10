@@ -59,6 +59,7 @@ public:
 		bool bProperty = true;
 		bool bScene = true;
 		bool bStat = false;
+		bool bCurve = false;
 		bool bContentBrowser = true;
 		bool bImGUISettings = false;
 		bool bEditorDebug = false;

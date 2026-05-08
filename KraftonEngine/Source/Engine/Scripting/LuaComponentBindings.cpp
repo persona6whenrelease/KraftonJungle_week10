@@ -15,6 +15,7 @@
 #include "Component/SceneComponent.h"
 #include "Component/PrimitiveComponent.h"
 #include "Component/StaticMeshComponent.h"
+#include "Component/SpringArmComponent.h"
 
 namespace
 {
@@ -183,6 +184,20 @@ void RegisterActorComponentBinding(sol::state& Lua)
 			}
 			FLuaStaticMeshComponentHandle Handle;
 			Handle.UUID = Mesh->GetUUID();
+			return sol::make_object(LuaView, Handle);
+		},
+
+		"AsSpringArm",
+		[](const FLuaActorComponentHandle& Self, sol::this_state State) -> sol::object
+		{
+			sol::state_view LuaView(State);
+			USpringArmComponent* SpringArm = Cast<USpringArmComponent>(Self.Resolve());
+			if (!SpringArm)
+			{
+				return sol::nil;
+			}
+			FLuaSpringArmComponentHandle Handle;
+			Handle.UUID = SpringArm->GetUUID();
 			return sol::make_object(LuaView, Handle);
 		}
 	);
@@ -398,6 +413,21 @@ void RegisterSceneComponentBinding(sol::state& Lua)
 			}
 			Component->MoveLocal(Delta);
 			return true;
+		},
+
+
+		"AsSpringArm",
+		[](const FLuaSceneComponentHandle& Self, sol::this_state State) -> sol::object
+		{
+			sol::state_view LuaView(State);
+			USpringArmComponent* SpringArm = Cast<USpringArmComponent>(Self.Resolve());
+			if (!SpringArm)
+			{
+				return sol::nil;
+			}
+			FLuaSpringArmComponentHandle Handle;
+			Handle.UUID = SpringArm->GetUUID();
+			return sol::make_object(LuaView, Handle);
 		},
 
 		"ListProperties",

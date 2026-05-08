@@ -43,65 +43,62 @@ bool FGameClientViewport::Initialize(
 	ViewportClient->SetPresentationRect(InitialPresentationRect);
 	ViewportClient->SetCursorClipRect(InitialPresentationRect);
 
-	FGameUiCallbacks UiCallbacks;
-	UiCallbacks.OnContinue = [InEngine]()
+	FViewportModuleContext ModuleContext;
+	ModuleContext.Engine = InEngine;
+	ModuleContext.Window = Window;
+	ModuleContext.Renderer = &Renderer;
+	ModuleContext.ViewportClient = ViewportClient;
+	ModuleContext.UiCommands.ExecuteCommand = [InEngine, Window](const FString& CommandName)
 	{
-		if (InEngine)
+		if (CommandName == "Viewport.Resume" || CommandName == "Viewport.ClosePauseMenu")
 		{
-			InEngine->SetPauseMenuOpen(false);
+			if (InEngine)
+			{
+				InEngine->SetPauseMenuOpen(false);
+			}
+		}
+		else if (CommandName == "Application.RestartSession")
+		{
+			if (InEngine)
+			{
+				InEngine->RequestRestart();
+			}
+		}
+		else if (CommandName == "Application.Exit")
+		{
+			if (InEngine)
+			{
+				InEngine->RequestExit();
+			}
+		}
+		else if (CommandName == "Application.ToggleFullscreen")
+		{
+			if (Window)
+			{
+				Window->ToggleFullscreen();
+			}
 		}
 	};
-	UiCallbacks.OnClosePauseMenu = [InEngine]()
+	ModuleContext.UiCommands.QueryBool = [InEngine, Window](const FString& StateName) -> bool
 	{
-		if (InEngine)
+		if (StateName == "Application.Fullscreen")
 		{
-			InEngine->SetPauseMenuOpen(false);
+			return Window && Window->IsFullscreen();
 		}
-	};
-	UiCallbacks.OnRestart = [InEngine]()
-	{
-		if (InEngine)
+		if (StateName == "Render.FXAA")
 		{
-			InEngine->RequestRestart();
+			return InEngine && InEngine->GetSettings().RenderOptions.ShowFlags.bFXAA;
 		}
-	};
-	UiCallbacks.OnExit = [InEngine]()
-	{
-		if (InEngine)
-		{
-			InEngine->RequestExit();
-		}
-	};
-	UiCallbacks.OnToggleFullscreen = [Window]()
-	{
-		if (Window)
-		{
-			Window->ToggleFullscreen();
-		}
-	};
-	UiCallbacks.IsFullscreen = [Window]() -> bool
-	{
-		return Window && Window->IsFullscreen();
-	};
-	UiCallbacks.IsFxaaEnabled = [InEngine]() -> bool
-	{
-		return InEngine && InEngine->GetSettings().RenderOptions.ShowFlags.bFXAA;
-	};
-	UiCallbacks.OnFxaaChanged = [InEngine](bool bEnabled)
-	{
-		if (InEngine)
-		{
-			InEngine->GetSettings().RenderOptions.ShowFlags.bFXAA = bEnabled;
-		}
-	};
-	FGameUiSystem& GameUi = ViewportClient->GetGameUiSystem();
-
-	if (!GameUi.Initialize(Window, Renderer, ViewportClient))
-	{
 		return false;
-	}
-
-	GameUi.SetCallbacks(std::move(UiCallbacks));
+	};
+	ModuleContext.UiCommands.SetBool = [InEngine](const FString& StateName, bool bValue)
+	{
+		if (StateName == "Render.FXAA" && InEngine)
+		{
+			InEngine->GetSettings().RenderOptions.ShowFlags.bFXAA = bValue;
+		}
+	};
+	InEngine->GetRuntimeModules().OnViewportCreated(ModuleContext);
 
 	SetInputEnabled(true);
 
@@ -191,7 +188,6 @@ void FGameClientViewport::Shutdown()
 {
 	if (ViewportClient)
 	{
-		ViewportClient->GetGameUiSystem().Shutdown();
 		ViewportClient->OnEndPIE();
 		UObjectManager::Get().DestroyObject(ViewportClient);
 		ViewportClient = nullptr;

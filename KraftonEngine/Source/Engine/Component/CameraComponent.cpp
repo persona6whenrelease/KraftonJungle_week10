@@ -238,6 +238,7 @@ FCameraView UCameraComponent::GetCameraView() const
 	View.Location = GetWorldLocation();
 	View.Rotation = GetWorldRotationQuat();
 	View.State = CameraState;
+	View.PostProcess = PostProcess;
 	View.bValid = true;
 	return View;
 }
@@ -252,25 +253,37 @@ void UCameraComponent::ApplyCameraView(const FCameraView& View)
 	SetWorldLocation(View.Location);
 	SetWorldRotation(View.Rotation);
 	SetCameraState(View.State);
+	PostProcess = View.PostProcess;
 }
 
 bool UCameraComponent::CalcCameraView(APlayerController* Controller, float DeltaTime, FCameraView& OutView)
 {
 	NormalizeOptions();
 
+	bool bResult = false;
 	switch (GetViewMode())
 	{
 	case ECameraViewMode::FirstPerson:
-		return CalcFirstPersonView(Controller, DeltaTime, OutView);
+		bResult = CalcFirstPersonView(Controller, DeltaTime, OutView);
+		break;
 	case ECameraViewMode::ThirdPerson:
-		return CalcThirdPersonView(Controller, DeltaTime, OutView);
+		bResult = CalcThirdPersonView(Controller, DeltaTime, OutView);
+		break;
 	case ECameraViewMode::OrthographicFollow:
-		return CalcOrthographicFollowView(Controller, DeltaTime, OutView);
+		bResult = CalcOrthographicFollowView(Controller, DeltaTime, OutView);
+		break;
 	case ECameraViewMode::Static:
 	case ECameraViewMode::Custom:
 	default:
-		return CalcStaticView(Controller, DeltaTime, OutView);
+		bResult = CalcStaticView(Controller, DeltaTime, OutView);
+		break;
 	}
+
+	if (bResult)
+	{
+		OutView.PostProcess = PostProcess;
+	}
+	return bResult;
 }
 
 void UCameraComponent::SetActiveCamera()

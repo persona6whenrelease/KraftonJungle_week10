@@ -1,41 +1,38 @@
-﻿#pragma once
+#pragma once
 #include "Core/CoreTypes.h"
 #include "Core/Singleton.h"
 
-#include "Platform/Paths.h"
 #include "ThirdParty/SFML/Audio.hpp"
 
-
-enum class SoundEffect : uint32
-{
-	Jump, 
-	Parry,
-	Death,
-	Dash
-};
-
+using FSoundId = FString;
 
 class FSoundManager : public TSingleton<FSoundManager>
 {
 	friend class TSingleton<FSoundManager>;
 
 public:
-	// sound file mapping 
-
-	void PlayBGM();
-	void StopBGM();
 	void initialize();
 
+	bool LoadMusic(const FSoundId& ID, const std::wstring& FilePath, bool bLoop = true);
+	void PlayMusic(const FSoundId& ID);
+	void StopMusic(const FSoundId& ID);
+	void StopAllMusic();
 
-	void LoadEffect(SoundEffect ID, const std::wstring& FilePath);
-	void PlayEffect(SoundEffect ID);
+	// Legacy aliases for callers that only need one active music channel.
+	void PlayBGM();
+	void StopBGM();
 
+	void LoadEffect(const FSoundId& ID, const std::wstring& FilePath);
+	void PlayEffect(const FSoundId& ID);
+	void StopEffect(const FSoundId& ID);
+
+	bool IsEffectPlaying(const FSoundId& ID) const;
+	float GetEffectDuration(const FSoundId& ID) const;
 
 private:
 	FSoundManager() = default;
-	TMap<SoundEffect, std::unique_ptr<sf::SoundBuffer>> SoundBufferMap;
-	TMap<SoundEffect, std::unique_ptr<sf::Sound>>       Sounds;
-	sf::Music m_bgm; 
-
-
+	TMap<FSoundId, std::unique_ptr<sf::SoundBuffer>> SoundBufferMap;
+	TMap<FSoundId, std::unique_ptr<sf::Sound>> Sounds;
+	TMap<FSoundId, std::unique_ptr<sf::Music>> MusicMap;
+	FSoundId LastMusicId;
 };

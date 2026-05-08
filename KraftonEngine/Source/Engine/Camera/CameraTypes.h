@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Core/CoreTypes.h"
 #include "Math/Quat.h"
@@ -14,11 +14,28 @@ struct FCameraState
 	bool bIsOrthogonal = false;
 };
 
+// 카메라 단위 PostProcess 매개변수.
+// CameraModifier chain이 매 프레임 누적/덮어써서 FCameraView 안에서 BlendViews와 함께 흐름.
+// 하드웨어 AlphaBlend 합성을 전제로 하므로 *Alpha 필드는 [0,1] 범위.
+struct FCameraPostProcess
+{
+	// Vignette
+	FVector2 VignetteCenter = FVector2(0.5f, 0.5f);  // UV 공간. Pawn 추적 시 매 프레임 갱신, 폴백은 화면 중심
+	float VignetteIntensity = 1.0f;                  // smoothstep 시작 거리 (1.0이면 효과 없음)
+	float VignetteSmoothness = 0.5f;                 // smoothstep 폭
+	FVector VignetteColor = FVector::ZeroVector;     // 가장자리 색상
+
+	// Fade
+	FVector FadeColor = FVector::ZeroVector;
+	float FadeAlpha = 0.0f;                          // 0=무효, 1=완전 가림
+};
+
 struct FCameraView
 {
 	FVector Location = FVector::ZeroVector;
 	FQuat Rotation = FQuat::Identity;
 	FCameraState State;
+	FCameraPostProcess PostProcess;
 	bool bValid = false;
 };
 

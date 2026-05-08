@@ -96,7 +96,7 @@ void FTickManager::Tick(UWorld* World, float DeltaTime, ELevelTick TickType)
 
 			TickFunction->ExecuteTick(DeltaTime, TickType);
 
-			// ExecuteTick 안에서 ResetMap/DestroyActor가 호출되면
+			// ExecuteTick 안에서 runtime reset/DestroyActor가 호출되면
 			// RemoveTickFunction()이 현재 배열을 수정할 수 있습니다.
 			// 따라서 단순 range-for 대신 index 기반으로 순회합니다.
 			++Index;

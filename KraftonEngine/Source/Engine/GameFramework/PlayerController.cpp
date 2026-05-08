@@ -1,5 +1,6 @@
-#include "GameFramework/PlayerController.h"
+﻿#include "GameFramework/PlayerController.h"
 
+#include "Object/ObjectFactory.h"
 #include "Component/ActorComponent.h"
 #include "Component/CameraComponent.h"
 #include "Component/ControllerInputComponent.h"
@@ -9,6 +10,7 @@
 #include "GameFramework/Pawn.h"
 #include "GameFramework/World.h"
 #include "Serialization/Archive.h"
+#include "Camera\CameraShakeModifier.h"
 
 IMPLEMENT_CLASS(APlayerController, AActor)
 
@@ -63,17 +65,22 @@ namespace
 	}
 }
 
+APlayerController::~APlayerController()
+{
+	DestroyCameraManager();
+}
+
 void APlayerController::Serialize(FArchive& Ar)
 {
 	AActor::Serialize(Ar);
 	Ar << ControlRotation;
 	Ar << PossessedActorUUID;
-	CameraManager.Serialize(Ar);
+	EnsureCameraManager()->SerializeCameraState(Ar);
 
 	if (Ar.IsLoading())
 	{
 		PossessedActor = nullptr;
-		CameraManager.Initialize(this);
+		EnsureCameraManager()->Initialize(this);
 	}
 }
 
@@ -100,7 +107,7 @@ void APlayerController::RemapActorReferences(const TMap<uint32, uint32>& ActorUU
 	};
 
 	RemapUUID(PossessedActorUUID);
-	CameraManager.RemapActorReferences(ActorUUIDRemap);
+	EnsureCameraManager()->RemapActorReferences(ActorUUIDRemap);
 	PossessedActor = nullptr;
 }
 
@@ -117,13 +124,17 @@ void APlayerController::InitDefaultComponents()
 	{
 		AddComponent<UControllerInputComponent>();
 	}
-	CameraManager.Initialize(this);
+	EnsureCameraManager();
 }
 
 void APlayerController::EndPlay()
 {
 	UnPossess();
-	CameraManager.ClearActiveCamera();
+	if (CameraManager && IsAliveObject(CameraManager))
+	{
+		CameraManager->ClearActiveCamera();
+	}
+	DestroyCameraManager();
 	AActor::EndPlay();
 }
 
@@ -237,8 +248,7 @@ void APlayerController::SetActiveCamera(UCameraComponent* Camera)
 		}
 	}
 
-	CameraManager.Initialize(this);
-	CameraManager.SetActiveCamera(Camera, false);
+	EnsureCameraManager()->SetActiveCamera(Camera, false);
 	ControlRotation = MakeControlRotationFromCamera(Camera);
 }
 
@@ -258,8 +268,7 @@ void APlayerController::SetActiveCameraWithBlend(UCameraComponent* Camera)
 		}
 	}
 
-	CameraManager.Initialize(this);
-	CameraManager.SetActiveCamera(Camera, true);
+	EnsureCameraManager()->SetActiveCamera(Camera, true);
 }
 
 bool APlayerController::SetActiveCameraFromPossessedPawn()
@@ -275,21 +284,26 @@ bool APlayerController::SetActiveCameraFromPossessedPawn()
 
 void APlayerController::ClearActiveCamera()
 {
-	CameraManager.ClearActiveCamera();
+	if (CameraManager && IsAliveObject(CameraManager))
+	{
+		CameraManager->ClearActiveCamera();
+	}
 }
 
 UCameraComponent* APlayerController::GetActiveCamera() const
 {
-	return CameraManager.GetActiveCamera();
+	return const_cast<APlayerController*>(this)->EnsureCameraManager()->GetActiveCamera();
 }
 
 UCameraComponent* APlayerController::ResolveViewCamera() const
 {
-	if (UCameraComponent* OutputCamera = CameraManager.GetOutputCameraIfValid())
+	APlayerCameraManager* Manager = const_cast<APlayerController*>(this)->EnsureCameraManager();
+
+	if (UCameraComponent* OutputCamera = Manager->GetOutputCameraIfValid())
 	{
 		return OutputCamera;
 	}
-	if (UCameraComponent* ActiveCamera = CameraManager.GetActiveCamera())
+	if (UCameraComponent* ActiveCamera = Manager->GetActiveCamera())
 	{
 		return ActiveCamera;
 	}
@@ -307,7 +321,7 @@ void APlayerController::ClearCameraReferencesForActor(const AActor* Actor)
 		return;
 	}
 
-	CameraManager.ClearCameraReferencesForActor(Actor);
+	EnsureCameraManager()->ClearCameraReferencesForActor(Actor);
 	if (PossessedActor == Actor || PossessedActorUUID == Actor->GetUUID())
 	{
 		UnPossess();
@@ -316,7 +330,93 @@ void APlayerController::ClearCameraReferencesForActor(const AActor* Actor)
 
 void APlayerController::ClearCameraReferencesForComponent(const UActorComponent* Component)
 {
-	CameraManager.ClearCameraReferencesForComponent(Component);
+	EnsureCameraManager()->ClearCameraReferencesForComponent(Component);
+}
+
+void APlayerController::StartCameraShake(
+	float Duration,
+	float LocationAmplitude,
+	float RotationAmplitude,
+	float Frequency,
+	float FOVAmplitude,
+	bool bSingleInstance)
+{
+	if (Duration <= 0.0f)
+	{
+		return;
+	}
+
+	const float SafeLocAmp = LocationAmplitude < 0.0f ? -LocationAmplitude : LocationAmplitude;
+	const float SafeRotAmp = RotationAmplitude < 0.0f ? -RotationAmplitude : RotationAmplitude;
+	const float SafeFreq = Frequency < 0.0f ? 0.0f : Frequency;
+
+	FCameraShakeParams Params;
+	Params.Duration = Duration;
+	Params.LocationAmplitude = FVector(SafeLocAmp, SafeLocAmp, SafeLocAmp);
+	Params.RotationAmplitude = FRotator(SafeRotAmp, SafeRotAmp, SafeRotAmp);
+	Params.Frequency = SafeFreq;
+	Params.FOVAmplitude = FOVAmplitude;
+	Params.bSingleInstance = bSingleInstance;
+
+	GetCameraManager().StartCameraShake(Params);
+}
+
+void APlayerController::SetCameraVignette(float Intensity, float Smoothness, const FVector& Color)
+{
+	UCameraComponent* TargetCamera = GetActiveCamera();
+	if (!TargetCamera)
+	{
+		return;
+	}
+
+	FCameraPostProcess& PP = TargetCamera->GetMutablePostProcess();
+	PP.VignetteIntensity = Intensity < 0.0f ? 0.0f : Intensity;
+	PP.VignetteSmoothness = Smoothness < 0.0f ? 0.0f : Smoothness;
+	PP.VignetteColor = Color;
+
+	if (UCameraComponent* OutputCamera = GetCameraManagerPtr() ? GetCameraManagerPtr()->GetOutputCameraIfValid() : nullptr)
+	{
+		FCameraPostProcess& OutputPP = OutputCamera->GetMutablePostProcess();
+		OutputPP.VignetteIntensity = PP.VignetteIntensity;
+		OutputPP.VignetteSmoothness = PP.VignetteSmoothness;
+		OutputPP.VignetteColor = PP.VignetteColor;
+	}
+}
+
+void APlayerController::SetCameraFade(float Alpha, const FVector& Color)
+{
+	UCameraComponent* TargetCamera = GetActiveCamera();
+	if (!TargetCamera)
+	{
+		return;
+	}
+
+	FCameraPostProcess& PP = TargetCamera->GetMutablePostProcess();
+	PP.FadeAlpha = Alpha < 0.0f ? 0.0f : (Alpha > 1.0f ? 1.0f : Alpha);
+	PP.FadeColor = Color;
+
+	if (UCameraComponent* OutputCamera = GetCameraManagerPtr() ? GetCameraManagerPtr()->GetOutputCameraIfValid() : nullptr)
+	{
+		FCameraPostProcess& OutputPP = OutputCamera->GetMutablePostProcess();
+		OutputPP.FadeAlpha = PP.FadeAlpha;
+		OutputPP.FadeColor = PP.FadeColor;
+	}
+}
+
+void APlayerController::ResetCameraPostProcess()
+{
+	UCameraComponent* TargetCamera = GetActiveCamera();
+	if (!TargetCamera)
+	{
+		return;
+	}
+
+	TargetCamera->SetPostProcess(FCameraPostProcess());
+
+	if (UCameraComponent* OutputCamera = GetCameraManagerPtr() ? GetCameraManagerPtr()->GetOutputCameraIfValid() : nullptr)
+	{
+		OutputCamera->SetPostProcess(FCameraPostProcess());
+	}
 }
 
 void APlayerController::SetControlRotation(const FRotator& InRotation)
@@ -422,4 +522,47 @@ AActor* APlayerController::ResolveActorUUID(uint32 ActorUUID) const
 	}
 	UWorld* World = GetWorld();
 	return World ? World->FindActorByUUIDInWorld(ActorUUID) : nullptr;
+}
+
+APlayerCameraManager* APlayerController::EnsureCameraManager()
+{
+	if (CameraManager && IsAliveObject(CameraManager))
+	{
+		return CameraManager;
+	}
+
+	CameraManager = UObjectManager::Get().CreateObject<APlayerCameraManager>(this);
+	if (CameraManager)
+	{
+		CameraManager->SetFName(FName("PlayerCameraManager"));
+		CameraManager->Initialize(this);
+	}
+
+	return CameraManager;
+}
+
+void APlayerController::DestroyCameraManager()
+{
+	if (CameraManager && IsAliveObject(CameraManager))
+	{
+		CameraManager->EndPlay();
+		UObjectManager::Get().DestroyObject(CameraManager);
+	}
+
+	CameraManager = nullptr;
+}
+
+APlayerCameraManager& APlayerController::GetCameraManager()
+{
+	return *EnsureCameraManager();
+}
+
+const APlayerCameraManager& APlayerController::GetCameraManager() const
+{
+	return *const_cast<APlayerController*>(this)->EnsureCameraManager();
+}
+
+APlayerCameraManager* APlayerController::GetCameraManagerPtr() const
+{
+	return CameraManager && IsAliveObject(CameraManager) ? CameraManager : nullptr;
 }

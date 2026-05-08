@@ -192,10 +192,12 @@ void FGameClientOverlay::Update(float DeltaTime)
 	{
 		if (UGameViewportClient* ViewportClient = Engine->GetGameViewport().GetViewportClient())
 		{
-			FGameUiSystem& GameUi = ViewportClient->GetGameUiSystem();
-			GameUi.SetPauseMenuVisible(bMenuOpen);
-			bGameUiWantsMouse = GameUi.WantsMouse();
-			bGameUiWantsKeyboard = GameUi.WantsKeyboard();
+			if (IViewportUiLayer* UiLayer = ViewportClient->GetUiLayer())
+			{
+				UiLayer->SetLayerVisible("PauseMenu", bMenuOpen);
+				bGameUiWantsMouse = UiLayer->WantsMouse();
+				bGameUiWantsKeyboard = UiLayer->WantsKeyboard();
+			}
 		}
 	}
 
@@ -226,11 +228,13 @@ void FGameClientOverlay::Render(float DeltaTime)
 		{
 			return;
 		}
-		FGameUiSystem& GameUi = ViewportClient->GetGameUiSystem();
-		GameUi.SetPauseMenuVisible(Engine->IsPauseMenuOpen());
-		GameUi.Update(DeltaTime);
-		GameUi.Render();
-		bGameUiAvailable = GameUi.IsAvailable();
+		if (IViewportUiLayer* UiLayer = ViewportClient->GetUiLayer())
+		{
+			UiLayer->SetLayerVisible("PauseMenu", Engine->IsPauseMenuOpen());
+			UiLayer->Update(DeltaTime);
+			UiLayer->Render();
+			bGameUiAvailable = UiLayer->IsAvailable();
+		}
 	};
 
 	if (bUseD3D11ViewportPresenter)

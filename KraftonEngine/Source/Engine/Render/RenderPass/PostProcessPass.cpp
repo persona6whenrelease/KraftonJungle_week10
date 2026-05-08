@@ -7,6 +7,7 @@ REGISTER_RENDER_PASS(FPostProcessPass)
 #include "Render/Types/FrameContext.h"
 #include "Render/Types/RenderConstants.h"
 #include "Render/Command/DrawCommandList.h"
+#include "Core/Log.h"
 
 FPostProcessPass::FPostProcessPass()
 {
@@ -19,7 +20,15 @@ bool FPostProcessPass::BeginPass(const FPassContext& Ctx)
 {
 	const FFrameContext& Frame = Ctx.Frame;
 	if (!Frame.DepthTexture || !Frame.DepthCopyTexture || !Frame.StencilCopySRV)
+	{
+		static uint32 SkipLogCounter = 0;
+		if (SkipLogCounter++ % 60 == 0)
+		{
+			UE_LOG("[PostProcessPass] Skipping pass! Depth: %p, DepthCopy: %p, StencilCopy: %p", 
+				Frame.DepthTexture, Frame.DepthCopyTexture, Frame.StencilCopySRV);
+		}
 		return false;
+	}
 
 	ID3D11DeviceContext* DC = Ctx.Device.GetDeviceContext();
 	FStateCache& Cache = Ctx.Cache;

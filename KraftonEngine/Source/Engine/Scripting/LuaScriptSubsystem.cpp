@@ -147,7 +147,6 @@ void FLuaScriptSubsystem::Initialize()
 	ConfigureLuaState();
 
 	RegisterScriptDirectoryWatcher("Config/");
-	RegisterScriptDirectoryWatcher("Game/");
 
 	bInitialized = true;
 	UE_LOG("[Lua] Lua Scripting Initialized.");
@@ -169,11 +168,11 @@ void FLuaScriptSubsystem::Shutdown()
 	}
 	WatchSubs.clear();
 
-	ClearLuaUiEventHandler();
 	CancelAllComponentTasks();
 	ComponentBindings.clear();
 	++LuaGeneration;
 	Lua = sol::state();
+	ExtraBindingRegistrars.clear();
 
 	LoadedScripts.clear();
 	LoadedScriptOrder.clear();
@@ -184,6 +183,30 @@ void FLuaScriptSubsystem::Shutdown()
 	bInitialized = false;
 	UE_LOG("[Lua] Lua Scripting Shutdown.");
 }
+
+void FLuaScriptSubsystem::AddBindingRegistrar(FLuaBindingRegistrar Registrar)
+{
+	if (!Registrar)
+	{
+		return;
+	}
+
+	for (FLuaBindingRegistrar Existing : ExtraBindingRegistrars)
+	{
+		if (Existing == Registrar)
+		{
+			return;
+		}
+	}
+
+	ExtraBindingRegistrars.push_back(Registrar);
+}
+
+void FLuaScriptSubsystem::ClearBindingRegistrars()
+{
+	ExtraBindingRegistrars.clear();
+}
+
 
 
 bool FLuaScriptSubsystem::DispatchUiEvent(const FString& EventName)
@@ -212,8 +235,7 @@ bool FLuaScriptSubsystem::DispatchUiEvent(const FString& EventName)
 
 	// Component scripts run in their own sol::environment, so a script-level
 	// function OnUIEvent(eventName) is not stored on Lua.globals(). Dispatch to
-	// those environments first. This prevents UI.SetEventHandler users such as
-	// UIExample.lua from stealing the single global UI handler slot.
+	// those environments first. This prevents component-level UI handlers from being bypassed by a global UI callback.
 	bool bHandledByComponent = false;
 	for (auto& Pair : ComponentBindings)
 	{
@@ -234,19 +256,6 @@ bool FLuaScriptSubsystem::DispatchUiEvent(const FString& EventName)
 	if (bHandledByComponent)
 	{
 		return true;
-	}
-
-	// Backward-compatible fallback for UI.SetEventHandler(function(eventName) ... end).
-	// This is intentionally fallback-only. Only one script can occupy this slot.
-	sol::object UiObject = Lua["UI"];
-	if (UiObject.get_type() == sol::type::table)
-	{
-		sol::table UiTable = UiObject.as<sol::table>();
-		sol::object HandlerObject = UiTable["_EventHandler"];
-		if (InvokeLuaFunction(HandlerObject, "UI.SetEventHandler"))
-		{
-			return true;
-		}
 	}
 
 	// Standalone/global script fallback.
@@ -856,6 +865,13 @@ void FLuaScriptSubsystem::ConfigureLuaState(sol::state& TargetLua)
 		sol::lib::string);
 
 	RegisterLuaBindings(TargetLua);
+	for (FLuaBindingRegistrar Registrar : ExtraBindingRegistrars)
+	{
+		if (Registrar)
+		{
+			Registrar(TargetLua);
+		}
+	}
 	RegisterRuntimeFunctions(TargetLua);
 
 	sol::table Package = TargetLua["package"];
@@ -1115,7 +1131,6 @@ bool FLuaScriptSubsystem::ReloadScriptsAtomically(const TSet<FString>& ReloadTar
 		}
 	}
 
-	ClearLuaUiEventHandler();
 	CancelAllComponentTasks();
 	ComponentBindings.clear();
 
@@ -1127,11 +1142,7 @@ bool FLuaScriptSubsystem::ReloadScriptsAtomically(const TSet<FString>& ReloadTar
 	ModulePaths = std::move(NewModulePaths);
 	RebuildIncludeDependents();
 
-	// Keep GameUiSystem connected to the current Lua state only.
-	// The router is native-only; it looks up the Lua receiver in the active state at dispatch time.
-	InstallLuaUiEventRouter();
-
-	for (const auto& [ComponentUUID, ScriptPath] : ComponentBindingsToRestore)
+		for (const auto& [ComponentUUID, ScriptPath] : ComponentBindingsToRestore)
 	{
 		UObject* Object = UObjectManager::Get().FindByUUID(ComponentUUID);
 		if (ULuaScriptComponent* Component = Cast<ULuaScriptComponent>(Object))

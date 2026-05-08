@@ -79,6 +79,9 @@
     <Filter Include="Source\Engine\Core">
       <UniqueIdentifier>{aaeb2f3f-eff4-9d0e-a471-82c1372b9aed}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source\Engine\Core\Time">
+      <UniqueIdentifier>{ed1c86e8-dd14-53ee-b3c6-60a4d6fd9a8c}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Source\Engine\Debug">
       <UniqueIdentifier>{94a820a1-1cf9-b142-f9b6-735eff25a3ee}</UniqueIdentifier>
     </Filter>
@@ -174,9 +177,6 @@
     </Filter>
     <Filter Include="Source\Engine\UI">
       <UniqueIdentifier>{e91ccaa5-c2ef-6d1b-0c73-22388c8418d2}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Source\Engine\UI\Game">
-      <UniqueIdentifier>{42d297eb-d356-439b-78a6-62a3f2e548e2}</UniqueIdentifier>
     </Filter>
     <Filter Include="Source\Engine\UI\ImGui">
       <UniqueIdentifier>{6162097b-7746-9038-23d9-4b6db03e0183}</UniqueIdentifier>
@@ -288,6 +288,9 @@
     <FxCompile Include="Shaders\PostProcess\FXAA.hlsl">
       <Filter>Shaders\PostProcess</Filter>
     </FxCompile>
+    <FxCompile Include="Shaders\PostProcess\Fade.hlsl">
+      <Filter>Shaders\PostProcess</Filter>
+    </FxCompile>
     <FxCompile Include="Shaders\PostProcess\HeightFog.hlsl">
       <Filter>Shaders\PostProcess</Filter>
     </FxCompile>
@@ -307,6 +310,9 @@
       <Filter>Shaders\PostProcess</Filter>
     </FxCompile>
     <FxCompile Include="Shaders\PostProcess\ShadowMapVis.hlsl">
+      <Filter>Shaders\PostProcess</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\PostProcess\Vignette.hlsl">
       <Filter>Shaders\PostProcess</Filter>
     </FxCompile>
     <FxCompile Include="Shaders\UI\Billboard.hlsl">
@@ -368,6 +374,9 @@
     <ClCompile Include="Source\Editor\UI\EditorControlWidget.cpp">
       <Filter>Source\Editor\UI</Filter>
     </ClCompile>
+    <ClCompile Include="Source\Editor\UI\EditorCurveWidget.cpp">
+      <Filter>Source\Editor\UI</Filter>
+    </ClCompile>
     <ClCompile Include="Source\Editor\UI\EditorDragSource.cpp">
       <Filter>Source\Editor\UI</Filter>
     </ClCompile>
@@ -415,6 +424,18 @@
     </ClCompile>
     <ClCompile Include="Source\Editor\Viewport\FLevelViewportLayout.cpp">
       <Filter>Source\Editor\Viewport</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Engine\Camera\CameraFadeModifier.cpp">
+      <Filter>Source\Engine\Camera</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Engine\Camera\CameraModifier.cpp">
+      <Filter>Source\Engine\Camera</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Engine\Camera\CameraShakeModifier.cpp">
+      <Filter>Source\Engine\Camera</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Engine\Camera\CameraVignetteModifier.cpp">
+      <Filter>Source\Engine\Camera</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Camera\PlayerCameraManager.cpp">
       <Filter>Source\Engine\Camera</Filter>
@@ -509,9 +530,6 @@
     <ClCompile Include="Source\Engine\Component\MeshComponent.cpp">
       <Filter>Source\Engine\Component</Filter>
     </ClCompile>
-    <ClCompile Include="Source\Engine\Component\Movement\HopMovementComponent.cpp">
-      <Filter>Source\Engine\Component\Movement</Filter>
-    </ClCompile>
     <ClCompile Include="Source\Engine\Component\Movement\InterpToMovementComponent.cpp">
       <Filter>Source\Engine\Component\Movement</Filter>
     </ClCompile>
@@ -530,9 +548,6 @@
     <ClCompile Include="Source\Engine\Component\Movement\RotatingMovementComponent.cpp">
       <Filter>Source\Engine\Component\Movement</Filter>
     </ClCompile>
-    <ClCompile Include="Source\Engine\Component\ParryComponent.cpp">
-      <Filter>Source\Engine\Component</Filter>
-    </ClCompile>
     <ClCompile Include="Source\Engine\Component\PawnOrientationComponent.cpp">
       <Filter>Source\Engine\Component</Filter>
     </ClCompile>
@@ -544,6 +559,9 @@
     </ClCompile>
     <ClCompile Include="Source\Engine\Component\Script\LuaScriptComponent.cpp">
       <Filter>Source\Engine\Component\Script</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Engine\Component\SpringArmComponent.cpp">
+      <Filter>Source\Engine\Component</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Component\StaticMeshComponent.cpp">
       <Filter>Source\Engine\Component</Filter>
@@ -568,6 +586,9 @@
     </ClCompile>
     <ClCompile Include="Source\Engine\Core\TickFunction.cpp">
       <Filter>Source\Engine\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Engine\Core\Time\EngineTimeManager.cpp">
+      <Filter>Source\Engine\Core\Time</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Debug\DebugDrawQueue.cpp">
       <Filter>Source\Engine\Debug</Filter>
@@ -625,6 +646,9 @@
     </ClCompile>
     <ClCompile Include="Source\Engine\Materials\MaterialManager.cpp">
       <Filter>Source\Engine\Materials</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Engine\Math\MathUtils.cpp">
+      <Filter>Source\Engine\Math</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Math\Matrix.cpp">
       <Filter>Source\Engine\Math</Filter>
@@ -851,10 +875,16 @@
     <ClCompile Include="Source\Engine\Resource\ResourceManager.cpp">
       <Filter>Source\Engine\Resource</Filter>
     </ClCompile>
+    <ClCompile Include="Source\Engine\Runtime\ActorPoolSystem.cpp">
+      <Filter>Source\Engine\Runtime</Filter>
+    </ClCompile>
     <ClCompile Include="Source\Engine\Runtime\Delegate.cpp">
       <Filter>Source\Engine\Runtime</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Runtime\Engine.cpp">
+      <Filter>Source\Engine\Runtime</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Engine\Runtime\EngineFactory.cpp">
       <Filter>Source\Engine\Runtime</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Runtime\EngineLoop.cpp">
@@ -866,10 +896,7 @@
     <ClCompile Include="Source\Engine\Runtime\LoadingScreen.cpp">
       <Filter>Source\Engine\Runtime</Filter>
     </ClCompile>
-    <ClCompile Include="Source\Engine\Runtime\ObjectPoolSystem.cpp">
-      <Filter>Source\Engine\Runtime</Filter>
-    </ClCompile>
-    <ClCompile Include="Source\Engine\Runtime\RowManager.cpp">
+    <ClCompile Include="Source\Engine\Runtime\RuntimeModuleManager.cpp">
       <Filter>Source\Engine\Runtime</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Runtime\TaskScheduler.cpp">
@@ -908,9 +935,6 @@
     <ClCompile Include="Source\Engine\Scripting\LuaMovementBindings.cpp">
       <Filter>Source\Engine\Scripting</Filter>
     </ClCompile>
-    <ClCompile Include="Source\Engine\Scripting\LuaParryComponentBindings.cpp">
-      <Filter>Source\Engine\Scripting</Filter>
-    </ClCompile>
     <ClCompile Include="Source\Engine\Scripting\LuaPawnBindings.cpp">
       <Filter>Source\Engine\Scripting</Filter>
     </ClCompile>
@@ -923,22 +947,19 @@
     <ClCompile Include="Source\Engine\Scripting\LuaPropertyBridge.cpp">
       <Filter>Source\Engine\Scripting</Filter>
     </ClCompile>
-    <ClCompile Include="Source\Engine\Scripting\LuaRowManagerBindings.cpp">
-      <Filter>Source\Engine\Scripting</Filter>
-    </ClCompile>
-    <ClCompile Include="Source\Engine\Scripting\LuaSaveGameBindings.cpp">
-      <Filter>Source\Engine\Scripting</Filter>
-    </ClCompile>
     <ClCompile Include="Source\Engine\Scripting\LuaScriptSubsystem.cpp">
       <Filter>Source\Engine\Scripting</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Scripting\LuaShapeBindings.cpp">
       <Filter>Source\Engine\Scripting</Filter>
     </ClCompile>
-    <ClCompile Include="Source\Engine\Scripting\LuaStaticMeshBindings.cpp">
+    <ClCompile Include="Source\Engine\Scripting\LuaSoundLibrary.cpp">
       <Filter>Source\Engine\Scripting</Filter>
     </ClCompile>
-    <ClCompile Include="Source\Engine\Scripting\LuaUiBindings.cpp">
+    <ClCompile Include="Source\Engine\Scripting\LuaSpringArmComponentBindings.cpp">
+      <Filter>Source\Engine\Scripting</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Engine\Scripting\LuaStaticMeshBindings.cpp">
       <Filter>Source\Engine\Scripting</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Scripting\LuaWorldExtendedBindings.cpp">
@@ -946,6 +967,9 @@
     </ClCompile>
     <ClCompile Include="Source\Engine\Scripting\LuaWorldLibrary.cpp">
       <Filter>Source\Engine\Scripting</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Engine\Serialization\CurveSaveManager.cpp">
+      <Filter>Source\Engine\Serialization</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Serialization\PrefabSaveManager.cpp">
       <Filter>Source\Engine\Serialization</Filter>
@@ -958,9 +982,6 @@
     </ClCompile>
     <ClCompile Include="Source\Engine\Texture\Texture2D.cpp">
       <Filter>Source\Engine\Texture</Filter>
-    </ClCompile>
-    <ClCompile Include="Source\Engine\UI\Game\GameUiSystem.cpp">
-      <Filter>Source\Engine\UI\Game</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\UI\ImGui\ImGuiViewportPresenter.cpp">
       <Filter>Source\Engine\UI\ImGui</Filter>
@@ -1008,6 +1029,9 @@
       <Filter>Source\GameClient</Filter>
     </ClCompile>
     <ClCompile Include="Source\GameClient\GameClientViewport.cpp">
+      <Filter>Source\GameClient</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\GameClient\LinkedRuntimeModules.cpp">
       <Filter>Source\GameClient</Filter>
     </ClCompile>
     <ClCompile Include="Source\ObjViewer\ObjViewerEngine.cpp">
@@ -1103,6 +1127,9 @@
     <ClInclude Include="Source\Editor\UI\EditorControlWidget.h">
       <Filter>Source\Editor\UI</Filter>
     </ClInclude>
+    <ClInclude Include="Source\Editor\UI\EditorCurveWidget.h">
+      <Filter>Source\Editor\UI</Filter>
+    </ClInclude>
     <ClInclude Include="Source\Editor\UI\EditorDragSource.h">
       <Filter>Source\Editor\UI</Filter>
     </ClInclude>
@@ -1154,7 +1181,19 @@
     <ClInclude Include="Source\Editor\Viewport\LevelEditorViewportClient.h">
       <Filter>Source\Editor\Viewport</Filter>
     </ClInclude>
+    <ClInclude Include="Source\Engine\Camera\CameraFadeModifier.h">
+      <Filter>Source\Engine\Camera</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Camera\CameraModifier.h">
+      <Filter>Source\Engine\Camera</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Camera\CameraShakeModifier.h">
+      <Filter>Source\Engine\Camera</Filter>
+    </ClInclude>
     <ClInclude Include="Source\Engine\Camera\CameraTypes.h">
+      <Filter>Source\Engine\Camera</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Camera\CameraVignetteModifier.h">
       <Filter>Source\Engine\Camera</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Camera\PlayerCameraManager.h">
@@ -1259,9 +1298,6 @@
     <ClInclude Include="Source\Engine\Component\MeshComponent.h">
       <Filter>Source\Engine\Component</Filter>
     </ClInclude>
-    <ClInclude Include="Source\Engine\Component\Movement\HopMovementComponent.h">
-      <Filter>Source\Engine\Component\Movement</Filter>
-    </ClInclude>
     <ClInclude Include="Source\Engine\Component\Movement\InterpToMovementComponent.h">
       <Filter>Source\Engine\Component\Movement</Filter>
     </ClInclude>
@@ -1280,9 +1316,6 @@
     <ClInclude Include="Source\Engine\Component\Movement\RotatingMovementComponent.h">
       <Filter>Source\Engine\Component\Movement</Filter>
     </ClInclude>
-    <ClInclude Include="Source\Engine\Component\ParryComponent.h">
-      <Filter>Source\Engine\Component</Filter>
-    </ClInclude>
     <ClInclude Include="Source\Engine\Component\PawnOrientationComponent.h">
       <Filter>Source\Engine\Component</Filter>
     </ClInclude>
@@ -1294,6 +1327,9 @@
     </ClInclude>
     <ClInclude Include="Source\Engine\Component\Script\LuaScriptComponent.h">
       <Filter>Source\Engine\Component\Script</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Component\SpringArmComponent.h">
+      <Filter>Source\Engine\Component</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Component\StaticMeshComponent.h">
       <Filter>Source\Engine\Component</Filter>
@@ -1342,6 +1378,9 @@
     </ClInclude>
     <ClInclude Include="Source\Engine\Core\TickFunction.h">
       <Filter>Source\Engine\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Core\Time\EngineTimeManager.h">
+      <Filter>Source\Engine\Core\Time</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Debug\DebugDrawQueue.h">
       <Filter>Source\Engine\Debug</Filter>
@@ -1700,6 +1739,9 @@
     <ClInclude Include="Source\Engine\Resource\ResourceManager.h">
       <Filter>Source\Engine\Resource</Filter>
     </ClInclude>
+    <ClInclude Include="Source\Engine\Runtime\ActorPoolSystem.h">
+      <Filter>Source\Engine\Runtime</Filter>
+    </ClInclude>
     <ClInclude Include="Source\Engine\Runtime\Delegate.h">
       <Filter>Source\Engine\Runtime</Filter>
     </ClInclude>
@@ -1709,7 +1751,13 @@
     <ClInclude Include="Source\Engine\Runtime\Engine.h">
       <Filter>Source\Engine\Runtime</Filter>
     </ClInclude>
+    <ClInclude Include="Source\Engine\Runtime\EngineFactory.h">
+      <Filter>Source\Engine\Runtime</Filter>
+    </ClInclude>
     <ClInclude Include="Source\Engine\Runtime\EngineLoop.h">
+      <Filter>Source\Engine\Runtime</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Runtime\IRuntimeModule.h">
       <Filter>Source\Engine\Runtime</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Runtime\Launch.h">
@@ -1718,13 +1766,10 @@
     <ClInclude Include="Source\Engine\Runtime\LoadingScreen.h">
       <Filter>Source\Engine\Runtime</Filter>
     </ClInclude>
-    <ClInclude Include="Source\Engine\Runtime\ObjectPoolSystem.h">
-      <Filter>Source\Engine\Runtime</Filter>
-    </ClInclude>
     <ClInclude Include="Source\Engine\Runtime\PooledObjectInterface.h">
       <Filter>Source\Engine\Runtime</Filter>
     </ClInclude>
-    <ClInclude Include="Source\Engine\Runtime\RowManager.h">
+    <ClInclude Include="Source\Engine\Runtime\RuntimeModuleManager.h">
       <Filter>Source\Engine\Runtime</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Runtime\TaskScheduler.h">
@@ -1757,6 +1802,9 @@
     <ClInclude Include="Source\Engine\Scripting\LuaScriptSubsystem.h">
       <Filter>Source\Engine\Scripting</Filter>
     </ClInclude>
+    <ClInclude Include="Source\Engine\Scripting\LuaSoundLibrary.h">
+      <Filter>Source\Engine\Scripting</Filter>
+    </ClInclude>
     <ClInclude Include="Source\Engine\Scripting\LuaWorldLibrary.h">
       <Filter>Source\Engine\Scripting</Filter>
     </ClInclude>
@@ -1764,6 +1812,9 @@
       <Filter>Source\Engine\Scripting</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Serialization\Archive.h">
+      <Filter>Source\Engine\Serialization</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Serialization\CurveSaveManager.h">
       <Filter>Source\Engine\Serialization</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Serialization\MemoryArchive.h">
@@ -1783,9 +1834,6 @@
     </ClInclude>
     <ClInclude Include="Source\Engine\Texture\Texture2D.h">
       <Filter>Source\Engine\Texture</Filter>
-    </ClInclude>
-    <ClInclude Include="Source\Engine\UI\Game\GameUiSystem.h">
-      <Filter>Source\Engine\UI\Game</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\UI\ImGui\ImGuiViewportPresenter.h">
       <Filter>Source\Engine\UI\ImGui</Filter>
@@ -1809,6 +1857,9 @@
       <Filter>Source\Engine\UI</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\UI\SWindow.h">
+      <Filter>Source\Engine\UI</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\UI\ViewportUiLayer.h">
       <Filter>Source\Engine\UI</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Viewport\GameViewportClient.h">
@@ -1845,6 +1896,9 @@
       <Filter>Source\GameClient</Filter>
     </ClInclude>
     <ClInclude Include="Source\GameClient\GameClientViewport.h">
+      <Filter>Source\GameClient</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\GameClient\LinkedRuntimeModules.h">
       <Filter>Source\GameClient</Filter>
     </ClInclude>
     <ClInclude Include="Source\ObjViewer\ObjViewerEngine.h">

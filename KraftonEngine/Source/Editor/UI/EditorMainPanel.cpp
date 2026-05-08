@@ -4,11 +4,13 @@
 #include "Editor/Packaging/GamePackageBuilder.h"
 #include "Editor/Settings/EditorSettings.h"
 #include "Editor/Viewport/LevelEditorViewportClient.h"
+#include "Viewport/GameViewportClient.h"
 #include "Component/CameraComponent.h"
 #include "GameFramework/AActor.h"
 #include "GameFramework/World.h"
 #include "Object/Object.h"
 #include "Engine/Runtime/WindowsWindow.h"
+#include "Engine/Platform/Paths.h"
 
 #include "ImGui/imgui.h"
 #include "ImGui/imgui_impl_dx11.h"
@@ -24,7 +26,9 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <filesystem>
 #include <random>
+#include <thread>
 #include <utility>
 
 namespace
@@ -80,12 +84,18 @@ void FEditorMainPanel::Create(FWindowsWindow* InWindow, FRenderer& InRenderer, U
 	PropertyWidget.Initialize(InEditorEngine);
 	SceneWidget.Initialize(InEditorEngine);
 	StatWidget.Initialize(InEditorEngine);
+	CurveWidget.Initialize(InEditorEngine);
 	ContentBrowserWidget.Initialize(InEditorEngine, InRenderer.GetFD3DDevice().GetDevice());
 	ShadowMapDebugWidget.Initialize(InEditorEngine);
 }
 
 void FEditorMainPanel::Release()
 {
+	if (PackageBuildThread.joinable())
+	{
+		PackageBuildThread.join();
+	}
+
 	ConsoleWidget.Shutdown();
 	ImGui_ImplDX11_Shutdown();
 	ImGui_ImplWin32_Shutdown();
@@ -95,6 +105,12 @@ void FEditorMainPanel::Release()
 void FEditorMainPanel::SaveToSettings() const
 {
 	ContentBrowserWidget.SaveToSettings();
+}
+
+bool FEditorMainPanel::OpenCurveAsset(const FString& CurvePath)
+{
+	FEditorSettings::Get().UI.bCurve = true;
+	return CurveWidget.OpenCurveAsset(CurvePath);
 }
 
 void FEditorMainPanel::Render(float DeltaTime)
@@ -147,6 +163,12 @@ void FEditorMainPanel::Render(float DeltaTime)
 	{
 		SCOPE_STAT_CAT("StatWidget.Render", "5_UI");
 		StatWidget.Render(DeltaTime);
+	}
+
+	if (!bHideEditorWindows && Settings.UI.bCurve)
+	{
+		SCOPE_STAT_CAT("CurveWidget.Render", "5_UI");
+		CurveWidget.Render(DeltaTime);
 	}
 
 	if (!bHideEditorWindows && Settings.UI.bContentBrowser)
@@ -240,6 +262,7 @@ void FEditorMainPanel::RenderMainMenuBar()
 		ImGui::Checkbox("Property", &Settings.UI.bProperty);
 		ImGui::Checkbox("Scene", &Settings.UI.bScene);
 		ImGui::Checkbox("Stat", &Settings.UI.bStat);
+		ImGui::Checkbox("Curve", &Settings.UI.bCurve);
 		ImGui::Checkbox("ContentBrowser", &Settings.UI.bContentBrowser);
 		ImGui::Checkbox("Editor Debug", &Settings.UI.bEditorDebug);
 		ImGui::Checkbox("Shadow Map Debug", &Settings.UI.bShadowMapDebug);
@@ -305,12 +328,14 @@ void FEditorMainPanel::RenderShortcutOverlay()
 
 void FEditorMainPanel::RenderPackageSettingsWindow()
 {
+	ConsumePackageBuildCompletion();
+
 	if (!bPackageSettingsOpen)
 	{
 		return;
 	}
 
-	ImGui::SetNextWindowSize(ImVec2(560.0f, 520.0f), ImGuiCond_FirstUseEver);
+	ImGui::SetNextWindowSize(ImVec2(640.0f, 620.0f), ImGuiCond_FirstUseEver);
 	if (!ImGui::Begin("Package Game", &bPackageSettingsOpen))
 	{
 		ImGui::End();
@@ -321,8 +346,37 @@ void FEditorMainPanel::RenderPackageSettingsWindow()
 	{
 		ImGui::InputText("Project Name", PackageProjectName, sizeof(PackageProjectName));
 		ImGui::InputText("Output Directory", PackageOutputDirectory, sizeof(PackageOutputDirectory));
-		ImGui::InputText("Client Executable", PackageClientExecutablePath, sizeof(PackageClientExecutablePath));
+	}
+
+	if (ImGui::CollapsingHeader("Game Build", ImGuiTreeNodeFlags_DefaultOpen))
+	{
+		if (PackageGameDefinitions.empty())
+		{
+			RefreshPackageGameDefinitions();
+		}
+
+		TArray<const char*> GameLabels;
+		for (const FEditorPackageGameDefinition& Game : PackageGameDefinitions)
+		{
+			GameLabels.push_back(Game.DisplayName.c_str());
+		}
+		if (!GameLabels.empty())
+		{
+			int CurrentGame = PackageSelectedGameIndex >= 0 ? PackageSelectedGameIndex : 0;
+			if (ImGui::Combo("Game", &CurrentGame, GameLabels.data(), static_cast<int>(GameLabels.size())))
+			{
+				ApplySelectedPackageGame(CurrentGame);
+			}
+		}
+
+		ImGui::Checkbox("Build before packaging", &PackageSettings.bBuildBeforePackage);
+		ImGui::Checkbox("Auto-find MSBuild", &PackageSettings.bAutoFindBuildTool);
+		ImGui::InputText("Build Tool Path", PackageBuildToolPath, sizeof(PackageBuildToolPath));
+		ImGui::InputText("Build Solution", PackageBuildSolutionPath, sizeof(PackageBuildSolutionPath));
+		ImGui::InputText("Game Project", PackageGameProjectPath, sizeof(PackageGameProjectPath));
 		ImGui::InputText("Build Configuration", PackageBuildConfiguration, sizeof(PackageBuildConfiguration));
+		ImGui::InputText("Build Platform", PackageBuildPlatform, sizeof(PackageBuildPlatform));
+		ImGui::InputText("Client Executable", PackageClientExecutablePath, sizeof(PackageClientExecutablePath));
 	}
 
 	if (ImGui::CollapsingHeader("Startup", ImGuiTreeNodeFlags_DefaultOpen))
@@ -344,10 +398,43 @@ void FEditorMainPanel::RenderPackageSettingsWindow()
 		ImGui::Checkbox("Enable Overlay", &PackageSettings.bEnableOverlay);
 		ImGui::Checkbox("Enable Debug Draw", &PackageSettings.bEnableDebugDraw);
 		ImGui::Checkbox("Enable Lua Hot Reload", &PackageSettings.bEnableLuaHotReload);
+		ImGui::InputText("Runtime Modules", PackageRuntimeModules, sizeof(PackageRuntimeModules));
+		ImGui::Checkbox("Include d3dcompiler_47.dll", &PackageSettings.bIncludeD3DCompiler47);
+		ImGui::SameLine();
+		ImGui::TextDisabled("for older Windows / compatibility");
 		ImGui::Checkbox("Run Smoke Test", &PackageSettings.bRunSmokeTest);
 	}
 
+	if (ImGui::CollapsingHeader("Package File Set", ImGuiTreeNodeFlags_DefaultOpen))
+	{
+		ImGui::TextUnformatted("Include paths and exclude paths are project-root-relative. Wildcards: *, ?, /**");
+		ImGui::InputTextMultiline("Include", PackageIncludePaths, sizeof(PackageIncludePaths), ImVec2(-1.0f, 120.0f));
+		ImGui::InputTextMultiline("Exclude", PackageExcludePaths, sizeof(PackageExcludePaths), ImVec2(-1.0f, 90.0f));
+	}
+
 	ImGui::Separator();
+	bool bRunning = false;
+	float ProgressPercent = 0.0f;
+	FString ProgressStage;
+	{
+		std::lock_guard<std::mutex> Lock(PackageBuildMutex);
+		bRunning = bPackageBuildRunning;
+		ProgressPercent = PackageBuildProgressPercent;
+		ProgressStage = PackageBuildStage;
+	}
+
+	if (bRunning || ProgressPercent > 0.0f)
+	{
+		char ProgressLabel[64];
+		std::snprintf(ProgressLabel, sizeof(ProgressLabel), "%.0f%%", ProgressPercent);
+		ImGui::ProgressBar(ProgressPercent / 100.0f, ImVec2(-1.0f, 0.0f), ProgressLabel);
+		if (!ProgressStage.empty())
+		{
+			ImGui::TextUnformatted(ProgressStage.c_str());
+		}
+	}
+
+	ImGui::BeginDisabled(bRunning);
 	if (ImGui::Button("Build Package"))
 	{
 		CopyTextBuffersToPackageSettings();
@@ -364,6 +451,7 @@ void FEditorMainPanel::RenderPackageSettingsWindow()
 	{
 		bPackageSettingsOpen = false;
 	}
+	ImGui::EndDisabled();
 
 	ImGui::End();
 }
@@ -555,6 +643,8 @@ void FEditorMainPanel::RenderEditorDebugPanel()
 
 void FEditorMainPanel::OpenPackageSettingsWindow()
 {
+	RefreshPackageGameDefinitions();
+	ApplySelectedPackageGame(PackageSelectedGameIndex >= 0 ? PackageSelectedGameIndex : 0);
 	CopyPackageSettingsToTextBuffers();
 	bPackageSettingsOpen = true;
 }
@@ -566,32 +656,246 @@ void FEditorMainPanel::BuildGamePackageFromSettings()
 		return;
 	}
 
-	FGamePackageBuilder Builder;
-	FGamePackageBuildResult PackageResult = Builder.Build(EditorEngine, PackageSettings);
-	if (PackageResult.bSuccess)
+	{
+		std::lock_guard<std::mutex> Lock(PackageBuildMutex);
+		if (bPackageBuildRunning)
+		{
+			return;
+		}
+		bPackageBuildRunning = true;
+		bPackageBuildCompleted = false;
+		PackageBuildProgressPercent = 0.0f;
+		PackageBuildStage = "Starting package build";
+		PackageBuildResult = FGamePackageBuildResult();
+	}
+
+	if (PackageBuildThread.joinable())
+	{
+		PackageBuildThread.join();
+	}
+
+	FEditorPackageSettings SettingsCopy = PackageSettings;
+	UEditorEngine* Editor = EditorEngine;
+	PackageBuildThread = std::thread([this, Editor, SettingsCopy]()
+	{
+		FGamePackageBuilder Builder;
+		FGamePackageBuildResult Result = Builder.Build(
+			Editor,
+			SettingsCopy,
+			[this](const FGamePackageProgress& Progress)
+			{
+				std::lock_guard<std::mutex> Lock(PackageBuildMutex);
+				PackageBuildProgressPercent = Progress.Percent;
+				PackageBuildStage = Progress.Stage;
+			});
+
+		std::lock_guard<std::mutex> Lock(PackageBuildMutex);
+		PackageBuildResult = Result;
+		PackageBuildProgressPercent = Result.bSuccess ? 100.0f : PackageBuildProgressPercent;
+		PackageBuildStage = Result.bSuccess ? "Package build complete" : "Package build failed";
+		bPackageBuildRunning = false;
+		bPackageBuildCompleted = true;
+	});
+}
+
+void FEditorMainPanel::ConsumePackageBuildCompletion()
+{
+	FGamePackageBuildResult FinishedResult;
+	bool bHasFinished = false;
+	{
+		std::lock_guard<std::mutex> Lock(PackageBuildMutex);
+		if (bPackageBuildCompleted)
+		{
+			FinishedResult = PackageBuildResult;
+			bPackageBuildCompleted = false;
+			bHasFinished = true;
+		}
+	}
+
+	if (!bHasFinished)
+	{
+		return;
+	}
+
+	if (PackageBuildThread.joinable())
+	{
+		PackageBuildThread.join();
+	}
+
+	if (FinishedResult.bSuccess)
 	{
 		FNotificationManager::Get().AddNotification(
-			"Game package created: " + PackageResult.OutputDirectory,
+			"Game package created: " + FinishedResult.OutputDirectory,
 			ENotificationType::Success,
 			4.0f);
 	}
 	else
 	{
 		FNotificationManager::Get().AddNotification(
-			"Game package failed: " + PackageResult.ErrorMessage,
+			"Game package failed: " + FinishedResult.ErrorMessage,
 			ENotificationType::Error,
 			8.0f);
 	}
 }
+
+
+void FEditorMainPanel::RefreshPackageGameDefinitions()
+{
+	PackageGameDefinitions.clear();
+	const std::filesystem::path GamesRoot = std::filesystem::path(FPaths::RootDir()) / L"Source" / L"Games";
+	if (std::filesystem::exists(GamesRoot) && std::filesystem::is_directory(GamesRoot))
+	{
+		for (const auto& Entry : std::filesystem::directory_iterator(GamesRoot))
+		{
+			if (!Entry.is_directory())
+			{
+				continue;
+			}
+			const FString GameName = FPaths::ToUtf8(Entry.path().filename().wstring());
+			if (GameName.empty())
+			{
+				continue;
+			}
+			FEditorPackageGameDefinition Definition;
+			Definition.DisplayName = GameName;
+			Definition.ModuleName = GameName.ends_with("Game") ? GameName : GameName + "Game";
+			Definition.ProjectPath = Definition.ModuleName + ".vcxproj";
+			PackageGameDefinitions.push_back(Definition);
+		}
+	}
+
+	if (PackageGameDefinitions.empty())
+	{
+		PackageGameDefinitions.push_back({ "Crossy", "CrossyGame", "CrossyGame.vcxproj" });
+	}
+
+	PackageSelectedGameIndex = 0;
+	for (int32 Index = 0; Index < static_cast<int32>(PackageGameDefinitions.size()); ++Index)
+	{
+		const FEditorPackageGameDefinition& Game = PackageGameDefinitions[Index];
+		if (Game.DisplayName == PackageSettings.SelectedGame
+			|| Game.ModuleName == PackageSettings.SelectedGame
+			|| (!PackageSettings.RuntimeModules.empty() && Game.ModuleName == PackageSettings.RuntimeModules.front()))
+		{
+			PackageSelectedGameIndex = Index;
+			break;
+		}
+	}
+}
+
+void FEditorMainPanel::ApplySelectedPackageGame(int32 GameIndex)
+{
+	if (GameIndex < 0 || GameIndex >= static_cast<int32>(PackageGameDefinitions.size()))
+	{
+		return;
+	}
+	PackageSelectedGameIndex = GameIndex;
+	const FEditorPackageGameDefinition& Game = PackageGameDefinitions[GameIndex];
+	PackageSettings.SelectedGame = Game.DisplayName;
+	PackageSettings.GameProjectPath = Game.ProjectPath;
+	PackageSettings.RuntimeModules.clear();
+	PackageSettings.RuntimeModules.push_back(Game.ModuleName);
+	CopyPackageSettingsToTextBuffers();
+}
+
+namespace
+{
+FString JoinStringList(const TArray<FString>& Values, const char* Separator)
+{
+	FString Result;
+	for (const FString& Value : Values)
+	{
+		if (Value.empty())
+		{
+			continue;
+		}
+		if (!Result.empty())
+		{
+			Result += Separator;
+		}
+		Result += Value;
+	}
+	return Result;
+}
+
+FString JoinRuntimeModules(const TArray<FString>& Modules)
+{
+	return JoinStringList(Modules, ",");
+}
+
+FString JoinPackagePathList(const TArray<FString>& Paths)
+{
+	return JoinStringList(Paths, "\n");
+}
+
+TArray<FString> SplitRuntimeModules(const FString& Text)
+{
+	TArray<FString> Result;
+	FString Current;
+	for (char Ch : Text)
+	{
+		if (Ch == ',' || Ch == ';' || Ch == '\n' || Ch == '\r')
+		{
+			if (!Current.empty())
+			{
+				Result.push_back(Current);
+				Current.clear();
+			}
+			continue;
+		}
+		if (Ch != ' ' && Ch != '\t')
+		{
+			Current.push_back(Ch);
+		}
+	}
+	if (!Current.empty())
+	{
+		Result.push_back(Current);
+	}
+	return Result;
+}
+
+TArray<FString> SplitPackagePathList(const FString& Text)
+{
+	TArray<FString> Result;
+	FString Current;
+	for (char Ch : Text)
+	{
+		if (Ch == '\n' || Ch == '\r')
+		{
+			if (!Current.empty())
+			{
+				Result.push_back(Current);
+				Current.clear();
+			}
+			continue;
+		}
+		Current.push_back(Ch);
+	}
+	if (!Current.empty())
+	{
+		Result.push_back(Current);
+	}
+	return Result;
+}
+}
+
 
 void FEditorMainPanel::CopyPackageSettingsToTextBuffers()
 {
 	CopyToTextBuffer(PackageProjectName, PackageSettings.ProjectName);
 	CopyToTextBuffer(PackageOutputDirectory, PackageSettings.OutputDirectory);
 	CopyToTextBuffer(PackageClientExecutablePath, PackageSettings.ClientExecutablePath);
+	CopyToTextBuffer(PackageBuildToolPath, PackageSettings.BuildToolPath);
+	CopyToTextBuffer(PackageBuildSolutionPath, PackageSettings.BuildSolutionPath);
+	CopyToTextBuffer(PackageGameProjectPath, PackageSettings.GameProjectPath);
 	CopyToTextBuffer(PackageStartSceneName, PackageSettings.StartSceneName);
 	CopyToTextBuffer(PackageStartScenePackagePath, PackageSettings.StartScenePackagePath);
 	CopyToTextBuffer(PackageBuildConfiguration, PackageSettings.BuildConfiguration);
+	CopyToTextBuffer(PackageBuildPlatform, PackageSettings.BuildPlatform);
+	CopyToTextBuffer(PackageRuntimeModules, JoinRuntimeModules(PackageSettings.RuntimeModules));
+	CopyToTextBuffer(PackageIncludePaths, JoinPackagePathList(PackageSettings.IncludePackagePaths));
+	CopyToTextBuffer(PackageExcludePaths, JoinPackagePathList(PackageSettings.ExcludePackagePaths));
 }
 
 void FEditorMainPanel::CopyTextBuffersToPackageSettings()
@@ -599,9 +903,16 @@ void FEditorMainPanel::CopyTextBuffersToPackageSettings()
 	PackageSettings.ProjectName = PackageProjectName;
 	PackageSettings.OutputDirectory = PackageOutputDirectory;
 	PackageSettings.ClientExecutablePath = PackageClientExecutablePath;
+	PackageSettings.BuildToolPath = PackageBuildToolPath;
+	PackageSettings.BuildSolutionPath = PackageBuildSolutionPath;
+	PackageSettings.GameProjectPath = PackageGameProjectPath;
 	PackageSettings.StartSceneName = PackageStartSceneName;
 	PackageSettings.StartScenePackagePath = PackageStartScenePackagePath;
 	PackageSettings.BuildConfiguration = PackageBuildConfiguration;
+	PackageSettings.BuildPlatform = PackageBuildPlatform;
+	PackageSettings.RuntimeModules = SplitRuntimeModules(PackageRuntimeModules);
+	PackageSettings.IncludePackagePaths = SplitPackagePathList(PackageIncludePaths);
+	PackageSettings.ExcludePackagePaths = SplitPackagePathList(PackageExcludePaths);
 }
 
 void FEditorMainPanel::RenderConsoleDrawer(float DeltaTime)
@@ -787,20 +1098,42 @@ void FEditorMainPanel::Update()
 
 	ImGuiIO& IO = ImGui::GetIO();
 
-	// 뷰포트 슬롯 위에서는 bUsingMouse를 해제해야 TickInteraction이 동작
-	bool bWantMouse = IO.WantCaptureMouse;
-	bool bWantKeyboard = IO.WantCaptureKeyboard || bShowShortcutOverlay;
-	if (EditorEngine && EditorEngine->IsMouseOverViewport())
+	// PIE possessed 중에는 에디터 ImGui hover/click 상태가 게임 룩 입력을 막으면 안 된다.
+	// 이 구간에서는 Rml 게임 UI(인트로/일시정지/게임오버)만 입력 캡처 권한을 가진다.
+	if (EditorEngine && EditorEngine->IsPIEPossessedMode())
 	{
-		bWantMouse = false;
-		if (!IO.WantTextInput && !bShowShortcutOverlay)
+		bool bGameUiWantsMouse = false;
+		bool bGameUiWantsKeyboard = false;
+		if (UGameViewportClient* GameViewportClient = EditorEngine->GetGameViewportClient())
 		{
-			bWantKeyboard = false;
+			if (IViewportUiLayer* UiLayer = GameViewportClient->GetUiLayer())
+			{
+				bGameUiWantsMouse = UiLayer->WantsMouse();
+				bGameUiWantsKeyboard = UiLayer->WantsKeyboard();
+			}
 		}
+
+		InputSystem::Get().SetGuiMouseCapture(bGameUiWantsMouse);
+		InputSystem::Get().SetGuiKeyboardCapture(bGameUiWantsKeyboard);
+		InputSystem::Get().SetGuiTextInputCapture(bGameUiWantsKeyboard);
 	}
-	InputSystem::Get().SetGuiMouseCapture(bWantMouse);
-	InputSystem::Get().SetGuiKeyboardCapture(bWantKeyboard);
-	InputSystem::Get().SetGuiTextInputCapture(IO.WantTextInput);
+	else
+	{
+		// 뷰포트 슬롯 위에서는 bUsingMouse를 해제해야 TickInteraction이 동작
+		bool bWantMouse = IO.WantCaptureMouse;
+		bool bWantKeyboard = IO.WantCaptureKeyboard || bShowShortcutOverlay;
+		if (EditorEngine && EditorEngine->IsMouseOverViewport())
+		{
+			bWantMouse = false;
+			if (!IO.WantTextInput && !bShowShortcutOverlay)
+			{
+				bWantKeyboard = false;
+			}
+		}
+		InputSystem::Get().SetGuiMouseCapture(bWantMouse);
+		InputSystem::Get().SetGuiKeyboardCapture(bWantKeyboard);
+		InputSystem::Get().SetGuiTextInputCapture(IO.WantTextInput);
+	}
 
 	// IME는 ImGui가 텍스트 입력을 원할 때만 활성화.
 	if (Window)
@@ -931,6 +1264,7 @@ void FEditorMainPanel::HideEditorWindows()
 	Settings.UI.bProperty = false;
 	Settings.UI.bScene = false;
 	Settings.UI.bStat = false;
+	Settings.UI.bCurve = false;
 	Settings.UI.bContentBrowser = false;
 	Settings.UI.bImGUISettings = false;
 	Settings.UI.bEditorDebug = false;

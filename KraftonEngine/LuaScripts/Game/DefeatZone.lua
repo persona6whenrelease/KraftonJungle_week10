@@ -8,6 +8,7 @@ function OnOverlap(otherActor)
     if State.IsPlaying ~= nil
         and State.IsPlaying()
         and State.IsPlayer(otherActor) then
+        State.IsDying = true
         State.GameOver("Touched defeat zone")
     end
 end

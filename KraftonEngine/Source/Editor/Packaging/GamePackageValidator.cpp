@@ -1,4 +1,4 @@
-#include "Editor/Packaging/GamePackageValidator.h"
+﻿#include "Editor/Packaging/GamePackageValidator.h"
 
 #include "Engine/Platform/Paths.h"
 #include "SimpleJSON/json.hpp"
@@ -117,7 +117,10 @@ FGamePackageValidationResult FGamePackageValidator::Validate(
 
 	RequireFile(PackageRoot, "GameClient.exe", Result);
 	RequireFile(PackageRoot, "GamePackage.json", Result);
-	RequireFile(PackageRoot, "d3dcompiler_47.dll", Result);
+	if (Settings.bIncludeD3DCompiler47)
+	{
+		RequireFile(PackageRoot, "d3dcompiler_47.dll", Result);
+	}
 	RequireFile(PackageRoot, "lua51.dll", Result);
 	RequireFile(PackageRoot, "sfml-audio-3.dll", Result);
 	RequireFile(PackageRoot, "sfml-system-3.dll", Result);

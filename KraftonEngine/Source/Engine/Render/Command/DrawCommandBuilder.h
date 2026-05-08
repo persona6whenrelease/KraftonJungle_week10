@@ -80,11 +80,13 @@ private:
 	// PerObject CB 풀
 	TArray<FConstantBuffer> PerObjectCBPool;
 
-	// PostProcess CBs (Fog, Outline, SceneDepth, FXAA)
+	// PostProcess CBs (Fog, Outline, SceneDepth, FXAA, Vignette, Fade)
 	FConstantBuffer FogCB;
 	FConstantBuffer OutlineCB;
 	FConstantBuffer SceneDepthCB;
 	FConstantBuffer FXAACB;
+	FConstantBuffer VignetteCB;
+	FConstantBuffer FadeCB;
 
 	// D3D 디바이스 캐시 (Create 시 설정, 변하지 않음)
 	ID3D11Device*        CachedDevice  = nullptr;

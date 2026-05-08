@@ -81,11 +81,17 @@ void UEngine::Init(FWindowsWindow* InWindow)
 	FDirectoryWatcher::Get().Initialize();
 	FLuaScriptSubsystem::Get().Initialize();
 	FSoundManager::Get().initialize();
+
+	FEngineModuleContext ModuleContext;
+	ModuleContext.Engine = this;
+	ModuleContext.Window = Window;
+	RuntimeModules.OnEngineInit(ModuleContext);
 }
 
 void UEngine::Shutdown()
 {
 	TaskScheduler.Clear();
+	RuntimeModules.UnloadModules();
 	FLuaScriptSubsystem::Get().Shutdown();
 	FDirectoryWatcher::Get().Shutdown();
 	FLogManager::Get().Shutdown();
@@ -105,18 +111,23 @@ void UEngine::BeginPlay()
 		if (Context->WorldType == EWorldType::Game || Context->WorldType == EWorldType::PIE)
 		{
 			Context->World->BeginPlay();
+			RuntimeModules.OnBeginPlay(Context->World);
 		}
 	}
 }
 
 void UEngine::Tick(float DeltaTime)
 {
+	const float RawDeltaTime = DeltaTime;
+	TimeManager.Update(RawDeltaTime);
+	const float GameDeltaTime = TimeManager.GetGameDeltaTime();
+
 	FDirectoryWatcher::Get().ProcessChanges();
-	FNotificationManager::Get().Tick(DeltaTime);
+	FNotificationManager::Get().Tick(RawDeltaTime);
 	InputSystem::Get().Tick();
-	TaskScheduler.Tick(DeltaTime);
-	WorldTick(DeltaTime);
-	Render(DeltaTime);
+	TaskScheduler.Tick(RawDeltaTime);
+	WorldTick(GameDeltaTime, RawDeltaTime);
+	Render(RawDeltaTime);
 }
 
 void UEngine::Render(float DeltaTime)
@@ -138,7 +149,10 @@ bool UEngine::HandleWindowMessage(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lPa
 {
 	if (GameViewportClient)
 	{
-		return GameViewportClient->GetGameUiSystem().ProcessWin32Message(hWnd, Msg, wParam, lParam);
+		if (IViewportUiLayer* UiLayer = GameViewportClient->GetUiLayer())
+		{
+			return UiLayer->ProcessWin32Message(hWnd, Msg, wParam, lParam);
+		}
 	}
 	return false;
 }
@@ -154,7 +168,7 @@ void UEngine::OnWindowResized(uint32 Width, uint32 Height)
 	Renderer.ResetRenderStateCache();
 }
 
-void UEngine::WorldTick(float DeltaTime)
+void UEngine::WorldTick(float GameDeltaTime, float RawDeltaTime)
 {
 	SCOPE_STAT_CAT("UEngine::WorldTick", "1_WorldTick");
 
@@ -188,7 +202,7 @@ void UEngine::WorldTick(float DeltaTime)
 		const ELevelTick TickType = ToLevelTickType(Ctx.WorldType);
 
 		// 월드 단위 업데이트 (FlushPrimitive / VisibleProxies / DebugDraw /s TickManager)
-		World->Tick(DeltaTime, TickType);
+		World->Tick(GameDeltaTime, RawDeltaTime, TickType);
 	}
 }
 
@@ -210,6 +224,7 @@ FWorldContext& UEngine::CreateWorldContext(EWorldType Type, const FName& Handle,
 		Context.World->SetWorldType(Type);
 	}
 	WorldList.push_back(Context);
+	RuntimeModules.OnWorldCreated(WorldList.back().World);
 	return WorldList.back();
 }
 

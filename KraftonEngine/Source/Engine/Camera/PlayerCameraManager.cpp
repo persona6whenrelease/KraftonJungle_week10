@@ -1,5 +1,7 @@
-#include "Camera/PlayerCameraManager.h"
+﻿#include "Camera/PlayerCameraManager.h"
 
+#include "Camera/CameraFadeModifier.h"
+#include "Camera/CameraModifier.h"
 #include "Component/CameraComponent.h"
 #include "Component/ComponentReferenceUtils.h"
 #include "GameFramework/AActor.h"
@@ -7,10 +9,44 @@
 #include "GameFramework/World.h"
 #include "Math/MathUtils.h"
 #include "Object/FName.h"
+#include "Object/ObjectFactory.h"
 #include "Serialization/Archive.h"
+#include "Core/Log.h"
 
 #include <algorithm>
 #include <cmath>
+
+#include "Camera/CameraShakeModifier.h"
+#include "Camera/CameraVignetteModifier.h"
+
+IMPLEMENT_CLASS(APlayerCameraManager, AActor)
+
+APlayerCameraManager::APlayerCameraManager()
+{
+	SetSerializeToScene(false);
+	bNeedsTick = false;
+	SetActorTickEnabled(false);
+}
+
+APlayerCameraManager::~APlayerCameraManager()
+{
+	ClearCameraModifiers();
+}
+
+void APlayerCameraManager::InitDefaultComponents()
+{
+	EnsureOutputCamera();
+}
+
+void APlayerCameraManager::EndPlay()
+{
+	ClearCameraModifiers();
+	ClearActiveCamera();
+	OwnerController = nullptr;
+	ViewTarget = FViewTarget();
+
+	AActor::EndPlay();
+}
 
 namespace
 {
@@ -34,13 +70,22 @@ namespace
 	}
 }
 
-void FPlayerCameraManager::Initialize(APlayerController* InOwner)
+void APlayerCameraManager::Initialize(APlayerController* InOwner)
 {
 	OwnerController = InOwner;
+	SetSerializeToScene(false);
+	bNeedsTick = false;
+	SetActorTickEnabled(false);
+
 	EnsureOutputCamera();
 }
+void APlayerCameraManager::Serialize(FArchive& Ar)
+{
+	Super::Serialize(Ar);
+	SerializeCameraState(Ar);
+}
 
-void FPlayerCameraManager::Serialize(FArchive& Ar)
+void APlayerCameraManager::SerializeCameraState(FArchive& Ar)
 {
 	Ar << ActiveCameraRef.OwnerActorUUID;
 	Ar << ActiveCameraRef.ComponentPath;
@@ -56,10 +101,13 @@ void FPlayerCameraManager::Serialize(FArchive& Ar)
 		BlendFromView = FCameraView();
 		BlendElapsedTime = 0.0f;
 		bIsBlending = false;
+
+		ViewTarget = FViewTarget();
+		ClearCameraModifiers();
 	}
 }
 
-void FPlayerCameraManager::SetActiveCamera(UCameraComponent* Camera, bool bBlend)
+void APlayerCameraManager::SetActiveCamera(UCameraComponent* Camera, bool bBlend)
 {
 	if (!Camera)
 	{
@@ -88,19 +136,22 @@ void FPlayerCameraManager::SetActiveCamera(UCameraComponent* Camera, bool bBlend
 	BlendElapsedTime = 0.0f;
 }
 
-void FPlayerCameraManager::ClearActiveCamera()
+void APlayerCameraManager::ClearActiveCamera()
 {
 	ActiveCameraRef.Reset();
 	PendingCameraRef.Reset();
 	ActiveCameraCached = nullptr;
 	PendingCameraCached = nullptr;
+
 	CurrentView = FCameraView();
 	BlendFromView = FCameraView();
+	ViewTarget = FViewTarget();
+
 	bIsBlending = false;
 	BlendElapsedTime = 0.0f;
 }
 
-UCameraComponent* FPlayerCameraManager::GetActiveCamera() const
+UCameraComponent* APlayerCameraManager::GetActiveCamera() const
 {
 	if (ActiveCameraCached && IsAliveObject(ActiveCameraCached))
 	{
@@ -109,7 +160,7 @@ UCameraComponent* FPlayerCameraManager::GetActiveCamera() const
 	return ResolveCameraReference(ActiveCameraRef);
 }
 
-bool FPlayerCameraManager::HasValidOutputCamera() const
+bool APlayerCameraManager::HasValidOutputCamera() const
 {
 	return OutputCameraComponent
 		&& IsAliveObject(OutputCameraComponent)
@@ -117,13 +168,18 @@ bool FPlayerCameraManager::HasValidOutputCamera() const
 		&& (ActiveCameraRef.IsSet() || PendingCameraRef.IsSet());
 }
 
-UCameraComponent* FPlayerCameraManager::GetOutputCameraIfValid() const
+UCameraComponent* APlayerCameraManager::GetOutputCameraIfValid() const
 {
 	return HasValidOutputCamera() ? OutputCameraComponent : nullptr;
 }
 
-void FPlayerCameraManager::UpdateCamera(float DeltaTime)
+void APlayerCameraManager::UpdateCamera(float GameDeltaTime, float RawDeltaTime)
 {
+	if (!OwnerController || !IsAliveObject(OwnerController))
+	{
+		return;
+	}
+
 	EnsureOutputCamera();
 	if (!OutputCameraComponent)
 	{
@@ -155,7 +211,7 @@ void FPlayerCameraManager::UpdateCamera(float DeltaTime)
 	}
 
 	FCameraView DesiredView;
-	if (!TargetCamera->CalcCameraView(OwnerController, DeltaTime, DesiredView))
+	if (!TargetCamera->CalcCameraView(OwnerController, GameDeltaTime, DesiredView))
 	{
 		return;
 	}
@@ -163,7 +219,16 @@ void FPlayerCameraManager::UpdateCamera(float DeltaTime)
 	if (!CurrentView.bValid)
 	{
 		CurrentView = DesiredView;
-		OutputCameraComponent->ApplyCameraView(CurrentView);
+
+		ViewTarget.Target = TargetCamera ? TargetCamera->GetOwner() : nullptr;
+		ViewTarget.Camera = TargetCamera;
+		ViewTarget.POV = CurrentView;
+
+		FCameraView FinalView = CurrentView;
+		ApplyCameraModifiers(RawDeltaTime, FinalView);
+		OutputCameraComponent->ApplyCameraView(FinalView);
+		UpdateVignetteCenter(TargetCamera);
+
 		return;
 	}
 
@@ -172,7 +237,7 @@ void FPlayerCameraManager::UpdateCamera(float DeltaTime)
 
 	if (bIsBlending)
 	{
-		BlendElapsedTime += DeltaTime;
+		BlendElapsedTime += GameDeltaTime;
 		const float Duration = Transition.BlendTime;
 		const float RawAlpha = Duration > 0.0f ? Clamp(BlendElapsedTime / Duration, 0.0f, 1.0f) : 1.0f;
 		const float Alpha = EvaluateBlendAlpha(RawAlpha, Transition.Function);
@@ -190,10 +255,10 @@ void FPlayerCameraManager::UpdateCamera(float DeltaTime)
 	}
 	else if (Smoothing.bEnableSmoothing)
 	{
-		const float LocationAlpha = ExpAlpha(Smoothing.LocationLagSpeed, DeltaTime);
-		const float RotationAlpha = ExpAlpha(Smoothing.RotationLagSpeed, DeltaTime);
-		const float FOVAlpha = ExpAlpha(Smoothing.FOVLagSpeed, DeltaTime);
-		const float OrthoAlpha = ExpAlpha(Smoothing.OrthoWidthLagSpeed, DeltaTime);
+		const float LocationAlpha = ExpAlpha(Smoothing.LocationLagSpeed, GameDeltaTime);
+		const float RotationAlpha = ExpAlpha(Smoothing.RotationLagSpeed, GameDeltaTime);
+		const float FOVAlpha = ExpAlpha(Smoothing.FOVLagSpeed, GameDeltaTime);
+		const float OrthoAlpha = ExpAlpha(Smoothing.OrthoWidthLagSpeed, GameDeltaTime);
 
 		CurrentView.Location = LerpVector(CurrentView.Location, DesiredView.Location, LocationAlpha);
 		CurrentView.Rotation = FQuat::Slerp(CurrentView.Rotation, DesiredView.Rotation, RotationAlpha);
@@ -202,6 +267,7 @@ void FPlayerCameraManager::UpdateCamera(float DeltaTime)
 		NewState.FOV = LerpFloat(CurrentView.State.FOV, DesiredView.State.FOV, FOVAlpha);
 		NewState.OrthoWidth = LerpFloat(CurrentView.State.OrthoWidth, DesiredView.State.OrthoWidth, OrthoAlpha);
 		CurrentView.State = NewState;
+		CurrentView.PostProcess = DesiredView.PostProcess;
 		CurrentView.bValid = true;
 	}
 	else
@@ -209,10 +275,33 @@ void FPlayerCameraManager::UpdateCamera(float DeltaTime)
 		CurrentView = DesiredView;
 	}
 
-	OutputCameraComponent->ApplyCameraView(CurrentView);
+	ViewTarget.Target = TargetCamera ? TargetCamera->GetOwner() : nullptr;
+	ViewTarget.Camera = TargetCamera;
+	ViewTarget.POV = CurrentView;
+
+	FCameraView FinalView = CurrentView;
+	ApplyCameraModifiers(RawDeltaTime, FinalView);
+	OutputCameraComponent->ApplyCameraView(FinalView);
+
+	// static uint32 ChainLogCounter = 0;
+	// if (ChainLogCounter++ % 30 == 0)
+	// {
+	// 	UE_LOG("[CameraMgr] Tgt=%u TgtPP=%.2f Desired=%.2f Current=%.2f Final=%.2f Blend=%d Smooth=%d Out=%u OutPP=%.2f",
+	// 		TargetCamera ? TargetCamera->GetUUID() : 0,
+	// 		TargetCamera ? TargetCamera->GetPostProcess().VignetteIntensity : -1.0f,
+	// 		DesiredView.PostProcess.VignetteIntensity,
+	// 		CurrentView.PostProcess.VignetteIntensity,
+	// 		FinalView.PostProcess.VignetteIntensity,
+	// 		bIsBlending ? 1 : 0,
+	// 		Smoothing.bEnableSmoothing ? 1 : 0,
+	// 		OutputCameraComponent ? OutputCameraComponent->GetUUID() : 0,
+	// 		OutputCameraComponent ? OutputCameraComponent->GetPostProcess().VignetteIntensity : -1.0f);
+	// }
+	//
+	UpdateVignetteCenter(TargetCamera);
 }
 
-void FPlayerCameraManager::SnapToActiveCamera()
+void APlayerCameraManager::SnapToActiveCamera()
 {
 	EnsureOutputCamera();
 	UCameraComponent* ActiveCamera = GetActiveCamera();
@@ -225,11 +314,19 @@ void FPlayerCameraManager::SnapToActiveCamera()
 	if (ActiveCamera->CalcCameraView(OwnerController, 0.0f, DesiredView))
 	{
 		CurrentView = DesiredView;
-		OutputCameraComponent->ApplyCameraView(CurrentView);
+
+		ViewTarget.Target = ActiveCamera->GetOwner();
+		ViewTarget.Camera = ActiveCamera;
+		ViewTarget.POV = CurrentView;
+
+		FCameraView FinalView = CurrentView;
+		ApplyCameraModifiers(0.0f, FinalView);
+		OutputCameraComponent->ApplyCameraView(FinalView);
+		UpdateVignetteCenter(ActiveCamera);
 	}
 }
 
-void FPlayerCameraManager::RemapActorReferences(const TMap<uint32, uint32>& ActorUUIDRemap)
+void APlayerCameraManager::RemapActorReferences(const TMap<uint32, uint32>& ActorUUIDRemap)
 {
 	auto RemapRef = [&ActorUUIDRemap](FCameraComponentReference& Ref)
 	{
@@ -257,7 +354,7 @@ void FPlayerCameraManager::RemapActorReferences(const TMap<uint32, uint32>& Acto
 	BlendElapsedTime = 0.0f;
 }
 
-void FPlayerCameraManager::ClearCameraReferencesForActor(const AActor* Actor)
+void APlayerCameraManager::ClearCameraReferencesForActor(const AActor* Actor)
 {
 	if (!Actor)
 	{
@@ -284,7 +381,7 @@ void FPlayerCameraManager::ClearCameraReferencesForActor(const AActor* Actor)
 	}
 }
 
-void FPlayerCameraManager::ClearCameraReferencesForComponent(const UActorComponent* Component)
+void APlayerCameraManager::ClearCameraReferencesForComponent(const UActorComponent* Component)
 {
 	const UCameraComponent* Camera = Cast<UCameraComponent>(Component);
 	if (!Camera)
@@ -318,8 +415,40 @@ void FPlayerCameraManager::ClearCameraReferencesForComponent(const UActorCompone
 		OutputCameraComponent = nullptr;
 	}
 }
+UCameraShakeModifier* APlayerCameraManager::StartCameraShake(const FCameraShakeParams& Params)
+{
+	if (Params.bSingleInstance)
+	{
+		for (UCameraModifier* Modifier : ModifierList)
+		{
+			UCameraShakeModifier* ExistingShake = Cast<UCameraShakeModifier>(Modifier);
+			if (!ExistingShake || !IsAliveObject(ExistingShake))
+			{
+				continue;
+			}
+			
+			if (!ExistingShake->IsPendingRemove())
+			{
+				ExistingShake->StartShake(Params);
+				return ExistingShake;
+			}
+		}
+	}
+	
+	UCameraShakeModifier* NewShake = UObjectManager::Get().CreateObject<UCameraShakeModifier>(this);
+	if (!NewShake)
+	{
+		return nullptr;
+	}
+	
+	NewShake->SetPriority(128);
+	NewShake->StartShake(Params);
+	
+	AddCameraModifier(NewShake);
+	return NewShake;
+}
 
-UCameraComponent* FPlayerCameraManager::ResolveCameraReference(const FCameraComponentReference& Ref) const
+UCameraComponent* APlayerCameraManager::ResolveCameraReference(const FCameraComponentReference& Ref) const
 {
 	if (!Ref.IsSet() || !OwnerController)
 	{
@@ -341,7 +470,7 @@ UCameraComponent* FPlayerCameraManager::ResolveCameraReference(const FCameraComp
 	return Cast<UCameraComponent>(ComponentReferenceUtils::ResolveComponentPath(OwnerActor, Ref.ComponentPath));
 }
 
-FCameraComponentReference FPlayerCameraManager::MakeCameraReference(UCameraComponent* Camera) const
+FCameraComponentReference APlayerCameraManager::MakeCameraReference(UCameraComponent* Camera) const
 {
 	FCameraComponentReference Ref;
 	if (!Camera || !Camera->GetOwner())
@@ -354,7 +483,7 @@ FCameraComponentReference FPlayerCameraManager::MakeCameraReference(UCameraCompo
 	return Ref;
 }
 
-FCameraView FPlayerCameraManager::BlendViews(
+FCameraView APlayerCameraManager::BlendViews(
 	const FCameraView& From,
 	const FCameraView& To,
 	float Alpha,
@@ -411,10 +540,19 @@ FCameraView FPlayerCameraManager::BlendViews(
 		break;
 	}
 
+	// PostProcess 보간 — 카메라 자체 baseline. modifier가 ApplyCameraModifiers에서 추가로 덮어씀.
+	Out.PostProcess.VignetteCenter.X = LerpFloat(From.PostProcess.VignetteCenter.X, To.PostProcess.VignetteCenter.X, Alpha);
+	Out.PostProcess.VignetteCenter.Y = LerpFloat(From.PostProcess.VignetteCenter.Y, To.PostProcess.VignetteCenter.Y, Alpha);
+	Out.PostProcess.VignetteIntensity = LerpFloat(From.PostProcess.VignetteIntensity, To.PostProcess.VignetteIntensity, Alpha);
+	Out.PostProcess.VignetteSmoothness = LerpFloat(From.PostProcess.VignetteSmoothness, To.PostProcess.VignetteSmoothness, Alpha);
+	Out.PostProcess.VignetteColor = LerpVector(From.PostProcess.VignetteColor, To.PostProcess.VignetteColor, Alpha);
+	Out.PostProcess.FadeColor = LerpVector(From.PostProcess.FadeColor, To.PostProcess.FadeColor, Alpha);
+	Out.PostProcess.FadeAlpha = LerpFloat(From.PostProcess.FadeAlpha, To.PostProcess.FadeAlpha, Alpha);
+
 	return Out;
 }
 
-float FPlayerCameraManager::EvaluateBlendAlpha(float RawAlpha, ECameraBlendFunction Function) const
+float APlayerCameraManager::EvaluateBlendAlpha(float RawAlpha, ECameraBlendFunction Function) const
 {
 	const float A = Clamp(RawAlpha, 0.0f, 1.0f);
 	switch (Function)
@@ -431,23 +569,254 @@ float FPlayerCameraManager::EvaluateBlendAlpha(float RawAlpha, ECameraBlendFunct
 	}
 }
 
-void FPlayerCameraManager::EnsureOutputCamera()
+void APlayerCameraManager::EnsureOutputCamera()
 {
 	if (OutputCameraComponent && IsAliveObject(OutputCameraComponent))
 	{
 		return;
 	}
 
-	if (!OwnerController)
-	{
-		return;
-	}
-
-	OutputCameraComponent = OwnerController->AddComponent<UCameraComponent>();
+	OutputCameraComponent = AddComponent<UCameraComponent>();
 	if (OutputCameraComponent)
 	{
 		OutputCameraComponent->SetFName(FName("PlayerOutputCamera"));
 		OutputCameraComponent->SetHiddenInComponentTree(true);
 		OutputCameraComponent->SetAutoActivate(false);
 	}
+}
+
+void APlayerCameraManager::AddCameraModifier(UCameraModifier* Modifier)
+{
+	if (!Modifier || !IsAliveObject(Modifier))
+	{
+		return;
+	}
+
+	if (std::find(ModifierList.begin(), ModifierList.end(), Modifier) != ModifierList.end())
+	{
+		return;
+	}
+
+	Modifier->Initialize(this);
+	Modifier->OnAddedToCameraManager();
+
+	ModifierList.push_back(Modifier);
+	SortCameraModifiers();
+}
+
+void APlayerCameraManager::RemoveCameraModifier(UCameraModifier* Modifier, bool bImmediate)
+{
+	if (!Modifier)
+	{
+		return;
+	}
+
+	auto It = std::find(ModifierList.begin(), ModifierList.end(), Modifier);
+	if (It == ModifierList.end())
+	{
+		return;
+	}
+
+	if (!bImmediate)
+	{
+		if (IsAliveObject(Modifier))
+		{
+			Modifier->MarkPendingRemove();
+		}
+		return;
+	}
+
+	if (IsAliveObject(Modifier))
+	{
+		Modifier->OnRemovedFromCameraManager();
+		UObjectManager::Get().DestroyObject(Modifier);
+	}
+
+	ModifierList.erase(It);
+}
+
+void APlayerCameraManager::ClearCameraModifiers()
+{
+	for (UCameraModifier* Modifier : ModifierList)
+	{
+		if (Modifier && IsAliveObject(Modifier))
+		{
+			Modifier->OnRemovedFromCameraManager();
+			UObjectManager::Get().DestroyObject(Modifier);
+		}
+	}
+
+	ModifierList.clear();
+	FadeModifier = nullptr;
+	VignetteModifier = nullptr;
+}
+
+UCameraFadeModifier* APlayerCameraManager::EnsureFadeModifier()
+{
+	if (FadeModifier && IsAliveObject(FadeModifier)
+		&& std::find(ModifierList.begin(), ModifierList.end(), FadeModifier) != ModifierList.end())
+	{
+		return FadeModifier;
+	}
+
+	FadeModifier = UObjectManager::Get().CreateObject<UCameraFadeModifier>(this);
+	if (FadeModifier)
+	{
+		AddCameraModifier(FadeModifier);
+	}
+	return FadeModifier;
+}
+
+UVignetteModifier* APlayerCameraManager::EnsureVignetteModifier()
+{
+	if (VignetteModifier && IsAliveObject(VignetteModifier)
+		&& std::find(ModifierList.begin(), ModifierList.end(), VignetteModifier) != ModifierList.end())
+	{
+		return VignetteModifier;
+	}
+
+	VignetteModifier = UObjectManager::Get().CreateObject<UVignetteModifier>(this);
+	if (VignetteModifier)
+	{
+		// Vignette는 보통 Fade보다 아래에 위치하도록 우선순위 조정 (낮을수록 나중에 적용되나 현재 sort 로직 확인 필요)
+		// 현재 SortCameraModifiers는 PriorityA > PriorityB 순으로 정렬 (큰 값이 먼저 적용됨)
+		// 렌더링 순서상 Fade가 마지막에 덮어야 하므로, Fade의 우선순위가 더 낮아야 함 (작은 값이 뒤에 옴)
+		// 하지만 modifier chain은 누적 방식이므로 나중에 적용되는 것이 덮어씀.
+		VignetteModifier->SetPriority(64);
+		AddCameraModifier(VignetteModifier);
+	}
+	return VignetteModifier;
+}
+
+void APlayerCameraManager::StartFadeIn(float Duration, float TargetAlpha, const FVector& Color)
+{
+	if (UCameraFadeModifier* Mod = EnsureFadeModifier())
+	{
+		Mod->SetPriority(128); // Fade가 더 나중에 적용되어 Vignette를 덮도록 높은 우선순위 (수정: chain 순서 확인)
+		Mod->StartFadeIn(Duration, TargetAlpha, Color);
+	}
+}
+
+void APlayerCameraManager::StartFadeOut(float Duration)
+{
+	if (FadeModifier && IsAliveObject(FadeModifier))
+	{
+		FadeModifier->StartFadeOut(Duration);
+	}
+}
+
+void APlayerCameraManager::StartVignette(float Intensity, const FVector& Color, float Duration, float Smoothness)
+{
+	if (UVignetteModifier* Mod = EnsureVignetteModifier())
+	{
+		Mod->StartVignette(Intensity, Color, Duration, Smoothness);
+	}
+}
+
+void APlayerCameraManager::StopVignette(float Duration)
+{
+	if (VignetteModifier && IsAliveObject(VignetteModifier))
+	{
+		VignetteModifier->StopVignette(Duration);
+	}
+}
+
+
+void APlayerCameraManager::ApplyCameraModifiers(float DeltaTime, FCameraView& InOutView)
+{
+	if (!InOutView.bValid || ModifierList.empty())
+	{
+		return;
+	}
+
+	CleanupCameraModifiers();
+	SortCameraModifiers();
+
+	//여기서 순회하면서 modifier 적용
+	for (UCameraModifier* Modifier : ModifierList)
+	{
+		if (!Modifier || !IsAliveObject(Modifier))
+		{
+			continue;
+		}
+
+		const bool bContinueChain = Modifier->UpdateCameraModifier(DeltaTime, InOutView);
+		if (!bContinueChain)
+		{
+			break;
+		}
+	}
+
+	CleanupCameraModifiers();
+}
+
+void APlayerCameraManager::CleanupCameraModifiers()
+{
+	for (auto It = ModifierList.begin(); It != ModifierList.end(); )
+	{
+		UCameraModifier* Modifier = *It;
+
+		if (!Modifier || !IsAliveObject(Modifier))
+		{
+			It = ModifierList.erase(It);
+			continue;
+		}
+
+		if (Modifier->IsShouldDestroy())
+		{
+			Modifier->OnRemovedFromCameraManager();
+			UObjectManager::Get().DestroyObject(Modifier);
+
+			It = ModifierList.erase(It);
+			continue;
+		}
+
+		++It;
+	}
+}
+
+void APlayerCameraManager::SortCameraModifiers()
+{
+	std::stable_sort(
+		ModifierList.begin(),
+		ModifierList.end(),
+		[](const UCameraModifier* A, const UCameraModifier* B)
+		{
+			const uint8 PriorityA = A && IsAliveObject(A) ? A->GetPriority() : 0;
+			const uint8 PriorityB = B && IsAliveObject(B) ? B->GetPriority() : 0;
+
+			return PriorityA > PriorityB;
+		}
+	);
+}
+
+void APlayerCameraManager::UpdateVignetteCenter(UCameraComponent* TargetCamera)
+{
+	if (!OutputCameraComponent || !TargetCamera)
+	{
+		return;
+	}
+
+	FCameraPostProcess& PP = OutputCameraComponent->GetMutablePostProcess();
+
+	AActor* Subject = TargetCamera->GetSubjectActor(OwnerController);
+	if (!Subject || !IsAliveObject(Subject))
+	{
+		PP.VignetteCenter = FVector2(0.5f, 0.5f);
+		return;
+	}
+
+	const FMatrix VP = OutputCameraComponent->GetViewProjectionMatrix();
+	const FVector NDC = VP.TransformPositionWithW(Subject->GetActorLocation());
+
+	// D3D Reverse-Z: NDC.Z 범위는 [0, 1] (1=near, 0=far). 카메라 뒤면 W 부호 반전으로 NDC가 깨짐.
+	if (NDC.Z < 0.0f || NDC.Z > 1.0f || NDC.X < -1.0f || NDC.X > 1.0f || NDC.Y < -1.0f || NDC.Y > 1.0f)
+	{
+		PP.VignetteCenter = FVector2(0.5f, 0.5f);
+		return;
+	}
+
+	const float U = NDC.X * 0.5f + 0.5f;
+	const float V = -NDC.Y * 0.5f + 0.5f;
+	PP.VignetteCenter = FVector2(U, V);
 }

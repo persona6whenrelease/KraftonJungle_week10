@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "Object/Object.h"
 #include "Object/ObjectFactory.h"
 #include "Component/SceneComponent.h"
@@ -99,6 +99,9 @@ public:
 	bool IsPooledActorInactive() const { return bIsPooledActor && bIsPooledActorInactive; }
 	void SetPooledActorState(bool bPooled, bool bInactive);
 
+	bool ShouldSerializeToScene() const { return bSerializeToScene; }
+	void SetSerializeToScene(bool bEnabled) { bSerializeToScene = bEnabled; }
+
 	// Tick 필요 여부 — false면 Tick 호출 자체를 건너뜀 (StaticMesh 등)
 	bool bNeedsTick = true;
 	bool bTickInEditor = false;
@@ -138,5 +141,6 @@ protected:
 	bool bActorCollisionEnabled = true;
 	bool bIsPooledActor = false;
 	bool bIsPooledActorInactive = false;
+	bool bSerializeToScene = true;
 	TArray<FString> Tags;
 };

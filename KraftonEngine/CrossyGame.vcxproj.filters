@@ -1,0 +1,96 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source">
+      <UniqueIdentifier>{9271e31b-ff23-3727-f0ac-e8a31f9d369a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\Games">
+      <UniqueIdentifier>{1cde1acd-5166-7e62-01d6-046688d9c649}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\Games\Crossy">
+      <UniqueIdentifier>{e2784bbb-3c0f-2ce9-f31d-d631ea7cdd42}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\Games\Crossy\Audio">
+      <UniqueIdentifier>{6b7846b1-4797-0903-1faa-f4dcdb42d79c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\Games\Crossy\Components">
+      <UniqueIdentifier>{cc87b2fd-bfbd-5780-ce7d-d63d9c208c86}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\Games\Crossy\Map">
+      <UniqueIdentifier>{e8a18f96-dc02-8c60-3728-8b1bfbeda009}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\Games\Crossy\Scripting">
+      <UniqueIdentifier>{374e81eb-26f0-91e7-81c6-01cc350f35c0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\Games\Crossy\UI">
+      <UniqueIdentifier>{9116ee65-9791-7109-c8ac-e52de464fe20}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Source\Games\Crossy\Components\HopMovementComponent.cpp">
+      <Filter>Source\Games\Crossy\Components</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Games\Crossy\Components\ParryComponent.cpp">
+      <Filter>Source\Games\Crossy\Components</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Games\Crossy\Components\ParryableProjectileComponent.cpp">
+      <Filter>Source\Games\Crossy\Components</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Games\Crossy\CrossyGameModule.cpp">
+      <Filter>Source\Games\Crossy</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Games\Crossy\Map\RowManager.cpp">
+      <Filter>Source\Games\Crossy\Map</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Games\Crossy\Scripting\CrossyLuaBindings.cpp">
+      <Filter>Source\Games\Crossy\Scripting</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Games\Crossy\Scripting\CrossyLuaMovementBindings.cpp">
+      <Filter>Source\Games\Crossy\Scripting</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Games\Crossy\Scripting\CrossyLuaParryComponentBindings.cpp">
+      <Filter>Source\Games\Crossy\Scripting</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Games\Crossy\Scripting\CrossyLuaRowManagerBindings.cpp">
+      <Filter>Source\Games\Crossy\Scripting</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Games\Crossy\Scripting\CrossyLuaSaveGameBindings.cpp">
+      <Filter>Source\Games\Crossy\Scripting</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Games\Crossy\Scripting\CrossyLuaUiBindings.cpp">
+      <Filter>Source\Games\Crossy\Scripting</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Games\Crossy\UI\CrossyGameUiSystem.cpp">
+      <Filter>Source\Games\Crossy\UI</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Source\Games\Crossy\Audio\CrossyAudioIds.h">
+      <Filter>Source\Games\Crossy\Audio</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Games\Crossy\Components\HopMovementComponent.h">
+      <Filter>Source\Games\Crossy\Components</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Games\Crossy\Components\ParryComponent.h">
+      <Filter>Source\Games\Crossy\Components</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Games\Crossy\Components\ParryableProjectileComponent.h">
+      <Filter>Source\Games\Crossy\Components</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Games\Crossy\CrossyGameModule.h">
+      <Filter>Source\Games\Crossy</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Games\Crossy\Map\RowManager.h">
+      <Filter>Source\Games\Crossy\Map</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Games\Crossy\Scripting\CrossyLuaBindings.h">
+      <Filter>Source\Games\Crossy\Scripting</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Games\Crossy\Scripting\CrossyLuaHandles.h">
+      <Filter>Source\Games\Crossy\Scripting</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Games\Crossy\UI\CrossyGameUiSystem.h">
+      <Filter>Source\Games\Crossy\UI</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "Object/Object.h"
 #include "Core/RayTypes.h"
 #include "Core/CollisionTypes.h"
@@ -11,7 +11,7 @@
 #include "GameFramework/WorldContext.h"
 #include "Render/Scene/FScene.h"
 #include "Render/Types/LODContext.h"
-#include "Runtime/ObjectPoolSystem.h"
+#include "Runtime/ActorPoolSystem.h"
 #include <Collision/Octree.h>
 #include <Collision/SpatialPartition.h>
 
@@ -69,7 +69,7 @@ public:
 	void BeginDeferredPickingBVHUpdate();
 	void EndDeferredPickingBVHUpdate();
 	void WarmupPickingData() const;
-	bool RaycastPrimitives(const FRay& Ray, FHitResult& OutHitResult, AActor*& OutActor) const;
+	bool RaycastPrimitives(const FRay& Ray, FHitResult& OutHitResult, AActor*& OutActor, const FRaycastQueryParams& Params = FRaycastQueryParams()) const;
 
 	const TArray<AActor*>& GetActors() const { return PersistentLevel->GetActors(); }
 
@@ -78,7 +78,7 @@ public:
 
 	void InitWorld();      // Set up the world before gameplay begins
 	void BeginPlay();      // Triggers BeginPlay on all actors
-	void Tick(float DeltaTime, ELevelTick TickType);  // Drives the game loop every frame
+	void Tick(float GameDeltaTime, float RawDeltaTime, ELevelTick TickType);  // Drives the game loop every frame
 	void EndPlay();        // Cleanup before world is destroyed
 
 	bool HasBegunPlay() const { return bHasBegunPlay; }
@@ -122,7 +122,7 @@ public:
 	void UpdateCollision();
 	bool HasBlockingOverlapForActor(AActor* MovingActor, FHitResult* OutHit = nullptr);
 	void ApplyCollisionDebugVisualization();
-	void UpdatePlayerCameraManagers(float DeltaTime);
+	void UpdatePlayerCameraManagers(float GameDeltaTime, float RawDeltaTime);
 
 private:
 	//TArray<AActor*> Actors;
@@ -160,11 +160,11 @@ inline T* UWorld::SpawnActor()
 template<typename T>
 inline T* UWorld::AcquireActor(const FVector& Location, const FRotator& Rotation)
 {
-	return FObjectPoolSystem::Get().AcquireActor<T>(this, T::StaticClass(), Location, Rotation);
+	return FActorPoolSystem::Get().AcquireActor<T>(this, T::StaticClass(), Location, Rotation);
 }
 
 template<typename T>
 inline T* UWorld::AcquireActor(UClass* Class, const FVector& Location, const FRotator& Rotation)
 {
-	return FObjectPoolSystem::Get().AcquireActor<T>(this, Class, Location, Rotation);
+	return FActorPoolSystem::Get().AcquireActor<T>(this, Class, Location, Rotation);
 }

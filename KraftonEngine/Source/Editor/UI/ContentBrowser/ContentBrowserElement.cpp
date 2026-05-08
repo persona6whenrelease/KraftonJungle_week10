@@ -174,3 +174,13 @@ void MaterialElement::RenderDetail()
 {
 	MaterialInspector.Render();
 }
+
+void CurveElement::OnDoubleLeftClicked(ContentBrowserContext& Context)
+{
+	ContentBrowserElement::OnDoubleLeftClicked(Context);
+
+	if (Context.EditorEngine)
+	{
+		Context.EditorEngine->OpenCurveAsset(FPaths::ToUtf8(ContentItem.Path.wstring()));
+	}
+}

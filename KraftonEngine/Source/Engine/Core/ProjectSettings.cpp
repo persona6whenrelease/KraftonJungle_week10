@@ -13,6 +13,32 @@ namespace PSKey
 	constexpr const char* PointAtlasResolution = "PointAtlasResolution";
 	constexpr const char* MaxSpotAtlasPages = "MaxSpotAtlasPages";
 	constexpr const char* MaxPointAtlasPages = "MaxPointAtlasPages";
+	constexpr const char* Runtime = "Runtime";
+	constexpr const char* Modules = "Modules";
+	constexpr const char* RuntimeModules = "RuntimeModules";
+}
+
+namespace
+{
+	TArray<FString> ReadStringArray(json::JSON& Object, const char* Key, const TArray<FString>& Fallback)
+	{
+		if (!Object.hasKey(Key))
+		{
+			return Fallback;
+		}
+
+		json::JSON Values = Object[Key];
+		TArray<FString> Result;
+		for (int32 Index = 0; Index < static_cast<int32>(Values.length()); ++Index)
+		{
+			const FString Value = Values[Index].ToString();
+			if (!Value.empty())
+			{
+				Result.push_back(Value);
+			}
+		}
+		return Result;
+	}
 }
 
 void FProjectSettings::SaveToFile(const FString& Path) const
@@ -29,6 +55,18 @@ void FProjectSettings::SaveToFile(const FString& Path) const
 	ShadowObj[PSKey::MaxSpotAtlasPages] = static_cast<int>(Shadow.MaxSpotAtlasPages);
 	ShadowObj[PSKey::MaxPointAtlasPages] = static_cast<int>(Shadow.MaxPointAtlasPages);
 	Root[PSKey::Shadow] = ShadowObj;
+
+	JSON RuntimeObj = Object();
+	JSON ModulesArr = Array();
+	for (const FString& ModuleName : RuntimeModules)
+	{
+		if (!ModuleName.empty())
+		{
+			ModulesArr.append(ModuleName);
+		}
+	}
+	RuntimeObj[PSKey::Modules] = ModulesArr;
+	Root[PSKey::Runtime] = RuntimeObj;
 
 	std::filesystem::path FilePath(FPaths::ToWide(Path));
 	if (FilePath.has_parent_path())
@@ -51,6 +89,13 @@ void FProjectSettings::LoadFromFile(const FString& Path)
 		std::istreambuf_iterator<char>());
 
 	JSON Root = JSON::Load(Content);
+
+	RuntimeModules = ReadStringArray(Root, PSKey::RuntimeModules, RuntimeModules);
+	if (Root.hasKey(PSKey::Runtime))
+	{
+		JSON R = Root[PSKey::Runtime];
+		RuntimeModules = ReadStringArray(R, PSKey::Modules, RuntimeModules);
+	}
 
 	if (Root.hasKey(PSKey::Shadow))
 	{

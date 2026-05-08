@@ -1,4 +1,4 @@
-﻿#include "Engine/Input/GameplayInputRouter.h"
+#include "Engine/Input/GameplayInputRouter.h"
 
 #include "Engine/Input/InputFrame.h"
 #include "GameFramework/World.h"
@@ -14,7 +14,17 @@ void FGameplayInputRouter::ApplyGuiCapture(FInputFrame& InputFrame)
 
 bool FGameplayInputRouter::Route(FInputFrame& InputFrame, const FGameplayInputRouteContext& Context)
 {
-    ApplyGuiCapture(InputFrame);
+    const bool bPossessedGameplay = Context.ViewportClient && Context.ViewportClient->IsPossessed();
+    const bool bGameUiCapturing = Context.ViewportClient && Context.ViewportClient->GetUiLayer() &&
+        (Context.ViewportClient->GetUiLayer()->WantsMouse() ||
+         Context.ViewportClient->GetUiLayer()->WantsKeyboard());
+
+    // Possessed gameplay에서는 이전 프레임의 에디터 ImGui 캡처가 남아 있어도
+    // 마우스 룩/이동 입력을 소비하지 않는다. 실제 게임 UI가 떠 있을 때만 캡처한다.
+    if (!bPossessedGameplay || bGameUiCapturing)
+    {
+        ApplyGuiCapture(InputFrame);
+    }
 
     // 임시 진단: Lua가 보는 시점의 RBUTTON 상태와 소비 여부
     static bool sLastRBtn = false;

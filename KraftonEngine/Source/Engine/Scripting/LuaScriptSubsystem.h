@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #define SOL_ALL_SAFETIES_ON 1
 #define SOL_LUAJIT 1
@@ -19,6 +19,8 @@ class FLuaScriptSubsystem : public TSingleton<FLuaScriptSubsystem>
 	friend class TSingleton<FLuaScriptSubsystem>;
 
 public:
+	using FLuaBindingRegistrar = void(*)(sol::state&);
+
 	void Initialize();
 	void Shutdown();
 
@@ -27,6 +29,10 @@ public:
 		return Lua;
 	}
 
+	void AddBindingRegistrar(FLuaBindingRegistrar Registrar);
+	void ClearBindingRegistrars();
+	void RegisterScriptDirectoryWatcher(const FString& ScriptSubDirectory);
+	
 	bool DispatchUiEvent(const FString& EventName);
 	bool DispatchGameEvent(const FString& EventName, AActor* Instigator = nullptr);
 
@@ -48,7 +54,6 @@ public:
 private:
 	FLuaScriptSubsystem() = default;
 
-	void RegisterScriptDirectoryWatcher(const FString& ScriptSubDirectory);
 	void OnScriptsChanged(const TSet<FString>& ChangedFiles);
 	void ConfigureLuaState();
 	void ConfigureLuaState(sol::state& TargetLua);
@@ -123,5 +128,6 @@ private:
 	TMap<FString, FString> ModulePaths;
 	TArray<FLuaDependencyContext> DependencyContextStack;
 	TMap<uint32, FLuaComponentBinding> ComponentBindings;
+	TArray<FLuaBindingRegistrar> ExtraBindingRegistrars;
 	uint64 LuaGeneration = 0;
 };

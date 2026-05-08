@@ -1,10 +1,8 @@
-﻿#include "RenderCollector.h"
+#include "RenderCollector.h"
 
 #include "Component/ActorComponent.h"
 #include "Component/Collision/ShapeComponent.h"
 #include "GameFramework/AActor.h"
-#include "Editor/EditorEngine.h"
-#include "Editor/Subsystem/OverlayStatSystem.h"
 #include "GameFramework/World.h"
 #include "Profiling/Stats.h"
 #include "Collision/ConvexVolume.h"
@@ -69,17 +67,6 @@ void FRenderCollector::CollectGrid(float GridSpacing, int32 GridHalfLineCount, F
 	Scene.SetGrid(GridSpacing, GridHalfLineCount);
 }
 
-void FRenderCollector::CollectOverlayText(const FOverlayStatSystem& OverlaySystem, const UEditorEngine& Editor, FScene& Scene)
-{
-	TArray<FOverlayStatLine> Lines;
-	OverlaySystem.BuildLines(Editor, Lines);
-	const float TextScale = OverlaySystem.GetLayout().TextScale;
-
-	for (FOverlayStatLine& Line : Lines)
-	{
-		Scene.AddOverlayText(std::move(Line.Text), Line.ScreenPosition, TextScale);
-	}
-}
 
 void FRenderCollector::CollectDebugDraw(const FFrameContext& Frame, FScene& Scene)
 {

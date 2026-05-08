@@ -1,26 +1,27 @@
-﻿#include "Engine/Runtime/EngineLoop.h"
+#include "Engine/Runtime/EngineLoop.h"
 #include "Engine/Runtime/LoadingScreen.h"
 #include "Profiling/StartupProfiler.h"
 
-#if IS_GAME_CLIENT
-#include "GameClient/GameClientEngine.h"
-#elif IS_OBJ_VIEWER
-#include "ObjViewer/ObjViewerEngine.h"
-#elif WITH_EDITOR
-#include "Editor/EditorEngine.h"
-#endif
+#include "Runtime/EngineFactory.h"
+#include "Object/ObjectFactory.h"
 
 void FEngineLoop::CreateEngine()
 {
 #if IS_GAME_CLIENT
-	GEngine = UObjectManager::Get().CreateObject<UGameClientEngine>();
+	const FString EngineFactoryName = "GameClient";
 #elif IS_OBJ_VIEWER
-	GEngine = UObjectManager::Get().CreateObject<UObjViewerEngine>();
+	const FString EngineFactoryName = "ObjViewer";
 #elif WITH_EDITOR
-	GEngine = UObjectManager::Get().CreateObject<UEditorEngine>();
+	const FString EngineFactoryName = "Editor";
 #else
-	GEngine = UObjectManager::Get().CreateObject<UEngine>();
+	const FString EngineFactoryName = "Engine";
 #endif
+
+	GEngine = FEngineFactoryRegistry::Create(EngineFactoryName);
+	if (!GEngine)
+	{
+		GEngine = UObjectManager::Get().CreateObject<UEngine>();
+	}
 }
 
 bool FEngineLoop::Init(HINSTANCE hInstance, int nShowCmd)

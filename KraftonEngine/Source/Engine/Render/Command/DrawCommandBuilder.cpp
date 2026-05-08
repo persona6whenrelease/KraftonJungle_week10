@@ -13,6 +13,7 @@
 #include "Render/Pipeline/RenderCollector.h"
 #include "Materials/Material.h"
 #include "Texture/Texture2D.h"
+#include "Core/Log.h"
 
 // UpdateProxyLOD defined in RenderCollector.cpp (shared)
 extern void UpdateProxyLOD(FPrimitiveSceneProxy* Proxy, const FLODUpdateContext& LODCtx);
@@ -35,6 +36,8 @@ void FDrawCommandBuilder::Create(ID3D11Device* InDevice, ID3D11DeviceContext* In
 	OutlineCB.Create(InDevice, sizeof(FOutlinePostProcessConstants));
 	SceneDepthCB.Create(InDevice, sizeof(FSceneDepthPConstants));
 	FXAACB.Create(InDevice, sizeof(FFXAAConstants));
+	VignetteCB.Create(InDevice, sizeof(FVignettePostProcessConstants));
+	FadeCB.Create(InDevice, sizeof(FFadePostProcessConstants));
 }
 
 void FDrawCommandBuilder::Release()
@@ -53,6 +56,8 @@ void FDrawCommandBuilder::Release()
 	OutlineCB.Release();
 	SceneDepthCB.Release();
 	FXAACB.Release();
+	VignetteCB.Release();
+	FadeCB.Release();
 }
 
 // ============================================================
@@ -456,6 +461,16 @@ void FDrawCommandBuilder::BuildPostProcessCommands(const FFrameContext& Frame, c
 	EViewMode ViewMode = Frame.RenderOptions.ViewMode;
 	const FDrawCommandRenderState PPRS = PassRenderStateTable->ToDrawCommandState(ERenderPass::PostProcess, ViewMode);
 
+	// [DEBUG LOG] 매 프레임 플래그와 강도를 출력하여 렌더러가 인식하는 상태를 확인합니다.
+	// static uint32 GlobalPPLogCounter = 0;
+	// if (GlobalPPLogCounter++ % 60 == 0)
+	// {
+	// 	UE_LOG("[DrawCommandBuilder] CamUUID=%u | ShowFlags: Vig=%d, Fade=%d | Values: Intensity=%.2f, Alpha=%.2f",
+	// 		Frame.CameraUUID,
+	// 		Frame.RenderOptions.ShowFlags.bVignette, Frame.RenderOptions.ShowFlags.bFade,
+	// 		Frame.PostProcess.VignetteIntensity, Frame.PostProcess.FadeAlpha);
+	// }
+
 	// HeightFog (UserBits=0 → Outline보다 먼저)
 	if (Frame.RenderOptions.ShowFlags.bFog && CollectScene && CollectScene->GetEnvironment().HasFog())
 	{
@@ -540,6 +555,51 @@ void FDrawCommandBuilder::BuildPostProcessCommands(const FFrameContext& Frame, c
 			FDrawCommand& Cmd = DrawCommandList.AddCommand();
 			Cmd.InitFullscreenTriangle(CullingShader, ERenderPass::PostProcess, PPRS);
 			Cmd.BuildSortKey(4);
+		}
+	}
+
+	// Vignette (UserBits=5 → LightCulling 뒤, Fade 앞)
+	if (Frame.RenderOptions.ShowFlags.bVignette && Frame.PostProcess.VignetteIntensity < 0.99f)
+	{
+		static uint32 VignetteLogCounter = 0;
+		if (VignetteLogCounter++ % 60 == 0)
+		{
+			UE_LOG("[Renderer] Drawing Vignette. Intensity: %.2f, Center: (%.2f, %.2f)", 
+				Frame.PostProcess.VignetteIntensity, Frame.PostProcess.VignetteCenter.X, Frame.PostProcess.VignetteCenter.Y);
+		}
+
+		FShader* VignetteShader = FShaderManager::Get().GetOrCreate(EShaderPath::Vignette);
+		if (VignetteShader)
+		{
+			FVignettePostProcessConstants VignetteData = {};
+			VignetteData.VignetteCenter     = Frame.PostProcess.VignetteCenter;
+			VignetteData.VignetteIntensity  = Frame.PostProcess.VignetteIntensity;
+			VignetteData.VignetteSmoothness = Frame.PostProcess.VignetteSmoothness;
+			VignetteData.VignetteColor      = Frame.PostProcess.VignetteColor;
+			VignetteCB.Update(Ctx, &VignetteData, sizeof(FVignettePostProcessConstants));
+
+			FDrawCommand& Cmd = DrawCommandList.AddCommand();
+			Cmd.InitFullscreenTriangle(VignetteShader, ERenderPass::PostProcess, PPRS);
+			Cmd.Bindings.PerShaderCB[0] = &VignetteCB;
+			Cmd.BuildSortKey(5);
+		}
+	}
+
+	// Fade (UserBits=6 → 모든 PostProcess 효과 위에 덮음)
+	if (Frame.RenderOptions.ShowFlags.bFade && Frame.PostProcess.FadeAlpha > 0.001f)
+	{
+		FShader* FadeShader = FShaderManager::Get().GetOrCreate(EShaderPath::Fade);
+		if (FadeShader)
+		{
+			FFadePostProcessConstants FadeData = {};
+			FadeData.FadeColor = Frame.PostProcess.FadeColor;
+			FadeData.FadeAlpha = Frame.PostProcess.FadeAlpha;
+			FadeCB.Update(Ctx, &FadeData, sizeof(FFadePostProcessConstants));
+
+			FDrawCommand& Cmd = DrawCommandList.AddCommand();
+			Cmd.InitFullscreenTriangle(FadeShader, ERenderPass::PostProcess, PPRS);
+			Cmd.Bindings.PerShaderCB[0] = &FadeCB;
+			Cmd.BuildSortKey(6);
 		}
 	}
 

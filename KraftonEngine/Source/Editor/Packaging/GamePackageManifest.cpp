@@ -1,4 +1,4 @@
-#include "Editor/Packaging/GamePackageManifest.h"
+﻿#include "Editor/Packaging/GamePackageManifest.h"
 
 #include "Engine/Platform/Paths.h"
 #include "SimpleJSON/json.hpp"
@@ -120,6 +120,9 @@ bool FGamePackageManifestWriter::Write(
 	Root["PackageVersion"] = 1;
 	Root["ProjectName"] = Settings.ProjectName;
 	Root["BuildConfiguration"] = Settings.BuildConfiguration;
+	Root["BuildPlatform"] = Settings.BuildPlatform;
+	Root["SelectedGame"] = Settings.SelectedGame;
+	Root["GameProject"] = Settings.GameProjectPath;
 	Root["CreatedBy"] = "EditorPackageButton";
 	Root["CreatedAt"] = GetCreatedAtLocalIso8601();
 

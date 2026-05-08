@@ -1,5 +1,6 @@
 ﻿#pragma once
 
+#include "Camera/CameraTypes.h"
 #include "Core/CoreTypes.h"
 #include "Math/Matrix.h"
 #include "Math/Vector.h"
@@ -22,6 +23,7 @@ class FGPUOcclusionCulling;
 struct FFrameContext
 {
 	// Camera
+	uint32  CameraUUID = 0;
 	FMatrix View;
 	FMatrix Proj;
 	FVector CameraPosition;
@@ -66,6 +68,10 @@ struct FFrameContext
 
 	// Render Settings (Single Source of Truth)
 	FViewportRenderOptions RenderOptions;
+
+	// Per-frame PostProcess parameters from active camera (Vignette, Fade, etc.).
+	// Populated by SetCameraInfo via UCameraComponent::GetPostProcess().
+	FCameraPostProcess PostProcess;
 
 	FVector    WireframeColor = FVector(0.0f, 0.0f, 0.7f);
 

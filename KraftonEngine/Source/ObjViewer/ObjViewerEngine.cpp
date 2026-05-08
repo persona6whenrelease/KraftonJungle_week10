@@ -1,4 +1,4 @@
-﻿#include "ObjViewer/ObjViewerEngine.h"
+#include "ObjViewer/ObjViewerEngine.h"
 
 #include "ObjViewer/ObjViewerRenderPipeline.h"
 #include "Engine/Runtime/WindowsWindow.h"
@@ -8,8 +8,19 @@
 #include "Component/StaticMeshComponent.h"
 #include "GameFramework/AActor.h"
 #include "Viewport/Viewport.h"
+#include "Runtime/EngineFactory.h"
 
 IMPLEMENT_CLASS(UObjViewerEngine, UEngine)
+
+namespace
+{
+	UEngine* CreateObjViewerEngine()
+	{
+		return UObjectManager::Get().CreateObject<UObjViewerEngine>();
+	}
+
+	FEngineFactoryRegistrar GObjViewerEngineRegistrar("ObjViewer", &CreateObjViewerEngine);
+}
 
 void UObjViewerEngine::Init(FWindowsWindow* InWindow)
 {

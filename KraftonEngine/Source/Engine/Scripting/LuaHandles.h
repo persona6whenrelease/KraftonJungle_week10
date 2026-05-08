@@ -3,6 +3,7 @@
 #include "Component/StaticMeshComponent.h"
 #include "Component/ActorComponent.h"
 #include "Component/CameraComponent.h"
+#include "Component/SpringArmComponent.h"
 #include "Component/Script/LuaScriptComponent.h"
 #include "Component/SceneComponent.h"
 #include "Component/PrimitiveComponent.h"
@@ -15,8 +16,6 @@
 #include "Component/Movement/PendulumMovementComponent.h"
 #include "Component/Movement/ProjectileMovementComponent.h"
 #include "Component/Movement/RotatingMovementComponent.h"
-#include "Component/Movement/HopMovementComponent.h"
-#include "Component/ParryComponent.h"
 #include "Core/CoreTypes.h"
 #include "Object/Object.h"
 #include "GameFramework/AActor.h"
@@ -187,21 +186,6 @@ struct FLuaRotatingMovementComponentHandle
 	}
 };
 
-struct FLuaHopMovementComponentHandle
-{
-	uint32 UUID = 0;
-	
-	UHopMovementComponent* Resolve() const
-	{
-		UObject* Object = UObjectManager::Get().FindByUUID(UUID);
-		return Cast<UHopMovementComponent>(Object);
-	}
-	
-	bool IsValid() const
-	{
-		return Resolve() != nullptr;
-	}
-};
 
 // Lua가 Shape에 직접 접근할 수 없도록 감쌈
 // nullptr일 경우를 대비
@@ -301,6 +285,23 @@ struct FLuaControllerInputComponentHandle
 	}
 };
 
+
+struct FLuaSpringArmComponentHandle
+{
+	uint32 UUID = 0;
+
+	USpringArmComponent* Resolve() const
+	{
+		UObject* Object = UObjectManager::Get().FindByUUID(UUID);
+		return Cast<USpringArmComponent>(Object);
+	}
+
+	bool IsValid() const
+	{
+		return Resolve() != nullptr;
+	}
+};
+
 struct FLuaCameraComponentHandle
 {
 	uint32 UUID = 0;
@@ -365,18 +366,3 @@ struct FLuaPlayerControllerHandle
 	}
 };
 
-struct FLuaParryComponentHandle
-{
-	uint32 UUID = 0;
-
-	UParryComponent* Resolve() const
-	{
-		UObject* Object = UObjectManager::Get().FindByUUID(UUID);
-		return Cast<UParryComponent>(Object);
-	}
-
-	bool IsValid() const
-	{
-		return Resolve() != nullptr;
-	}
-};

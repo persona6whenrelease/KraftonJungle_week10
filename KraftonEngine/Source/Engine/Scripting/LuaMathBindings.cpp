@@ -6,6 +6,44 @@
 #include "Math/Vector.h"
 #include "Math/Rotator.h"
 
+void RegisterFVector2Binding(sol::state& Lua)
+{
+	Lua.new_usertype<FVector2>(
+		"FVector2",
+		sol::constructors<FVector2(), FVector2(float, float)>(),
+
+		"x",
+		sol::property([](const FVector2& V) { return V.X; }, [](FVector2& V, float Value) { V.X = Value; }),
+
+		"y",
+		sol::property([](const FVector2& V) { return V.Y; }, [](FVector2& V, float Value) { V.Y = Value; }),
+
+		"X", &FVector2::X,
+		"Y", &FVector2::Y,
+
+		"Length",
+		[](const FVector2& Self) { return Self.Length(); },
+
+		"Normalized",
+		[](const FVector2& Self) { return Self.Normalized(); },
+
+		"Dot",
+		[](const FVector2& Self, const FVector2& Other) { return Self.Dot(Other); },
+
+		sol::meta_function::addition,
+		[](const FVector2& A, const FVector2& B) { return A + B; },
+
+		sol::meta_function::subtraction,
+		[](const FVector2& A, const FVector2& B) { return A - B; },
+
+		sol::meta_function::multiplication,
+		sol::overload([](const FVector2& V, float Scalar) { return V * Scalar; }, [](float Scalar, const FVector2& V) { return V * Scalar; }),
+
+		sol::meta_function::division,
+		[](const FVector2& V, float Scalar) { return V / Scalar; }
+	);
+}
+
 // Lua에 FVector를 등록
 void RegisterFVectorBinding(sol::state& Lua)
 {

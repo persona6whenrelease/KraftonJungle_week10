@@ -60,9 +60,14 @@ public:
 
 	void SetTargetActor(AActor* Target);
 	AActor* ResolveTargetActor() const;
+	AActor* GetSubjectActor(APlayerController* Controller) const { return ResolveSubjectActor(Controller); }
 	void ClearTargetActor();
 	void ClearTargetActorIfMatches(const AActor* Actor);
 	uint32 GetTargetActorUUID() const { return TargetActorUUID; }
+
+	const FCameraPostProcess& GetPostProcess() const { return PostProcess; }
+	FCameraPostProcess& GetMutablePostProcess() { return PostProcess; }
+	void SetPostProcess(const FCameraPostProcess& InPostProcess) { PostProcess = InPostProcess; }
 
 	ECameraViewMode GetViewMode() const { return static_cast<ECameraViewMode>(ViewMode); }
 	int32 GetViewModeIndex() const { return ViewMode; }
@@ -157,6 +162,7 @@ private:
 
 	FCameraSmoothingSettings SmoothingSettings;
 	FCameraTransitionSettings TransitionSettings;
+	FCameraPostProcess PostProcess;
 
 	FVector SmoothedLookAheadWorld = FVector::ZeroVector;
 	FVector StableFocusPoint = FVector::ZeroVector;

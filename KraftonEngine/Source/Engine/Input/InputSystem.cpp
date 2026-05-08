@@ -1,4 +1,4 @@
-﻿#include "Engine/Input/InputSystem.h"
+#include "Engine/Input/InputSystem.h"
 #include <cmath>
 #include "Core/Log.h"
 
@@ -160,10 +160,7 @@ void InputSystem::ResetCaptureStateForPIEEnd()
     SetUseRawMouse(false);
     ResetAllKeyStates();
     ResetTransientState();
-    GuiState.bUsingMouse = false;
-    GuiState.bUsingKeyboard = false;
-    GuiState.bUsingTextInput = false;
-    UpdateCurrentSnapshot();
+    ClearGuiCapture();
 }
 
 void InputSystem::UpdateCurrentSnapshot()

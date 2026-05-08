@@ -1,11 +1,10 @@
-﻿#include "LuaWorldLibrary.h"
+#include "LuaWorldLibrary.h"
 
 #include "Core/Log.h"
 #include "Object/Object.h"
 #include "Object/ObjectFactory.h"
 #include "Object/UClass.h"
 #include "Runtime/Engine.h"
-#include "Runtime/ObjectPoolSystem.h"
 
 #include "GameFramework/World.h"
 #include "GameFramework/StaticMeshActor.h"
@@ -21,11 +20,10 @@
 #include "Component/Movement/InterpToMovementComponent.h"
 #include "Component/Movement/PendulumMovementComponent.h"
 #include "Component/Movement/RotatingMovementComponent.h"
-#include "Component/Movement/HopMovementComponent.h"
 #include "Component/Movement/PawnMovementComponent.h"
 #include "Component/ControllerInputComponent.h"
-#include "Component/ParryComponent.h"
 #include "Component/StaticMeshComponent.h"
+#include "Component/SpringArmComponent.h"
 #include "Component/TextRenderComponent.h"
 
 #include "Mesh/ObjManager.h"
@@ -111,102 +109,6 @@ AActor* FLuaWorldLibrary::SpawnActorByClassName(const FString& ClassName, const 
 	World->AddActor(Actor);
 
 	return Actor;
-}
-
-AActor* FLuaWorldLibrary::AcquireActorByClassName(const FString& ClassName, const FVector& Location, const FRotator& Rotation)
-{
-	if (!IsAllowedLuaActorClassName(ClassName))
-	{
-		UE_LOG("[LuaSecurity] AcquireActor blocked: class is not allowed from Lua. ClassName = %s", ClassName.c_str());
-		return nullptr;
-	}
-
-	UWorld* World = GetActiveWorld();
-	if (!World)
-	{
-		return nullptr;
-	}
-
-	UClass* ActorClass = FindRegisteredClassByName(ClassName);
-	if (!ActorClass || !ActorClass->IsA(AActor::StaticClass()))
-	{
-		UE_LOG("[Lua] AcquireActor failed: unknown actor class name = %s", ClassName.c_str());
-		return nullptr;
-	}
-
-	AActor* Actor = FObjectPoolSystem::Get().AcquireActor<AActor>(World, ActorClass, Location, Rotation);
-	if (!Actor)
-	{
-		return nullptr;
-	}
-
-	EnsureRootComponent(Actor);
-	Actor->SetActorLocation(Location);
-	Actor->SetActorRotation(Rotation);
-	return Actor;
-}
-
-
-AActor* FLuaWorldLibrary::AcquirePrefab(const FString& PrefabPath, const FVector& Location, const FRotator& Rotation)
-{
-	UWorld* World = GetActiveWorld();
-	if (!World)
-	{
-		return nullptr;
-	}
-
-	AActor* Actor = FObjectPoolSystem::Get().AcquirePrefab(World, PrefabPath, Location, Rotation);
-	if (!Actor)
-	{
-		UE_LOG("[Lua] AcquirePrefab failed: prefab path = %s", PrefabPath.c_str());
-	}
-	return Actor;
-}
-
-bool FLuaWorldLibrary::ReleaseActorToPool(AActor* Actor)
-{
-	if (!Actor)
-	{
-		return false;
-	}
-
-	return FObjectPoolSystem::Get().ReleaseActor(Actor);
-}
-
-int32 FLuaWorldLibrary::WarmUpActorPool(const FString& ClassName, int32 Count)
-{
-	if (!IsAllowedLuaActorClassName(ClassName))
-	{
-		UE_LOG("[LuaSecurity] WarmUpActorPool blocked: class is not allowed from Lua. ClassName = %s", ClassName.c_str());
-		return 0;
-	}
-
-	UWorld* World = GetActiveWorld();
-	if (!World)
-	{
-		return 0;
-	}
-
-	UClass* ActorClass = FindRegisteredClassByName(ClassName);
-	if (!ActorClass || !ActorClass->IsA(AActor::StaticClass()))
-	{
-		UE_LOG("[Lua] WarmUpActorPool failed: unknown actor class name = %s", ClassName.c_str());
-		return 0;
-	}
-
-	return FObjectPoolSystem::Get().WarmUp(World, ActorClass, Count);
-}
-
-
-int32 FLuaWorldLibrary::WarmUpPrefabPool(const FString& PrefabPath, int32 Count)
-{
-	UWorld* World = GetActiveWorld();
-	if (!World)
-	{
-		return 0;
-	}
-
-	return FObjectPoolSystem::Get().WarmUpPrefab(World, PrefabPath, Count);
 }
 
 AActor* FLuaWorldLibrary::SpawnStaticMeshActor(const FString& StaticMeshPath, const FVector& Location)
@@ -463,10 +365,16 @@ namespace
 {
 	struct FLuaAllowedComponentClass
 	{
-		const char* NormalizedName;
+		FString NormalizedName;
 		UClass* Class;
 		bool bCanCreate;
 	};
+
+	TArray<FLuaAllowedComponentClass>& GetExtraAllowedComponentClasses()
+	{
+		static TArray<FLuaAllowedComponentClass> ExtraClasses;
+		return ExtraClasses;
+	}
 
 	FString NormalizeLuaTypeName(FString Name)
 	{
@@ -647,6 +555,7 @@ namespace
 			{ "luascript", ULuaScriptComponent::StaticClass(), true },
 			{ "staticmesh", UStaticMeshComponent::StaticClass(), true },
 			{ "textrender", UTextRenderComponent::StaticClass(), true },
+			{ "springarm", USpringArmComponent::StaticClass(), true },
 			{ "shape", UShapeComponent::StaticClass(), false },
 			{ "box", UBoxComponent::StaticClass(), true },
 			{ "sphere", USphereComponent::StaticClass(), true },
@@ -658,11 +567,17 @@ namespace
 			{ "interptomovement", UInterpToMovementComponent::StaticClass(), true },
 			{ "pendulummovement", UPendulumMovementComponent::StaticClass(), true },
 			{ "rotatingmovement",URotatingMovementComponent::StaticClass(),true },
-			{ "hopmovement",UHopMovementComponent::StaticClass(),true },
-			{ "parry", UParryComponent::StaticClass(), true },
 		};
 
 		for (const FLuaAllowedComponentClass& Entry : AllowedComponents)
+		{
+			if (NormalizedTypeName == Entry.NormalizedName)
+			{
+				return &Entry;
+			}
+		}
+
+		for (const FLuaAllowedComponentClass& Entry : GetExtraAllowedComponentClasses())
 		{
 			if (NormalizedTypeName == Entry.NormalizedName)
 			{
@@ -689,6 +604,28 @@ UActorComponent* FLuaWorldLibrary::FindComponentByTypeName(AActor* Actor, const 
 	TArray<UActorComponent*> Components = FindComponentsByTypeName(Actor, TypeName);
 	const size_t Index = static_cast<size_t>(ComponentIndex);
 	return Index < Components.size() ? Components[Index] : nullptr;
+}
+
+void FLuaWorldLibrary::RegisterAllowedComponentClass(const FString& TypeName, UClass* Class, bool bCanCreateFromLua)
+{
+	if (!Class)
+	{
+		return;
+	}
+
+	const FString NormalizedTypeName = NormalizeLuaTypeName(TypeName);
+	TArray<FLuaAllowedComponentClass>& ExtraClasses = GetExtraAllowedComponentClasses();
+	for (FLuaAllowedComponentClass& Entry : ExtraClasses)
+	{
+		if (Entry.NormalizedName == NormalizedTypeName)
+		{
+			Entry.Class = Class;
+			Entry.bCanCreate = bCanCreateFromLua;
+			return;
+		}
+	}
+
+	ExtraClasses.push_back({ NormalizedTypeName, Class, bCanCreateFromLua });
 }
 
 TArray<UActorComponent*> FLuaWorldLibrary::FindComponentsByTypeName(AActor* Actor, const FString& TypeName)

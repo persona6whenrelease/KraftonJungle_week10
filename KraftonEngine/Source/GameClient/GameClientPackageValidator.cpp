@@ -135,6 +135,12 @@ bool FGameClientPackageValidator::ValidateBeforeEngineInit(const FGameClientSett
 	bOk &= RequireFile("Settings/Game.ini", OutErrors);
 	bOk &= RequireFile("Settings/Resource.ini", OutErrors);
 
+	if (Settings.RuntimeModules.empty())
+	{
+		AppendError(OutErrors, "Settings/Game.ini must specify Runtime.Modules or RuntimeModules.");
+		bOk = false;
+	}
+
 	bOk &= RequireDirectory("Asset", OutErrors);
 	bOk &= RequireDirectory("Asset/Scene", OutErrors);
 	bOk &= RequireDirectory("LuaScripts", OutErrors);

@@ -1,54 +1,136 @@
 ﻿#include "SoundManager.h"
 
+#include "Core/Log.h"
+
+#include <filesystem>
+#include <stdexcept>
+
 void FSoundManager::initialize()
 {
-	if (!m_bgm.openFromFile(FPaths::ToUtf8(FPaths::Combine(FPaths::AssetDir() , L"Sound/BackgroundMusic.wav"))))
+	SoundBufferMap.clear();
+	Sounds.clear();
+	MusicMap.clear();
+	LastMusicId.clear();
+}
+
+bool FSoundManager::LoadMusic(const FSoundId& ID, const std::wstring& FilePath, bool bLoop)
+{
+	if (ID.empty())
 	{
-		throw std::runtime_error("BGM Load Failed : Sound/BackGround.wav" );
+		return false;
 	}
 
-	m_bgm.setLooping(true);
+	auto Music = std::make_unique<sf::Music>();
+	if (!Music->openFromFile(std::filesystem::path(FilePath)))
+	{
+		UE_LOG("[Sound] Music load failed: %s", ID.c_str());
+		return false;
+	}
 
+	Music->setLooping(bLoop);
+	MusicMap[ID] = std::move(Music);
+	LastMusicId = ID;
+	return true;
+}
 
-	LoadEffect(SoundEffect::Jump, FPaths::Combine(FPaths::AssetDir(), L"Sound/Jump.wav"));
-	LoadEffect(SoundEffect::Death, FPaths::Combine(FPaths::AssetDir(), L"Sound/Death.wav"));
-	LoadEffect(SoundEffect::Parry, FPaths::Combine(FPaths::AssetDir(), L"Sound/Parry.wav"));
-	LoadEffect(SoundEffect::Dash, FPaths::Combine(FPaths::AssetDir(), L"Sound/Dash.wav"));
+void FSoundManager::PlayMusic(const FSoundId& ID)
+{
+	auto It = MusicMap.find(ID);
+	if (It == MusicMap.end() || !It->second)
+	{
+		UE_LOG("[Sound] Music not loaded: %s", ID.c_str());
+		return;
+	}
 
+	LastMusicId = ID;
+	It->second->play();
+}
+
+void FSoundManager::StopMusic(const FSoundId& ID)
+{
+	auto It = MusicMap.find(ID);
+	if (It != MusicMap.end() && It->second)
+	{
+		It->second->stop();
+	}
+}
+
+void FSoundManager::StopAllMusic()
+{
+	for (auto& Pair : MusicMap)
+	{
+		if (Pair.second)
+		{
+			Pair.second->stop();
+		}
+	}
 }
 
 void FSoundManager::PlayBGM()
 {
-	m_bgm.play();
+	if (!LastMusicId.empty())
+	{
+		PlayMusic(LastMusicId);
+	}
 }
 
 void FSoundManager::StopBGM()
 {
-	m_bgm.stop();
+	if (!LastMusicId.empty())
+	{
+		StopMusic(LastMusicId);
+	}
 }
 
-void FSoundManager::LoadEffect(SoundEffect ID, const std::wstring& FilePath)
+void FSoundManager::LoadEffect(const FSoundId& ID, const std::wstring& FilePath)
 {
 	auto buffer = std::make_unique<sf::SoundBuffer>();
-	if (!buffer.get()->loadFromFile(FPaths::ToUtf8(FilePath)))
-
+	if (!buffer->loadFromFile(std::filesystem::path(FilePath)))
+	{
 		throw std::runtime_error("Effect Load Failed");
+	}
 
-	// unique_ptr로 힙에 생성 → 복사 없이 포인터만 map에 저장
 	SoundBufferMap[ID] = std::move(buffer);
 	Sounds[ID] = std::make_unique<sf::Sound>(*SoundBufferMap[ID]);
 }
 
-
-void FSoundManager::PlayEffect(SoundEffect ID)
+void FSoundManager::PlayEffect(const FSoundId& ID)
 {
 	auto it = Sounds.find(ID);
 	if (it == Sounds.end())
 	{
-		throw std::runtime_error("Effect not loaded");
+		UE_LOG("[Sound] Effect not loaded: %s", ID.c_str());
+		return;
 	}
 
-	it->second.get()->play();
-
+	it->second->play();
 }
 
+void FSoundManager::StopEffect(const FSoundId& ID)
+{
+	auto it = Sounds.find(ID);
+	if (it != Sounds.end() && it->second)
+	{
+		it->second->stop();
+	}
+}
+
+bool FSoundManager::IsEffectPlaying(const FSoundId& ID) const
+{
+	auto it = Sounds.find(ID);
+	if (it != Sounds.end() && it->second)
+	{
+		return it->second->getStatus() == sf::Sound::Status::Playing;
+	}
+	return false;
+}
+
+float FSoundManager::GetEffectDuration(const FSoundId& ID) const
+{
+	auto it = SoundBufferMap.find(ID);
+	if (it != SoundBufferMap.end() && it->second)
+	{
+		return it->second->getDuration().asSeconds();
+	}
+	return 0.0f;
+}

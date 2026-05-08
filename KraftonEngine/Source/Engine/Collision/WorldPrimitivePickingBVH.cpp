@@ -211,7 +211,7 @@ void FWorldPrimitivePickingBVH::CollectDebugAABBs(TArray<FDebugAABB>& OutAABBs, 
 	}
 }
 
-bool FWorldPrimitivePickingBVH::Raycast(const FRay& Ray, FHitResult& OutHitResult, AActor*& OutActor) const
+bool FWorldPrimitivePickingBVH::Raycast(const FRay& Ray, FHitResult& OutHitResult, AActor*& OutActor, const FRaycastQueryParams& Params) const
 {
 	struct FTraversalEntry
 	{
@@ -225,7 +225,7 @@ bool FWorldPrimitivePickingBVH::Raycast(const FRay& Ray, FHitResult& OutHitResul
 	const int32 RootNodeIndex = Tree.GetRootNodeIndex();
 	const auto& Nodes = Tree.GetNodes();
 
-	if (RootNodeIndex == TDynamicAABBTree<FPickingUserData>::INDEX_NONE || 
+	if (RootNodeIndex == TDynamicAABBTree<FPickingUserData>::INDEX_NONE ||
 		!TDynamicAABBTree<FPickingUserData>::IsValidNodeIndex(RootNodeIndex, static_cast<int32>(Nodes.size())))
 	{
 		return false;
@@ -238,6 +238,10 @@ bool FWorldPrimitivePickingBVH::Raycast(const FRay& Ray, FHitResult& OutHitResul
 		return false;
 	}
 
+	float BestDistance = Params.MaxDistance;
+	FHitResult BestHit{};
+	AActor* BestActor = nullptr;
+
 	TArray<FTraversalEntry> NodeStack;
 	NodeStack.reserve(Nodes.size());
 	NodeStack.push_back({ RootNodeIndex, RootTMin });
@@ -246,16 +250,39 @@ bool FWorldPrimitivePickingBVH::Raycast(const FRay& Ray, FHitResult& OutHitResul
 	{
 		const FTraversalEntry Entry = NodeStack.back();
 		NodeStack.pop_back();
-		if (Entry.TMin >= OutHitResult.Distance)
+
+		if (Entry.TMin >= BestDistance)
 		{
 			continue;
 		}
 
 		const auto& Node = Nodes[Entry.NodeIndex];
+
 		if (Node.IsLeaf())
 		{
 			const auto& UserData = Node.UserData;
-			if (!UserData.Primitive || !UserData.Owner || !UserData.Owner->IsVisible() || !UserData.Primitive->IsVisible())
+
+			if (!UserData.Primitive || !UserData.Owner)
+			{
+				continue;
+			}
+
+			if (Params.IgnoreActor && UserData.Owner == Params.IgnoreActor)
+			{
+				continue;
+			}
+
+			if (Params.IgnoreComponent && UserData.Primitive == Params.IgnoreComponent)
+			{
+				continue;
+			}
+
+			if (Params.bIgnoreHidden && (!UserData.Owner->IsVisible() || !UserData.Primitive->IsVisible()))
+			{
+				continue;
+			}
+
+			if (Params.bTraceOnlyBlocking && !UserData.Primitive->BlocksMovement())
 			{
 				continue;
 			}
@@ -267,6 +294,7 @@ bool FWorldPrimitivePickingBVH::Raycast(const FRay& Ray, FHitResult& OutHitResul
 			{
 				const FMatrix& WorldMatrix = StaticMeshComponent->GetWorldMatrix();
 				const FMatrix& WorldInverse = StaticMeshComponent->GetWorldInverseMatrix();
+
 				bHit = StaticMeshComponent->LineTraceStaticMeshFast(Ray, WorldMatrix, WorldInverse, CandidateHit);
 			}
 			else
@@ -274,11 +302,13 @@ bool FWorldPrimitivePickingBVH::Raycast(const FRay& Ray, FHitResult& OutHitResul
 				bHit = UserData.Primitive->LineTraceComponent(Ray, CandidateHit);
 			}
 
-			if (bHit && CandidateHit.Distance < OutHitResult.Distance)
+			if (bHit && CandidateHit.Distance >= 0.0f && CandidateHit.Distance < BestDistance && CandidateHit.Distance <= Params.MaxDistance)
 			{
-				OutHitResult = CandidateHit;
-				OutActor = UserData.Owner;
+				BestDistance = CandidateHit.Distance;
+				BestHit = CandidateHit;
+				BestActor = UserData.Owner;
 			}
+
 			continue;
 		}
 
@@ -287,12 +317,15 @@ bool FWorldPrimitivePickingBVH::Raycast(const FRay& Ray, FHitResult& OutHitResul
 		float RightTMin = 0.0f;
 		float RightTMax = 0.0f;
 
-		const bool bHitLeft = TDynamicAABBTree<FPickingUserData>::IsValidNodeIndex(Node.Left, static_cast<int32>(Nodes.size())) &&
-			FRayUtils::IntersectRayAABB(Ray, Nodes[Node.Left].Bounds.Min, Nodes[Node.Left].Bounds.Max, LeftTMin, LeftTMax) &&
-			LeftTMin < OutHitResult.Distance;
-		const bool bHitRight = TDynamicAABBTree<FPickingUserData>::IsValidNodeIndex(Node.Right, static_cast<int32>(Nodes.size())) &&
-			FRayUtils::IntersectRayAABB(Ray, Nodes[Node.Right].Bounds.Min, Nodes[Node.Right].Bounds.Max, RightTMin, RightTMax) &&
-			RightTMin < OutHitResult.Distance;
+		const bool bHitLeft =
+		TDynamicAABBTree<FPickingUserData>::IsValidNodeIndex(Node.Left, static_cast<int32>(Nodes.size())) &&
+		FRayUtils::IntersectRayAABB(Ray, Nodes[Node.Left].Bounds.Min, Nodes[Node.Left].Bounds.Max, LeftTMin, LeftTMax)
+		&& LeftTMin < BestDistance;
+
+		const bool bHitRight =
+		TDynamicAABBTree<FPickingUserData>::IsValidNodeIndex(Node.Right, static_cast<int32>(Nodes.size())) &&
+		FRayUtils::IntersectRayAABB(Ray, Nodes[Node.Right].Bounds.Min, Nodes[Node.Right].Bounds.Max, RightTMin, RightTMax)
+		&& RightTMin < BestDistance;
 
 		if (bHitLeft && bHitRight)
 		{
@@ -317,7 +350,14 @@ bool FWorldPrimitivePickingBVH::Raycast(const FRay& Ray, FHitResult& OutHitResul
 		}
 	}
 
-	return OutActor != nullptr;
+	if (!BestActor)
+	{
+		return false;
+	}
+
+	OutHitResult = BestHit;
+	OutActor = BestActor;
+	return true;
 }
 
 FBoundingBox FWorldPrimitivePickingBVH::MakeFatBounds(const FBoundingBox& Bounds)

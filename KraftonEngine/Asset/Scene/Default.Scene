@@ -280,9 +280,41 @@
           "Box Extent" : [0.500000, 0.300000, 0.500000],
           "Cast Shadow" : true,
           "Generate Overlap Events" : true,
-          "Location" : [-19.811497, 14.283877, 0.300000],
-          "Rotation" : [0.000000, 0.000000, 0.000000],
+          "Location" : [0.000000, 0.000000, 0.300000],
+          "Rotation" : [0.000000, -180.000000, 0.000000],
           "Scale" : [0.402405, 0.402405, 0.402405],
+          "Two Sided Shadow" : false,
+          "Visible" : true,
+          "bEditorOnly" : false,
+          "bTickEnable" : true
+        }
+      },
+      "Tags" : [],
+      "bVisible" : true
+    }, {
+      "ActorUUID" : 190,
+      "ClassName" : "AActor",
+      "NonSceneComponents" : [],
+      "RootComponent" : {
+        "Children" : [],
+        "ClassName" : "UStaticMeshComponent",
+        "Properties" : {
+          "Blocks Movement" : true,
+          "Cast Shadow" : true,
+          "Element 0" : {
+            "Path" : "Asset/Materials/Auto/realKFC.mat"
+          },
+          "Element 1" : {
+            "Path" : "Asset/Materials/Auto/whiteKFC.mat"
+          },
+          "Element 2" : {
+            "Path" : "Asset/Materials/Auto/redKFC.mat"
+          },
+          "Generate Overlap Events" : true,
+          "Location" : [1.000000, 0.000000, 0.000000],
+          "Rotation" : [0.000000, 0.000000, 0.000000],
+          "Scale" : [0.250000, 0.250000, 0.250000],
+          "Static Mesh" : "Data/Chicken/KFC.obj",
           "Two Sided Shadow" : false,
           "Visible" : true,
           "bEditorOnly" : false,
@@ -297,14 +329,14 @@
   "ContextName" : "Default",
   "Name" : "Default",
   "PerspectiveCamera" : {
-    "AspectRatio" : 2.031696,
+    "AspectRatio" : 1.872483,
     "FOV" : 1.047198,
     "FarClip" : 1000.000000,
-    "Location" : [-4.495878, 6.486424, 9.583252],
+    "Location" : [-1.007676, -3.073572, 1.530443],
     "NearClip" : 0.100000,
     "OrthoWidth" : 10.000000,
     "Orthographic" : false,
-    "Rotation" : [0.000000, 46.878017, -34.249676]
+    "Rotation" : [0.000000, 21.352669, 60.073021]
   },
   "Version" : 2,
   "WorldType" : "Editor"

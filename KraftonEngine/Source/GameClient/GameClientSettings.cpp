@@ -24,6 +24,27 @@ bool ReadBool(json::JSON& Object, const char* Key, bool Fallback)
 	return Object.hasKey(Key) ? Object[Key].ToBool() : Fallback;
 }
 
+TArray<FString> ReadStringArray(json::JSON& Object, const char* Key, const TArray<FString>& Fallback)
+{
+	if (!Object.hasKey(Key))
+	{
+		return Fallback;
+	}
+
+	json::JSON Values = Object[Key];
+	TArray<FString> Result;
+	for (int32 Index = 0; Index < static_cast<int32>(Values.length()); ++Index)
+	{
+		const FString Value = Values[Index].ToString();
+		if (!Value.empty())
+		{
+			Result.push_back(Value);
+		}
+	}
+
+	return Result.empty() ? Fallback : Result;
+}
+
 EViewMode ReadViewMode(json::JSON& Object, const char* Key, EViewMode Fallback)
 {
 	if (!Object.hasKey(Key))
@@ -62,6 +83,8 @@ void ApplyRuntimeDefaults(FGameClientSettings& Settings)
 	Settings.RenderOptions.ShowFlags.bViewLightCulling = false;
 	Settings.RenderOptions.ShowFlags.bVisualize25DCulling = false;
 	Settings.RenderOptions.ShowFlags.bShowShadowFrustum = false;
+	Settings.RenderOptions.ShowFlags.bVignette = true;
+	Settings.RenderOptions.ShowFlags.bFade = true;
 }
 }
 
@@ -100,7 +123,10 @@ void FGameClientSettings::Load()
 		bEnableOverlay = ReadBool(Runtime, "EnableOverlay", bEnableOverlay);
 		bEnableDebugDraw = ReadBool(Runtime, "EnableDebugDraw", bEnableDebugDraw);
 		bEnableLuaHotReload = ReadBool(Runtime, "EnableLuaHotReload", bEnableLuaHotReload);
+		RuntimeModules = ReadStringArray(Runtime, "Modules", RuntimeModules);
 	}
+
+	RuntimeModules = ReadStringArray(Root, "RuntimeModules", RuntimeModules);
 
 	ApplyRuntimeDefaults(*this);
 

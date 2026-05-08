@@ -25,6 +25,7 @@ class FProjectSettings : public TSingleton<FProjectSettings>
 
 public:
 	FShadowOption Shadow;
+	TArray<FString> RuntimeModules;
 
 	// --- 직렬화 ---
 	void SaveToFile(const FString& Path) const;

@@ -437,6 +437,125 @@ void RegisterCameraComponentBinding(sol::state& Lua)
 			}
 		),
 
+		"VignetteIntensity",
+		sol::property(
+			[](const FLuaCameraComponentHandle& Self) -> float
+			{
+				UCameraComponent* C = Self.Resolve();
+				return C ? C->GetPostProcess().VignetteIntensity : 0.0f;
+			},
+			[](const FLuaCameraComponentHandle& Self, float Value)
+			{
+				UCameraComponent* C = Self.Resolve();
+				if (!C)
+				{
+					UE_LOG("[Lua] Invalid CameraComponent.VignetteIntensity Access.");
+					return;
+				}
+				static uint32 LuaSetCounter = 0;
+				if (LuaSetCounter++ % 30 == 0)
+				{
+					UE_LOG("[Lua->Cam] UUID=%u VignetteIntensity := %.2f", C->GetUUID(), Value);
+				}
+				C->GetMutablePostProcess().VignetteIntensity = Value;
+			}
+		),
+
+		"VignetteColor",
+		sol::property(
+			[](const FLuaCameraComponentHandle& Self) -> FVector
+			{
+				UCameraComponent* C = Self.Resolve();
+				return C ? C->GetPostProcess().VignetteColor : FVector::ZeroVector;
+			},
+			[](const FLuaCameraComponentHandle& Self, const FVector& Value)
+			{
+				UCameraComponent* C = Self.Resolve();
+				if (!C)
+				{
+					UE_LOG("[Lua] Invalid CameraComponent.VignetteColor Access.");
+					return;
+				}
+				C->GetMutablePostProcess().VignetteColor = Value;
+			}
+		),
+
+		"VignetteCenter",
+		sol::property(
+			[](const FLuaCameraComponentHandle& Self) -> FVector2
+			{
+				UCameraComponent* C = Self.Resolve();
+				return C ? C->GetPostProcess().VignetteCenter : FVector2(0.5f, 0.5f);
+			},
+			[](const FLuaCameraComponentHandle& Self, const FVector2& Value)
+			{
+				UCameraComponent* C = Self.Resolve();
+				if (!C)
+				{
+					UE_LOG("[Lua] Invalid CameraComponent.VignetteCenter Access.");
+					return;
+				}
+				C->GetMutablePostProcess().VignetteCenter = Value;
+			}
+		),
+
+		"VignetteSmoothness",
+		sol::property(
+			[](const FLuaCameraComponentHandle& Self) -> float
+			{
+				UCameraComponent* C = Self.Resolve();
+				return C ? C->GetPostProcess().VignetteSmoothness : 0.0f;
+			},
+			[](const FLuaCameraComponentHandle& Self, float Value)
+			{
+				UCameraComponent* C = Self.Resolve();
+				if (!C)
+				{
+					UE_LOG("[Lua] Invalid CameraComponent.VignetteSmoothness Access.");
+					return;
+				}
+				C->GetMutablePostProcess().VignetteSmoothness = Value;
+			}
+		),
+
+		"FadeAlpha",
+		sol::property(
+			[](const FLuaCameraComponentHandle& Self) -> float
+			{
+				UCameraComponent* C = Self.Resolve();
+				return C ? C->GetPostProcess().FadeAlpha : 0.0f;
+			},
+			[](const FLuaCameraComponentHandle& Self, float Value)
+			{
+				UCameraComponent* C = Self.Resolve();
+				if (!C)
+				{
+					UE_LOG("[Lua] Invalid CameraComponent.FadeAlpha Access.");
+					return;
+				}
+				C->GetMutablePostProcess().FadeAlpha = Value;
+			}
+		),
+
+		"FadeColor",
+		sol::property(
+			[](const FLuaCameraComponentHandle& Self) -> FVector
+			{
+				UCameraComponent* C = Self.Resolve();
+				return C ? C->GetPostProcess().FadeColor : FVector::ZeroVector;
+			},
+			[](const FLuaCameraComponentHandle& Self, const FVector& Value)
+			{
+				UCameraComponent* C = Self.Resolve();
+				if (!C)
+				{
+					UE_LOG("[Lua] Invalid CameraComponent.FadeColor Access.");
+					return;
+				}
+				C->GetMutablePostProcess().FadeColor = Value;
+			}
+		),
+
 		"SetAsActiveCamera",
 		sol::overload(
 			[](const FLuaCameraComponentHandle& Self)

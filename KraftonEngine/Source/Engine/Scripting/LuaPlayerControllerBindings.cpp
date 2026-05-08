@@ -1,4 +1,4 @@
-#include "LuaBindings.h"
+﻿#include "LuaBindings.h"
 #include "SolInclude.h"
 #include "LuaHandles.h"
 #include "LuaBindingHelper.h"
@@ -566,6 +566,158 @@ void RegisterPlayerControllerBinding(sol::state& Lua)
 			}
 
 			Controller->AddMovementInput(Direction, Scale);
+		},
+
+		"StartFadeIn",
+		sol::overload(
+			[](const FLuaPlayerControllerHandle& Self, float Duration, float TargetAlpha)
+			{
+				APlayerController* Controller = Self.Resolve();
+				if (!Controller)
+				{
+					UE_LOG("[Lua] Invalid PlayerController.StartFadeIn Call.");
+					return;
+				}
+				if (APlayerCameraManager* Mgr = Controller->GetCameraManagerPtr())
+				{
+					Mgr->StartFadeIn(Duration, TargetAlpha, FVector::ZeroVector);
+				}
+			},
+			[](const FLuaPlayerControllerHandle& Self, float Duration, float TargetAlpha, const FVector& Color)
+			{
+				APlayerController* Controller = Self.Resolve();
+				if (!Controller)
+				{
+					UE_LOG("[Lua] Invalid PlayerController.StartFadeIn Call.");
+					return;
+				}
+				if (APlayerCameraManager* Mgr = Controller->GetCameraManagerPtr())
+				{
+					Mgr->StartFadeIn(Duration, TargetAlpha, Color);
+				}
+			}
+		),
+
+		"StartFadeOut",
+		[](const FLuaPlayerControllerHandle& Self, float Duration)
+		{
+			APlayerController* Controller = Self.Resolve();
+			if (!Controller)
+			{
+				UE_LOG("[Lua] Invalid PlayerController.StartFadeOut Call.");
+				return;
+			}
+			if (APlayerCameraManager* Mgr = Controller->GetCameraManagerPtr())
+			{
+				Mgr->StartFadeOut(Duration);
+			}
+		},
+
+		"StartCameraShake",
+		sol::overload(
+			[](const FLuaPlayerControllerHandle& Self, float Duration, float LocationAmplitude, float RotationAmplitude, float Frequency)
+			{
+				APlayerController* Controller = Self.Resolve();
+				if (!Controller)
+				{
+					UE_LOG("[Lua] Invalid PlayerController.StartCameraShake Call.");
+					return;
+				}
+				Controller->StartCameraShake(Duration, LocationAmplitude, RotationAmplitude, Frequency);
+			},
+			[](const FLuaPlayerControllerHandle& Self, float Duration, float LocationAmplitude, float RotationAmplitude, float Frequency, float FOVAmplitude)
+			{
+				APlayerController* Controller = Self.Resolve();
+				if (!Controller)
+				{
+					UE_LOG("[Lua] Invalid PlayerController.StartCameraShake Call.");
+					return;
+				}
+				Controller->StartCameraShake(Duration, LocationAmplitude, RotationAmplitude, Frequency, FOVAmplitude);
+			},
+			[](const FLuaPlayerControllerHandle& Self, float Duration, float LocationAmplitude, float RotationAmplitude, float Frequency, float FOVAmplitude, bool bSingleInstance)
+			{
+				APlayerController* Controller = Self.Resolve();
+				if (!Controller)
+				{
+					UE_LOG("[Lua] Invalid PlayerController.StartCameraShake Call.");
+					return;
+				}
+				Controller->StartCameraShake(Duration, LocationAmplitude, RotationAmplitude, Frequency, FOVAmplitude, bSingleInstance);
+			}
+		),
+
+		"SetCameraVignette",
+		[](const FLuaPlayerControllerHandle& Self, float Intensity, float Smoothness, const FVector& Color)
+		{
+			if (APlayerController* Controller = Self.Resolve())
+			{
+				Controller->SetCameraVignette(Intensity, Smoothness, Color);
+			}
+		},
+
+		"SetCameraFade",
+		[](const FLuaPlayerControllerHandle& Self, float Alpha, const FVector& Color)
+		{
+			if (APlayerController* Controller = Self.Resolve())
+			{
+				Controller->SetCameraFade(Alpha, Color);
+			}
+		},
+
+		"ResetCameraPostProcess",
+		[](const FLuaPlayerControllerHandle& Self)
+		{
+			if (APlayerController* Controller = Self.Resolve())
+			{
+				Controller->ResetCameraPostProcess();
+			}
+		},
+
+		"StartVignette",
+		sol::overload(
+			[](const FLuaPlayerControllerHandle& Self, float Intensity, const FVector& Color, float Duration)
+			{
+				APlayerController* Controller = Self.Resolve();
+				if (!Controller)
+				{
+					UE_LOG("[Lua] Invalid PlayerController.StartVignette Call.");
+					return;
+				}
+				if (APlayerCameraManager* Mgr = Controller->GetCameraManagerPtr())
+				{
+					Mgr->StartVignette(Intensity, Color, Duration);
+				}
+			},
+			[](const FLuaPlayerControllerHandle& Self, float Intensity, const FVector& Color, float Duration, float Smoothness)
+			{
+				APlayerController* Controller = Self.Resolve();
+				if (!Controller)
+				{
+					UE_LOG("[Lua] Invalid PlayerController.StartVignette Call.");
+					return;
+				}
+				if (APlayerCameraManager* Mgr = Controller->GetCameraManagerPtr())
+				{
+					Mgr->StartVignette(Intensity, Color, Duration, Smoothness);
+				}
+			}
+		),
+
+		"StopVignette",
+		[](const FLuaPlayerControllerHandle& Self, float Duration)
+		{
+			APlayerController* Controller = Self.Resolve();
+			if (!Controller)
+			{
+				UE_LOG("[Lua] Invalid PlayerController.StopVignette Call.");
+				return;
+			}
+			if (APlayerCameraManager* Mgr = Controller->GetCameraManagerPtr())
+			{
+				Mgr->StopVignette(Duration);
+			}
 		}
 	);
 }
+

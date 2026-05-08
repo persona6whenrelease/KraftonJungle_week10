@@ -1,7 +1,6 @@
 ﻿#include "Collision/WorldCollisionSystem.h"
 #include "GameFramework/World.h"
 #include "GameFramework/AActor.h"
-#include "GameFramework/Pawn.h"
 #include "Component/PrimitiveComponent.h"
 #include "Component/Collision/ShapeComponent.h"
 #include "Collision/PrimitiveCollision.h"
@@ -78,7 +77,6 @@ bool FWorldCollisionSystem::HasBlockingOverlapForActor(AActor* MovingActor, FHit
 
 			if (FPrimitiveCollision::Intersect(MovingPrimitive, Candidate))
 			{
-				DispatchVehicleDefeatEvent(MovingActor, CandidateOwner);
 				if (OutHit)
 				{
 					const FVector Separation = MovingPrimitive->GetWorldLocation() - Candidate->GetWorldLocation();
@@ -157,7 +155,6 @@ void FWorldCollisionSystem::DispatchOverlapEvents(const TSet<FOverlapPairKey>& O
 			const uint64 PairKey = (static_cast<uint64>(UUIDA) << 32) | UUIDB;
 			if (DispatchedActorPairs.insert(PairKey).second)
 			{
-				DispatchVehicleDefeatEvent(ActorA, ActorB);
 
 				// Dispatch A -> B
 				for (UActorComponent* Component : ActorA->GetComponents())
@@ -180,28 +177,3 @@ void FWorldCollisionSystem::DispatchOverlapEvents(const TSet<FOverlapPairKey>& O
 	}
 }
 
-void FWorldCollisionSystem::DispatchVehicleDefeatEvent(AActor* ActorA, AActor* ActorB)
-{
-	if (!ActorA || !ActorB || ActorA == ActorB)
-	{
-		return;
-	}
-
-	AActor* VehicleActor = nullptr;
-	AActor* OtherActor = nullptr;
-	if (ActorA->HasTag("Vehicle"))
-	{
-		VehicleActor = ActorA;
-		OtherActor = ActorB;
-	}
-	else if (ActorB->HasTag("Vehicle"))
-	{
-		VehicleActor = ActorB;
-		OtherActor = ActorA;
-	}
-
-	if (VehicleActor && Cast<APawn>(OtherActor))
-	{
-		FLuaScriptSubsystem::Get().DispatchGameEvent("Defeat", VehicleActor);
-	}
-}

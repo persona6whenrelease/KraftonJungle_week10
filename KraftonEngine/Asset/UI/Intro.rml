@@ -7,6 +7,7 @@
     <div id="intro-root" class="screen-root">
         <div id="intro-panel" class="glass-panel">
             <div class="panel-eyebrow">Team 7</div>
+            <div class="panel-eyebrow">한영서 이준협 이상훈 정찬일</div>
             <div id="game-title">마당을 나온 치킨</div>
             <div id="game-subtitle">오늘 저녁은 치킨이닭!</div>
 

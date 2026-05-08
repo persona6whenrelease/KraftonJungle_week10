@@ -8,9 +8,13 @@
 #include "Editor/UI/EditorStatWidget.h"
 #include "Editor/UI/EditorShadowMapDebugWidget.h"
 #include "Editor/UI/EditorProjectSettingsWidget.h"
+#include "Editor/UI/EditorCurveWidget.h"
 #include "Editor/Packaging/EditorPackageSettings.h"
 #include "Editor/UI/ContentBrowser/ContentBrowser.h"
 #include "Math/Vector.h"
+
+#include <mutex>
+#include <thread>
 
 class AActor;
 class FRenderer;
@@ -34,6 +38,7 @@ public:
 	void RefreshContentBrowser() { ContentBrowserWidget.Refresh(); }
 	void SetContentBrowserIconSize(float Size) { ContentBrowserWidget.SetIconSize(Size); }
 	float GetContentBrowserIconSize() const { return ContentBrowserWidget.GetIconSize(); }
+	bool OpenCurveAsset(const FString& CurvePath);
 
 private:
 	void RenderMainMenuBar();
@@ -47,6 +52,9 @@ private:
 	void ProcessPendingDebugActions();
 	void OpenPackageSettingsWindow();
 	void BuildGamePackageFromSettings();
+	void ConsumePackageBuildCompletion();
+	void RefreshPackageGameDefinitions();
+	void ApplySelectedPackageGame(int32 GameIndex);
 	void CopyPackageSettingsToTextBuffers();
 	void CopyTextBuffersToPackageSettings();
 
@@ -57,6 +65,7 @@ private:
 	FEditorPropertyWidget PropertyWidget;
 	FEditorSceneWidget SceneWidget;
 	FEditorStatWidget StatWidget;
+	FEditorCurveWidget CurveWidget;
 	FEditorContentBrowserWidget ContentBrowserWidget;
 	EditorShadowMapDebugWidget ShadowMapDebugWidget;
 	EditorProjectSettingsWidget ProjectSettingsWidget;
@@ -65,9 +74,25 @@ private:
 	char PackageProjectName[128] = {};
 	char PackageOutputDirectory[260] = {};
 	char PackageClientExecutablePath[260] = {};
+	char PackageBuildToolPath[260] = {};
+	char PackageBuildSolutionPath[260] = {};
+	char PackageGameProjectPath[260] = {};
+	char PackageBuildPlatform[64] = {};
 	char PackageStartSceneName[128] = {};
 	char PackageStartScenePackagePath[260] = {};
 	char PackageBuildConfiguration[128] = {};
+	char PackageRuntimeModules[260] = {};
+	char PackageIncludePaths[4096] = {};
+	char PackageExcludePaths[4096] = {};
+	TArray<FEditorPackageGameDefinition> PackageGameDefinitions;
+	std::thread PackageBuildThread;
+	mutable std::mutex PackageBuildMutex;
+	bool bPackageBuildRunning = false;
+	bool bPackageBuildCompleted = false;
+	float PackageBuildProgressPercent = 0.0f;
+	FString PackageBuildStage;
+	FGamePackageBuildResult PackageBuildResult;
+	int32 PackageSelectedGameIndex = -1;
 	bool bShowWidgetList = false;
 	bool bShowShortcutOverlay = false;
 	bool bHideEditorWindows = false;

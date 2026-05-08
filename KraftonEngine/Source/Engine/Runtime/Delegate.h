@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include <functional>
 #include <atomic>
 #include <concepts>
@@ -10,13 +10,11 @@
 	TDelegate<__VA_ARGS__> Name;
 
 /*
-Singleton 등록 예시
-	DashDelegate.Add([]()
-		{
-			FSoundManager::Get().PlayEffect(SoundEffect::Dash);
-		}
-	);
-
+Delegate 등록 예시
+	OnChanged.Add([]()
+	{
+		// handler body
+	});
 */
 
 

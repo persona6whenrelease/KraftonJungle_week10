@@ -8,11 +8,11 @@ local lane = 1
 local combo = 1
 
 local function RefreshHud()
-    UI.SetScore(score)
-    UI.SetBestScore(best)
-    UI.SetCoins(coins)
-    UI.SetLane(lane)
-    UI.SetCombo(combo)
+    Game.UI.SetScore(score)
+    Game.UI.SetBestScore(best)
+    Game.UI.SetCoins(coins)
+    Game.UI.SetLane(lane)
+    Game.UI.SetCombo(combo)
 end
 
 function StartRun()
@@ -21,8 +21,8 @@ function StartRun()
     lane = 1
     combo = 1
 
-    UI.ResetRun()
-    UI.SetStatus("앞으로 이동해서 도로를 건너세요!")
+    Game.UI.ResetRun()
+    Game.UI.SetStatus("앞으로 이동해서 도로를 건너세요!")
     RefreshHud()
 end
 
@@ -31,8 +31,8 @@ function EndRun()
         best = score
     end
 
-    UI.SetBestScore(best)
-    UI.ShowGameOver(score, best)
+    Game.UI.SetBestScore(best)
+    Game.UI.ShowGameOver(score, best)
 end
 
 function AddScore(amount)
@@ -60,6 +60,6 @@ end
 
 -- 이 파일은 예제용입니다. 실제 GameOver/Intro 버튼 처리는
 -- IntroCameraController.lua의 OnUIEvent가 담당합니다.
--- 여기서 UI.SetEventHandler를 등록하면 전역 UI 핸들러를 덮어써서
+-- 여기서 Game.UI.SetEventHandler를 등록하면 전역 UI 핸들러를 덮어써서
 -- restart/start 이벤트가 MapManager_Reset까지 도달하지 않을 수 있습니다.
 -- 필요하면 아래 함수들을 다른 게임 매니저에서 직접 호출하세요.

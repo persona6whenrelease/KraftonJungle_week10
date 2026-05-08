@@ -9,6 +9,7 @@ class UWorld;
 class USceneComponent;
 class UShapeComponent;
 class ULuaScriptComponent;
+class UClass;
 
 class FLuaWorldLibrary
 {
@@ -16,11 +17,6 @@ public:
 	static UWorld* GetActiveWorld();
 
 	static AActor* SpawnActorByClassName(const FString& ClassName, const FVector& Location);
-	static AActor* AcquireActorByClassName(const FString& ClassName, const FVector& Location, const FRotator& Rotation = FRotator());
-	static AActor* AcquirePrefab(const FString& PrefabPath, const FVector& Location, const FRotator& Rotation = FRotator());
-	static bool ReleaseActorToPool(AActor* Actor);
-	static int32 WarmUpActorPool(const FString& ClassName, int32 Count);
-	static int32 WarmUpPrefabPool(const FString& PrefabPath, int32 Count);
 
 	static AActor* SpawnStaticMeshActor(
 		const FString& StaticMeshPath,
@@ -152,6 +148,7 @@ public:
 	static UActorComponent* GetOrAddComponentByTypeName(AActor* Actor, const FString& TypeName);
 
 	static bool RemoveComponentByTypeName(AActor* Actor, const FString& TypeName);
+	static void RegisterAllowedComponentClass(const FString& TypeName, UClass* Class, bool bCanCreateFromLua);
 
 	static bool SetStaticMesh(UStaticMeshComponent* MeshComponent, const FString& StaticMeshPath);
 

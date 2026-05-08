@@ -1,4 +1,4 @@
-local MODULE_NAME = "Game.GameState"
+﻿local MODULE_NAME = "Game.GameState"
 local Vec = FVector.new
 
 local State = package.loaded[MODULE_NAME]
@@ -14,7 +14,7 @@ local DEFAULT_CONFIG = {
     StartButtonName = "StartButton",
     RestartButtonName = "RestartButton",
     DefeatY = -1000.0,
-    GameOverLocation = Vec(0.0, 0.501545, -2000.0),
+    GameOverLocation = Vec(0.0, 0.0, -1000.0),
     StartLocation = nil,
 
     -- X축으로 ScoreUnit만큼 전진할 때마다 1점
@@ -34,6 +34,7 @@ State.BestScore = State.BestScore or 0
 State.TopScores = State.TopScores or {}
 State.StartScoreRow = State.StartScoreRow or 0
 State.Elapsed = State.Elapsed or 0.0
+State.IsDying = false
 State.bInitialized = State.bInitialized or false
 State.bUIReady = State.bUIReady or false
 State.bBestScoreLoaded = State.bBestScoreLoaded or false
@@ -56,6 +57,25 @@ local function copy_defaults(target, defaults)
             end
         end
     end
+end
+
+
+local function resolve_member(value, owner)
+    if type(value) ~= "function" then
+        return value
+    end
+
+    local ok, result = pcall(value, owner)
+    if ok then
+        return result
+    end
+
+    ok, result = pcall(value)
+    if ok then
+        return result
+    end
+
+    return nil
 end
 
 local function is_valid(handle)
@@ -265,8 +285,8 @@ local function get_score_row_from_location(location)
 end
 
 local function hide_game_over_ui()
-    if UI ~= nil and UI.HideGameOver ~= nil then
-        UI.HideGameOver()
+    if Game ~= nil and Game.UI ~= nil and Game.UI.HideGameOver ~= nil then
+        Game.UI.HideGameOver()
     end
 end
 
@@ -345,6 +365,10 @@ local function save_top_scores()
     end
 end
 
+local function has_game_ui()
+    return Game ~= nil and Game.UI ~= nil
+end
+
 local function record_final_score(score)
     local finalScore = math.max(0, math.floor(score or 0))
     if finalScore > 0 then
@@ -357,20 +381,20 @@ local function record_final_score(score)
 end
 
 local function push_score_to_ui()
-    if UI == nil then
+    if not has_game_ui() then
         return
     end
 
-    if UI.SetScore ~= nil then
-        UI.SetScore(State.Score or 0)
+    if Game.UI.SetScore ~= nil then
+        Game.UI.SetScore(State.Score or 0)
     end
 
-    if UI.SetBestScore ~= nil then
-        UI.SetBestScore(State.BestScore or 0)
+    if Game.UI.SetBestScore ~= nil then
+        Game.UI.SetBestScore(State.BestScore or 0)
     end
 
-    if UI.SetTopScoresText ~= nil then
-        UI.SetTopScoresText(format_top_scores())
+    if Game.UI.SetTopScoresText ~= nil then
+        Game.UI.SetTopScoresText(format_top_scores())
     end
 end
 
@@ -464,15 +488,9 @@ function State.SetPlayerMovementEnabled(enabled)
         return
     end
 
-    local hop = player.HopMovement
-    if hop ~= nil and hop.IsValid ~= nil and hop:IsValid() then
+    local hop = resolve_member(player.HopMovement, player)
+    if hop ~= nil and type(hop) ~= "function" and hop.IsValid ~= nil and hop:IsValid() then
         hop.Simulating = enabled
-
-        if not enabled then
-            hop:ClearMovementInput()
-            hop:StopMovementImmediately()
-        end
-
         return
     end
 
@@ -549,13 +567,17 @@ function State.ResetToIntro()
     set_visible(State.CachedHUDText, false)
     set_visible(State.CachedCreditsText, false)
 
-    if UI ~= nil then
-        if UI.ShowHUD ~= nil then
-            UI.ShowHUD(false)
+    if has_game_ui() then
+        if Game.UI.ShowHUD ~= nil then
+            Game.UI.ShowHUD(false)
         end
 
-        if UI.ShowIntro ~= nil then
-            UI.ShowIntro(true)
+        if Game.UI.ShowIntro ~= nil then
+            Game.UI.ShowIntro(false) -- Wait for cinematic
+        end
+
+        if Game.UI.HideGameOver ~= nil then
+            Game.UI.HideGameOver()
         end
     end
 
@@ -604,23 +626,32 @@ function State.StartGame(reason)
     State.Score = 0
     State.StartScoreRow = 0
     State.Elapsed = 0.0
+    State.IsDying = false
     State.bCreditsPrinted = false
 
     hide_game_over_ui()
 
-    if UI ~= nil then
-        if UI.ResetRun ~= nil then
-            UI.ResetRun()
+    if has_game_ui() then
+        if Game.UI.ResetRun ~= nil then
+            Game.UI.ResetRun()
         end
 
-        if UI.ShowHUD ~= nil then
-            UI.ShowHUD(true)
+        if Game.UI.ShowIntro ~= nil then
+            Game.UI.ShowIntro(false)
+        end
+
+        if Game.UI.HideGameOver ~= nil then
+            Game.UI.HideGameOver()
+        end
+
+        if Game.UI.ShowHUD ~= nil then
+            Game.UI.ShowHUD(true)
         end
     end
 
     local player = State.GetPlayer()
     if is_valid(player) and State.Config.StartLocation ~= nil then
-        player.Location = FVector.new(0.0, 0.501545, -0.251383)
+        player.Location = FVector.new(0.0, 0.0, -0.25)
     end
 
     if is_valid(player) then
@@ -636,6 +667,12 @@ function State.StartGame(reason)
     State.SetPlayerMovementEnabled(true)
     State.SetMenuObjectsVisible(false)
     set_visible(State.CachedCreditsText, false)
+
+    local pc = get_player_controller()
+    if is_valid(pc) and pc.StartFadeOut ~= nil then
+        pc:StartFadeOut(0.0)
+    end
+
     push_score_to_ui()
     State.UpdateHUD()
     
@@ -654,7 +691,7 @@ function State.ReturnToStartScreen(reason)
 
     local player = State.GetPlayer()
     if is_valid(player) and State.Config.StartLocation ~= nil then
-        player.Location = FVector.new(0.0, 0.501545, -0.251383) 
+        player.Location = FVector.new(0.0, 0.0, -0.25) 
     end
 
     State.SetPlayerMovementEnabled(false)
@@ -670,7 +707,22 @@ end
 function State.StartFreshRun(reason)
     local resetReason = reason or "FreshRun"
 
+    if State.Mode == "Resetting" then
+        print("[GameState] StartFreshRun ignored: reset already in progress")
+        return
+    end
+
+    State.Mode = "Resetting"
+    State.SetPlayerMovementEnabled(false)
+
+    local asyncResetFunc = nil
     local resetFunc = nil
+
+    if _G ~= nil and _G.MapManager_ResetAsync ~= nil then
+        asyncResetFunc = _G.MapManager_ResetAsync
+    elseif MapManager_ResetAsync ~= nil then
+        asyncResetFunc = MapManager_ResetAsync
+    end
 
     if _G ~= nil and _G.MapManager_Reset ~= nil then
         resetFunc = _G.MapManager_Reset
@@ -678,14 +730,23 @@ function State.StartFreshRun(reason)
         resetFunc = MapManager_Reset
     end
 
+    local function start_after_reset(doneReason)
+        State.Mode = "Ready"
+        State.StartGame(doneReason or resetReason)
+    end
+
+    if asyncResetFunc ~= nil then
+        asyncResetFunc(resetReason, start_after_reset)
+        return
+    end
+
     if resetFunc ~= nil then
         resetFunc(resetReason)
     else
-        print("[GameState] StartFreshRun: _G.MapManager_Reset is nil")
+        print("[GameState] StartFreshRun: MapManager reset function is nil")
     end
 
-    State.Mode = "Ready"
-    State.StartGame(resetReason)
+    start_after_reset(resetReason)
 end
 
 function State.RestartRun()
@@ -693,8 +754,8 @@ function State.RestartRun()
 end
 
 function State.RestartLevel()
-    if Game ~= nil and Game.Restart ~= nil then
-        Game.Restart()
+    if Application ~= nil and Application.RestartSession ~= nil then
+        Application.RestartSession()
         return
     end
     State.RestartRun()
@@ -708,9 +769,6 @@ function State.GameOver(reason)
     State.Mode = "GameOver"
 
     local player = State.GetPlayer()
-    if is_valid(player) and State.Config.GameOverLocation ~= nil then
-        player.Location = clone_vector(State.Config.GameOverLocation)
-    end
 
     State.SetPlayerMovementEnabled(false)
     State.SetMenuObjectsVisible(true)
@@ -724,8 +782,19 @@ function State.GameOver(reason)
     State.UpdateHUD()
     push_score_to_ui()
 
-    if UI ~= nil and UI.ShowGameOver ~= nil then
-        UI.ShowGameOver(State.Score or 0, State.BestScore or State.Score or 0)
+    if has_game_ui() then
+        if Game.UI.SetTopScoresText ~= nil then
+            Game.UI.SetTopScoresText(format_top_scores())
+        end
+
+        if Game.UI.ShowGameOver ~= nil then
+            Game.UI.ShowGameOver(State.Score or 0, State.BestScore or State.Score or 0)
+        end
+
+        -- GameOver 문서가 Show된 뒤 다시 한 번 넣어줍니다.
+        if Game.UI.SetTopScoresText ~= nil then
+            Game.UI.SetTopScoresText(format_top_scores())
+        end
     end
 
     if not State.bCreditsPrinted then
@@ -735,6 +804,11 @@ function State.GameOver(reason)
 end
 
 function State.SetScore(value)
+    -- 사망 연출 중이거나 게임 오버 상태면 점수를 올리지 않습니다.
+    if State.Mode == "GameOver" or State.IsDying then
+        return
+    end
+
     local nextScore = math.max(0, math.floor(value or 0))
 
     if nextScore == State.Score then
@@ -789,13 +863,19 @@ function State.Tick(deltaTime)
         return
     end
 
-    if not State.bUIReady and UI ~= nil then
-        if UI.ShowHUD ~= nil then
-            UI.ShowHUD(State.Mode == "Playing")
+    if not State.bUIReady and has_game_ui() then
+        if Game.UI.ShowHUD ~= nil then
+            Game.UI.ShowHUD(State.Mode == "Playing")
         end
-        if UI.ShowIntro ~= nil then
-            UI.ShowIntro(State.Mode ~= "Playing")
+
+        if Game.UI.ShowIntro ~= nil then
+            Game.UI.ShowIntro(false) -- Wait for cinematic to show it
         end
+
+        if Game.UI.HideGameOver ~= nil and State.Mode ~= "GameOver" then
+            Game.UI.HideGameOver()
+        end
+
         push_score_to_ui()
         State.bUIReady = true
     end
@@ -828,6 +908,7 @@ function State.Tick(deltaTime)
         local location = player.Location
 
         if location ~= nil and vec_z(location) < State.Config.DefeatY then
+            State.IsDying = true
             State.GameOver("Fell out of stage")
             return
         end

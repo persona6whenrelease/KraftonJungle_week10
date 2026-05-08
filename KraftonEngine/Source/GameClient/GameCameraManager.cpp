@@ -1,4 +1,4 @@
-#include "GameClient/GameCameraManager.h"
+﻿#include "GameClient/GameCameraManager.h"
 
 #include "Component/CameraComponent.h"
 #include "GameFramework/AActor.h"
@@ -24,7 +24,7 @@ void FGameCameraManager::ClearWorldBinding()
 bool FGameCameraManager::CreateDebugCamera()
 {
 	// Debug camera actors are no longer spawned during startup.
-	// The gameplay camera path is PlayerController -> FPlayerCameraManager -> OutputCamera.
+	// The gameplay camera path is PlayerController -> APlayerCameraManager -> OutputCamera.
 	DebugCamera = nullptr;
 	return false;
 }

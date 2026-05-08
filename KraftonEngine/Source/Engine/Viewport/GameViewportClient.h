@@ -4,7 +4,7 @@
 #include "UI/SWindow.h"
 #include "Viewport/ViewportClient.h"
 #include "Viewport/ViewportPresentationTypes.h"
-#include "Engine/UI/Game/GameUiSystem.h"
+#include "Engine/UI/ViewportUiLayer.h"
 
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -64,8 +64,8 @@ public:
 	bool HasPossessedTarget() const { return GetPossessedTarget() != nullptr; }
 	bool Tick(float DeltaTime, FInputFrame& InputFrame);
 
-	FGameUiSystem& GetGameUiSystem() { return GameUiSystem; }
-	const FGameUiSystem& GetGameUiSystem() const { return GameUiSystem; }
+	void SetUiLayer(IViewportUiLayer* InUiLayer) { UiLayer = InUiLayer; }
+	IViewportUiLayer* GetUiLayer() const { return UiLayer; }
 
 private:
 	bool ApplyInputToCameraOrActor(float DeltaTime, FInputFrame& InputFrame);
@@ -81,5 +81,5 @@ private:
 	bool bHasCursorClipRect = false;
 	bool bPIEPossessedInputEnabled = false;
 	bool bCursorCaptured = false;
-	FGameUiSystem GameUiSystem;
+	IViewportUiLayer* UiLayer = nullptr;
 };

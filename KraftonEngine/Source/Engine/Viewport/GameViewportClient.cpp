@@ -39,7 +39,6 @@ void UGameViewportClient::OnBeginPIE(UCameraComponent* InitialTarget, FViewport*
 
 void UGameViewportClient::OnEndPIE()
 {
-	GameUiSystem.Shutdown();
 	SetPossessed(false);
 	SetPlayerController(nullptr);
 	UnPossess();
@@ -169,7 +168,7 @@ void UGameViewportClient::ResetInputState()
 
 bool UGameViewportClient::Tick(float DeltaTime, FInputFrame& InputFrame)
 {
-	const bool bUiActive = GameUiSystem.IsIntroVisible() || GameUiSystem.IsPauseMenuVisible() || GameUiSystem.IsGameOverVisible();
+	const bool bUiActive = UiLayer && UiLayer->IsBlockingGameplayInput();
 
 	if (!bPIEPossessedInputEnabled || !HasPossessedTarget())
 	{

@@ -4,6 +4,7 @@
 #include "Core/CollisionTypes.h"
 #include "Core/CoreTypes.h"
 #include "Math/Vector.h"
+#include "Runtime/PooledObjectInterface.h"
 
 enum class EProjectileHitBehavior : int32
 {
@@ -12,7 +13,7 @@ enum class EProjectileHitBehavior : int32
 	Destroy = 2,
 };
 
-class UProjectileMovementComponent : public UMovementComponent
+class UProjectileMovementComponent : public UMovementComponent, public IPooledObjectInterface
 {
 public:
 	DECLARE_CLASS(UProjectileMovementComponent, UMovementComponent)
@@ -35,9 +36,8 @@ public:
 	void SetMaxSpeed(float InMaxSpeed) { MaxSpeed = InMaxSpeed; }
 	FVector GetPreviewVelocity() const;
 	void StopSimulating();
+	void OnReturnToPool() override { StopSimulating(); }
 
-	bool IsParried() const { return bParried; }
-	void SetParried(bool bInParried) { bParried = bInParried; }
 
 protected:
 	FVector ComputeEffectiveVelocity() const;
@@ -47,5 +47,4 @@ protected:
 	FVector Velocity = FVector(0.0f, 0.0f, 0.0f);
 	float InitialSpeed = 10.0f;
 	float MaxSpeed = 100.0f;
-	bool bParried = false;
 };

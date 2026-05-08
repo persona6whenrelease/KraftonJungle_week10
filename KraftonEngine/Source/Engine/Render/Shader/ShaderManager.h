@@ -76,6 +76,8 @@ namespace EShaderPath
 	inline constexpr const char* SceneNormal = "Shaders/PostProcess/SceneNormal.hlsl";
 	inline constexpr const char* HeightFog = "Shaders/PostProcess/HeightFog.hlsl";
 	inline constexpr const char* LightCulling = "Shaders/PostProcess/LightCulling.hlsl";
+	inline constexpr const char* Vignette = "Shaders/PostProcess/Vignette.hlsl";
+	inline constexpr const char* Fade = "Shaders/PostProcess/Fade.hlsl";
 
 	inline constexpr const char* Font = "Shaders/UI/Font.hlsl";
 	inline constexpr const char* OverlayFont = "Shaders/UI/OverlayFont.hlsl";

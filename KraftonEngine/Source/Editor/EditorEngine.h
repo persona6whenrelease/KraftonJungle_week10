@@ -53,6 +53,7 @@ public:
 	void RefreshContentBrowser() { MainPanel.RefreshContentBrowser(); }
 	void SetContentBrowserIconSize(float Size) { MainPanel.SetContentBrowserIconSize(Size); }
 	float GetContentBrowserIconSize() const { return MainPanel.GetContentBrowserIconSize(); }
+	bool OpenCurveAsset(const FString& CurvePath) { return MainPanel.OpenCurveAsset(CurvePath); }
 	void HideEditorWindows() { MainPanel.HideEditorWindows(); }
 	void ShowEditorWindows() { MainPanel.ShowEditorWindows(); }
 	void SetShowEditorOnlyComponents(bool bEnable) { MainPanel.SetShowEditorOnlyComponents(bEnable); }

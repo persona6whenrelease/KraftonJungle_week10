@@ -46,12 +46,12 @@
 #intro-soft-top {
     top: 0px;
     bottom: auto;
-    height: 180px;
+    height: 56px;
 }
 
 #intro-soft-bottom {
     top: auto;
     bottom: 0px;
-    height: 220px;
+    height: 88px;
     background-color: rgba(2, 4, 7, 78);
 }

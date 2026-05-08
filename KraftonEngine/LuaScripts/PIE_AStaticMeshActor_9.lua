@@ -1,8 +1,6 @@
 function BeginPlay()
     print("[BeginPlay] UUID = " .. obj.UUID)
     obj:PrintLocation()
-    
-    WarmUpActorPool("AStaticMeshActor", 100)
 
 end
 

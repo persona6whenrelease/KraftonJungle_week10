@@ -2,6 +2,7 @@
 
 #include "GameClient/GameClientRenderPipeline.h"
 #include "GameClient/GameClientPackageValidator.h"
+#include "GameClient/LinkedRuntimeModules.h"
 #include "Core/Notification.h"
 #include "Engine/Platform/Paths.h"
 #include "Engine/Input/GameplayInputRouter.h"
@@ -9,12 +10,23 @@
 #include "Engine/Input/InputSystem.h"
 #include "Engine/Platform/DirectoryWatcher.h"
 #include "Engine/Runtime/WindowsWindow.h"
-#include "Runtime/RowManager.h"
 #include "GameFramework/PlayerController.h"
-#include "Runtime/ObjectPoolSystem.h"
+#include "Runtime/ActorPoolSystem.h"
+#include "Runtime/EngineFactory.h"
+#include "Object/ObjectFactory.h"
 #include "GameFramework/World.h"
 
 IMPLEMENT_CLASS(UGameClientEngine, UEngine)
+
+namespace
+{
+	UEngine* CreateGameClientEngine()
+	{
+		return UObjectManager::Get().CreateObject<UGameClientEngine>();
+	}
+
+	FEngineFactoryRegistrar GGameClientEngineRegistrar("GameClient", &CreateGameClientEngine);
+}
 
 void UGameClientEngine::InitCameraManager()
 {
@@ -56,6 +68,8 @@ void UGameClientEngine::Init(FWindowsWindow* InWindow)
 		return;
 	}
 
+	RegisterLinkedRuntimeModules();
+
 	if (InWindow)
 	{
 		InWindow->SetTitle(FPaths::ToWide(Settings.WindowTitle).c_str());
@@ -66,8 +80,9 @@ void UGameClientEngine::Init(FWindowsWindow* InWindow)
 		}
 	}
 
+	GetRuntimeModules().LoadModules(Settings.RuntimeModules);
+
 	UEngine::Init(InWindow);
-	FRowManager::Get().Initialize();
 
 	if (!Session.Initialize(this))
 	{
@@ -79,6 +94,8 @@ void UGameClientEngine::Init(FWindowsWindow* InWindow)
 		::PostQuitMessage(1);
 		return;
 	}
+
+	GetRuntimeModules().OnWorldCreated(GetWorld());
 
 	InitCameraManager();
 
@@ -94,26 +111,36 @@ void UGameClientEngine::Init(FWindowsWindow* InWindow)
 
 void UGameClientEngine::Shutdown()
 {
+	FSoundManager::Get().StopBGM();
 	CameraManager.ClearWorldBinding();
 	Overlay.Shutdown();
 	SetGameViewportClient(nullptr);
 	GameViewport.Shutdown();
 	Session.Shutdown();
-	FRowManager::Get().Shutdown();
 
 	UEngine::Shutdown();
 }
 
+void UGameClientEngine::BeginPlay()
+{
+	UEngine::BeginPlay();
+	FSoundManager::Get().PlayBGM();
+}
+
 void UGameClientEngine::Tick(float DeltaTime)
 {
-	TickAlways(DeltaTime);
+	const float RawDeltaTime = DeltaTime;
+	GetTimeManager().Update(RawDeltaTime);
+
+	TickAlways(RawDeltaTime);
 
 	if (!bPauseMenuOpen)
 	{
-		TickInGame(DeltaTime);
+		const float GameDeltaTime = GetTimeManager().GetGameDeltaTime();
+		TickInGame(GameDeltaTime, RawDeltaTime);
 	}
 
-	Render(DeltaTime);
+	Render(RawDeltaTime);
 }
 
 void UGameClientEngine::OnWindowResized(uint32 Width, uint32 Height)
@@ -161,10 +188,10 @@ void UGameClientEngine::RequestExit()
 	::PostQuitMessage(0);
 }
 
-void UGameClientEngine::TickAlways(float DeltaTime)
+void UGameClientEngine::TickAlways(float RawDeltaTime)
 {
 	FDirectoryWatcher::Get().ProcessChanges();
-	FNotificationManager::Get().Tick(DeltaTime);
+	FNotificationManager::Get().Tick(RawDeltaTime);
 
 	ProcessPendingCommands();
 
@@ -177,23 +204,24 @@ void UGameClientEngine::TickAlways(float DeltaTime)
 		GlobalInputFrame.ConsumeKey(VK_ESCAPE, "GameClientGlobalShortcut", "Toggle pause menu");
 	}
 
-	Overlay.Update(DeltaTime);
+	Overlay.Update(RawDeltaTime);
 	GameViewport.SetInputEnabled(!bPauseMenuOpen);
 }
 
-void UGameClientEngine::TickInGame(float DeltaTime)
+void UGameClientEngine::TickInGame(float GameDeltaTime, float RawDeltaTime)
 {
     FInputFrame InputFrame(InputSystem::Get().MakeSnapshot());
 
     FGameplayInputRouteContext InputContext;
     InputContext.World = GetWorld();
     InputContext.ViewportClient = GameViewport.GetViewportClient();
-    InputContext.DeltaTime = DeltaTime;
+    InputContext.DeltaTime = GameDeltaTime;
 	
     FGameplayInputRouter::Route(InputFrame, InputContext);
 
-    TaskScheduler.Tick(DeltaTime);
-    WorldTick(DeltaTime);
+    TaskScheduler.Tick(GameDeltaTime);
+    WorldTick(GameDeltaTime, RawDeltaTime);
+	GetRuntimeModules().OnTick(GameDeltaTime);
 
     CameraManager.SyncWorldViewCamera();
 }
@@ -214,18 +242,19 @@ bool UGameClientEngine::RestartGame()
 
 	TaskScheduler.Clear();
 
+	GetRuntimeModules().OnPreWorldReset(GetWorld());
+
 	// 재시작에서는 풀 반환이 아니라 월드에서 실제 삭제
-	FRowManager::Get().Shutdown(true);
 
 	// 풀에 남은 비활성 액터까지 제거
-	FObjectPoolSystem::Get().Shutdown();
+	FActorPoolSystem::Get().Shutdown();
 
 	if (!Session.Restart())
 	{
 		return false;
 	}
 
-	FRowManager::Get().Initialize();
+	GetRuntimeModules().OnPostWorldReset(GetWorld());
 
 	InitCameraManager();
 	GameViewport.BindPlayerController(CameraManager.GetPlayerController());

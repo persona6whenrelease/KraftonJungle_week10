@@ -54,9 +54,19 @@ local gameCam      = nil
 local sweepX       = 0.0
 local direction    = 1.0
 
+
 local bIntroActive = false
 local bStarted     = false
 local pendingStart = false
+
+-- Cinematic specific state
+local cinematicPhase = 1 -- 1: Spin, 2: Fade Out, 3: Fade In, 0: Idle/UI
+local cinematicTimer = 0.0
+local cinematicYaw   = VIEW_YAW
+local SPIN_DURATION = 3.0
+local FADE_OUT_DURATION = 0.5
+local FADE_IN_DURATION = 0.2
+
 
 -- =========================================================
 -- Helpers
@@ -86,16 +96,16 @@ local function safe_call(label, fn)
 end
 
 local function clear_ui_handler()
-    if UI ~= nil and UI.ClearEventHandler ~= nil then
-        safe_call("UI.ClearEventHandler", function()
-            UI.ClearEventHandler()
+    if Game ~= nil and Game.UI ~= nil and Game.UI.ClearEventHandler ~= nil then
+        safe_call("Game.UI.ClearEventHandler", function()
+            Game.UI.ClearEventHandler()
         end)
     end
 end
 
 local function hide_game_over_ui()
-    if UI ~= nil and UI.HideGameOver ~= nil then
-        UI.HideGameOver()
+    if Game ~= nil and Game.UI ~= nil and Game.UI.HideGameOver ~= nil then
+        Game.UI.HideGameOver()
     end
 end
 
@@ -119,7 +129,8 @@ end
 -- VIEW_PITCH / VIEW_YAW 방향으로 target을 바라보도록
 -- ortho 카메라 위치를 역산합니다.
 -- 이 함수는 "카메라 높이 CAM_Z 고정"입니다.
-local function get_ortho_camera_location_for_target(targetX, targetY, targetZ)
+local function get_ortho_camera_location_for_target(targetX, targetY, targetZ, yaw)
+    yaw = yaw or VIEW_YAW
     local f = get_forward_from_angles(VIEW_PITCH, VIEW_YAW)
 
     local distance = (CAM_Z - targetZ) / (-f.z)
@@ -164,15 +175,43 @@ local function set_camera_property(cam, name, value)
     end)
 end
 
-local function apply_intro_ortho_transform(targetX)
+
+local function get_spin_camera_location_for_target(targetX, targetY, targetZ, yaw)
+    yaw = yaw or VIEW_YAW
+    local pitch = 10.0
+    local f = get_forward_from_angles(pitch, yaw)
+    local distance = 2.0
+    return V(
+        targetX - f.x * distance,
+        targetY - f.y * distance,
+        targetZ - f.z * distance + 0.5
+    )
+end
+
+local function apply_intro_spin_transform(targetX, yaw)
+    if not is_valid(introCam) then return end
+
+    introCam.ViewMode      = "Static"
+    introCam.Orthographic  = false
+    introCam.FOVRadians    = BRIDGE_FOV_RAD
+    introCam.AspectRatio   = CAMERA_ASPECT
+    introCam.OrthoWidth    = ORTHO_WIDTH
+    
+    local pitch = 15.0
+    introCam.WorldLocation = get_spin_camera_location_for_target(targetX, TARGET_Y, TARGET_Z, yaw)
+    introCam.WorldRotation = R(pitch, yaw, 0.0)
+end
+
+local function apply_intro_ortho_transform(targetX, yaw)
+    yaw = yaw or VIEW_YAW
     if not is_valid(introCam) then return end
 
     introCam.ViewMode      = "Static"
     introCam.Orthographic  = true
     introCam.OrthoWidth    = ORTHO_WIDTH
     introCam.AspectRatio   = CAMERA_ASPECT
-    introCam.WorldLocation = get_ortho_camera_location_for_target(targetX, TARGET_Y, TARGET_Z)
-    introCam.WorldRotation = R(VIEW_PITCH, VIEW_YAW, 0.0)
+    introCam.WorldLocation = get_ortho_camera_location_for_target(targetX, TARGET_Y, TARGET_Z, yaw)
+    introCam.WorldRotation = R(VIEW_PITCH, yaw or VIEW_YAW, 0.0)
 end
 
 -- 스타트 순간에 현재 활성 introCam을 perspective-equivalent 상태로 바꿉니다.
@@ -187,7 +226,7 @@ local function apply_intro_perspective_bridge_transform(targetX)
     introCam.AspectRatio   = CAMERA_ASPECT
     introCam.OrthoWidth    = ORTHO_WIDTH
     introCam.WorldLocation = get_perspective_bridge_location_for_target(targetX, TARGET_Y, TARGET_Z)
-    introCam.WorldRotation = R(VIEW_PITCH, VIEW_YAW, 0.0)
+    introCam.WorldRotation = R(VIEW_PITCH, yaw or VIEW_YAW, 0.0)
 
     set_camera_property(introCam, "Enable Smoothing", false)
 end
@@ -319,6 +358,10 @@ local function init_intro_camera()
     bStarted = false
     pendingStart = false
 
+    cinematicPhase = 1
+    cinematicTimer = 0.0
+    cinematicYaw = VIEW_YAW
+
     configure_intro_camera(introCam)
     configure_game_camera_transition(gameCam)
 
@@ -331,14 +374,12 @@ local function init_intro_camera()
 
     hide_game_over_ui()
 
-    if UI ~= nil then
-        if UI.ShowHUD ~= nil then
-            UI.ShowHUD(false)
-        end
+    if Game ~= nil and Game.UI ~= nil and Game.UI.ShowHUD ~= nil then
+        Game.UI.ShowHUD(false)
+    end
 
-        if UI.ShowIntro ~= nil then
-            UI.ShowIntro(true)
-        end
+    if Game ~= nil and Game.UI ~= nil and Game.UI.ShowIntro ~= nil then
+        Game.UI.ShowIntro(false) -- Wait for cinematic
     end
 
     print("[IntroCam] Intro camera activated")
@@ -350,6 +391,10 @@ local function reset_to_intro()
     bIntroActive = true
     bStarted = false
     pendingStart = false
+
+    cinematicPhase = 1
+    cinematicTimer = 0.0
+    cinematicYaw = VIEW_YAW
 
     if not is_valid(pc) then
         pc = World.GetPlayerController(0)
@@ -364,14 +409,12 @@ local function reset_to_intro()
 
     hide_game_over_ui()
 
-    if UI ~= nil then
-        if UI.ShowHUD ~= nil then
-            UI.ShowHUD(false)
-        end
+    if Game ~= nil and Game.UI ~= nil and Game.UI.ShowHUD ~= nil then
+        Game.UI.ShowHUD(false)
+    end
 
-        if UI.ShowIntro ~= nil then
-            UI.ShowIntro(true)
-        end
+    if Game ~= nil and Game.UI ~= nil and Game.UI.ShowIntro ~= nil then
+        Game.UI.ShowIntro(false) -- Wait for cinematic
     end
 
     if is_valid(introCam) then
@@ -491,11 +534,47 @@ local function handle_ui_event(eventName)
     end
 
     if eventName == "main_menu" then
-        if State.ResetToIntro ~= nil then
-            State.ResetToIntro()
+        bStarted = false
+        pendingStart = false
+        bIntroActive = true
+
+        hide_game_over_ui()
+
+        local function finish_main_menu_reset()
+            if State.ResetToIntro ~= nil then
+                State.ResetToIntro()
+            end
+
+            reset_to_intro()
         end
 
-        reset_to_intro()
+        local asyncResetFunc = nil
+        local resetFunc = nil
+
+        if _G ~= nil and _G.MapManager_ResetAsync ~= nil then
+            asyncResetFunc = _G.MapManager_ResetAsync
+        elseif MapManager_ResetAsync ~= nil then
+            asyncResetFunc = MapManager_ResetAsync
+        end
+
+        if _G ~= nil and _G.MapManager_Reset ~= nil then
+            resetFunc = _G.MapManager_Reset
+        elseif MapManager_Reset ~= nil then
+            resetFunc = MapManager_Reset
+        end
+
+        if asyncResetFunc ~= nil then
+            asyncResetFunc("MainMenu", function()
+                finish_main_menu_reset()
+            end)
+            return
+        end
+
+        if resetFunc ~= nil then
+            resetFunc("MainMenu")
+        end
+
+        finish_main_menu_reset()
         return
     end
 
@@ -515,8 +594,8 @@ end
 local function bind_ui()
     clear_ui_handler()
 
-    if UI ~= nil and UI.SetEventHandler ~= nil then
-        UI.SetEventHandler(function(eventName)
+    if Game ~= nil and Game.UI ~= nil and Game.UI.SetEventHandler ~= nil then
+        Game.UI.SetEventHandler(function(eventName)
             handle_ui_event(eventName)
         end)
 
@@ -553,7 +632,7 @@ function BeginPlay()
 end
 
 function Tick(dt)
-    if bIntroActive and not bStarted and not pendingStart then
+    if bIntroActive and not bStarted and not pendingStart and cinematicPhase == 0 then
         if Input ~= nil and Input.GetKeyDown ~= nil then
             if Input.GetKeyDown("ENTER") or Input.GetKeyDown("SPACE") then
                 request_start()
@@ -569,17 +648,62 @@ function Tick(dt)
     if not bIntroActive then return end
     if not is_valid(introCam) then return end
 
-    sweepX = sweepX + direction * SWEEP_SPEED * dt
+    if cinematicPhase == 1 then
+        cinematicTimer = cinematicTimer + dt
+        local t = cinematicTimer / SPIN_DURATION
+        cinematicYaw = VIEW_YAW + t * 360.0
+        apply_intro_spin_transform(0.0, cinematicYaw)
 
-    if sweepX > SWEEP_RANGE then
-        sweepX = SWEEP_RANGE
-        direction = -1.0
-    elseif sweepX < -SWEEP_RANGE then
-        sweepX = -SWEEP_RANGE
-        direction = 1.0
+        if cinematicTimer >= SPIN_DURATION then
+            cinematicPhase = 2
+            cinematicTimer = 0.0
+            if is_valid(pc) and pc.StartFadeIn ~= nil then
+                pc:StartFadeIn(FADE_OUT_DURATION, 1.0, FVector.new(0,0,0))
+            end
+        end
+    elseif cinematicPhase == 2 then
+        cinematicTimer = cinematicTimer + dt
+        apply_intro_spin_transform(0.0, VIEW_YAW + 360.0)
+
+        if cinematicTimer >= FADE_OUT_DURATION then
+            cinematicPhase = 3
+            cinematicTimer = 0.0
+            apply_intro_ortho_transform(0.0, VIEW_YAW)
+            
+            -- 암전된 상태에서 맵 생성
+            if _G.MapManager_GenerateInitial ~= nil then
+                _G.MapManager_GenerateInitial()
+            end
+            
+            if Game ~= nil and Game.UI ~= nil and Game.UI.ShowIntro ~= nil then
+                Game.UI.ShowIntro(true)
+            end
+            
+            if is_valid(pc) and pc.StartFadeOut ~= nil then
+                pc:StartFadeOut(FADE_IN_DURATION)
+            end
+        end
+    elseif cinematicPhase == 3 then
+        cinematicTimer = cinematicTimer + dt
+        apply_intro_ortho_transform(0.0, VIEW_YAW)
+
+        if cinematicTimer >= FADE_IN_DURATION then
+            cinematicPhase = 0
+            cinematicTimer = 0.0
+        end
+    elseif cinematicPhase == 0 then
+        sweepX = sweepX + direction * SWEEP_SPEED * dt
+
+        if sweepX > SWEEP_RANGE then
+            sweepX = SWEEP_RANGE
+            direction = -1.0
+        elseif sweepX < -SWEEP_RANGE then
+            sweepX = -SWEEP_RANGE
+            direction = 1.0
+        end
+
+        apply_intro_ortho_transform(sweepX, VIEW_YAW)
     end
-
-    apply_intro_ortho_transform(sweepX)
 end
 
 function EndPlay()

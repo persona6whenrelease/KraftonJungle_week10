@@ -2,7 +2,6 @@
 
 #include "Component/ActorComponent.h"
 #include "Component/CameraComponent.h"
-#include "Component/Movement/HopMovementComponent.h"
 #include "Component/Movement/PawnMovementComponent.h"
 #include "Component/StaticMeshComponent.h"
 #include "GameFramework/PlayerController.h"
@@ -10,25 +9,6 @@
 
 IMPLEMENT_CLASS(APawn, AActor)
 
-namespace
-{
-	UHopMovementComponent* FindHopMovementComponent(const APawn* Pawn)
-	{
-		if (!Pawn)
-		{
-			return nullptr;
-		}
-
-		for (UActorComponent* Component : Pawn->GetComponents())
-		{
-			if (UHopMovementComponent* Movement = Cast<UHopMovementComponent>(Component))
-			{
-				return Movement;
-			}
-		}
-		return nullptr;
-	}
-}
 
 void APawn::InitDefaultComponents()
 {
@@ -39,7 +19,7 @@ void APawn::InitDefaultComponents()
 			SetRootComponent(Root);
 		}
 	}
-	if (!FindPawnMovementComponent() && !FindHopMovementComponent(this))
+	if (!FindPawnMovementComponent())
 	{
 		AddComponent<UPawnMovementComponent>();
 	}

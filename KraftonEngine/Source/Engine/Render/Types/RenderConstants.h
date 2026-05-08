@@ -244,6 +244,25 @@ struct FFXAAConstants
 	float _pad[2];
 };
 
+// PostProcess Vignette CB (b2) — HLSL VignetteBuffer와 1:1 대응
+struct FVignettePostProcessConstants
+{
+	FVector2 VignetteCenter;     // 8B  — UV 공간 (0~1). Phase 2에서 Pawn 스크린 UV로 갱신
+	float    VignetteIntensity;  // 4B  — smoothstep 시작 거리 (작을수록 더 일찍 어두워짐)
+	float    VignetteSmoothness; // 4B  — 16B boundary
+	FVector  VignetteColor;      // 12B — 가장자리 색상
+	float    _Pad0;              //  4B — 16B boundary, 총 32B
+};
+static_assert(sizeof(FVignettePostProcessConstants) % 16 == 0, "FVignettePostProcessConstants must be 16-byte aligned");
+
+// PostProcess Fade CB (b2) — HLSL FadeBuffer와 1:1 대응
+struct FFadePostProcessConstants
+{
+	FVector FadeColor;  // 12B
+	float   FadeAlpha;  //  4B — 16B boundary, 총 16B
+};
+static_assert(sizeof(FFadePostProcessConstants) % 16 == 0, "FFadePostProcessConstants must be 16-byte aligned");
+
 // ============================================================
 // 타입별 CB 바인딩 디스크립터 — GPU CB에 업로드할 데이터를 인라인 보관
 // ============================================================

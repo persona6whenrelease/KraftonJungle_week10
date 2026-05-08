@@ -25,7 +25,6 @@ public:
 		MarkWorldBoundsDirty();
 	}
 
-	void OnParry() override;
 
 private:
 	FVector BoxExtent = FVector(0.5f, 0.5f, 0.5f);

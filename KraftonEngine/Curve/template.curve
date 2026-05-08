@@ -1,0 +1,7 @@
+{
+    "ControlPoints" : [0.000000, 0.000000, 1.000000, 1.000000] ,
+    "Kind" : "CubicBezier01",
+    "PresetIndex" : 9,
+    "Type" : "KraftonCurve",
+    "Version" : 1
+};

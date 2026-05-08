@@ -89,32 +89,13 @@ local VehicleSpeedMultipliers = {
     [PREFABS.CARD] = 1.10,
 }
 
+
 function RowGenerator.ConfigureRows()
-    SetRowSize(RowGenerator.MapConfig.SlotCount, RowGenerator.MapConfig.SlotSize, RowGenerator.MapConfig.RowDepth)
-    SetRowBufferCounts(RowGenerator.MapConfig.KeepRowsBehind, RowGenerator.MapConfig.KeepRowsAhead)
+    Game.Map.SetRowSize(RowGenerator.MapConfig.SlotCount, RowGenerator.MapConfig.SlotSize, RowGenerator.MapConfig.RowDepth)
+    Game.Map.SetRowBufferCounts(RowGenerator.MapConfig.KeepRowsBehind, RowGenerator.MapConfig.KeepRowsAhead)
 
-    if World and World.WarmUpPrefabPool then
-        World.WarmUpPrefabPool(PREFABS.GRASSTILE, 100)
-        World.WarmUpPrefabPool(PREFABS.ROADTILE, 100)
-        World.WarmUpPrefabPool(PREFABS.TRAFFIC_BARRIER_B, 100)
-        World.WarmUpPrefabPool(PREFABS.TRAFFIC_BARRIER_A, 100)
-        World.WarmUpPrefabPool(PREFABS.INVISIBLE_SIDE_WALL, 100)
+    -- ActorPool warmup 정책은 Crossy C++ RowManager가 담당합니다.
 
-        World.WarmUpPrefabPool(PREFABS.ROCK, 100)
-        World.WarmUpPrefabPool(PREFABS.TREE1, 100)
-        World.WarmUpPrefabPool(PREFABS.TREE2, 100)
-        World.WarmUpPrefabPool(PREFABS.TREE3, 100)
-        World.WarmUpPrefabPool(PREFABS.TREE4, 100)
-        
-        World.WarmUpPrefabPool(PREFABS.CARA, 100)
-        World.WarmUpPrefabPool(PREFABS.CARB, 100)
-        World.WarmUpPrefabPool(PREFABS.CARC, 100)
-        World.WarmUpPrefabPool(PREFABS.MINIBUS, 100)
-        World.WarmUpPrefabPool(PREFABS.FIRECAR, 100)
-        World.WarmUpPrefabPool(PREFABS.POLICECAR, 100)
-        World.WarmUpPrefabPool(PREFABS.RACINGCAR, 100)
-
-    end
 end
 
 -- 가중치 기반 독립적 선택
@@ -144,7 +125,7 @@ local function SpawnGrassObstacle(rowIndex, slot, prefab)
     local offsetX = RandomRange(-0.2, 0.2)
     local offsetY = RandomRange(-0.2, 0.2)
     local yaw = RandomRange(-15.0, 15.0)
-    SpawnStaticObstacle(rowIndex, slot, prefab, offsetX, offsetY, yaw)
+    Game.Map.SpawnStaticObstacle(rowIndex, slot, prefab, offsetX, offsetY, yaw)
 end
 
 -- 진행도(RowIndex)에 따른 장애물 확률 증가
@@ -157,26 +138,26 @@ function RowGenerator.GenerateRow(rowIndex)
     -- 1. 지형 결정 (Markov Chain)
     local biome = ChooseWeighted(BiomeWeights)
     local biomeType = biome.type
-    SetRowBiome(rowIndex, biomeType)
+    Game.Map.SetRowBiome(rowIndex, biomeType)
     -- print("Biome : " .. (BIOME_NAME[biomeType] or tostring(biomeType)))
 
-    SpawnStaticObstacle(rowIndex, -1, PREFABS.INVISIBLE_SIDE_WALL)
-    SpawnStaticObstacle(rowIndex, RowGenerator.MapConfig.SlotCount, PREFABS.INVISIBLE_SIDE_WALL)
+    Game.Map.SpawnStaticObstacle(rowIndex, -1, PREFABS.INVISIBLE_SIDE_WALL)
+    Game.Map.SpawnStaticObstacle(rowIndex, RowGenerator.MapConfig.SlotCount, PREFABS.INVISIBLE_SIDE_WALL)
 
     if biomeType == BIOME.GRASS then
-        SpawnStaticObstacle(rowIndex, math.floor(RowGenerator.MapConfig.SlotCount / 2), PREFABS.GRASSTILE)
-        SpawnStaticObstacle(rowIndex, 0, PREFABS.TRAFFIC_BARRIER_B)
-        SpawnStaticObstacle(rowIndex, RowGenerator.MapConfig.MaxSlotIndex, PREFABS.TRAFFIC_BARRIER_B)
+        Game.Map.SpawnStaticObstacle(rowIndex, math.floor(RowGenerator.MapConfig.SlotCount / 2), PREFABS.GRASSTILE)
+        Game.Map.SpawnStaticObstacle(rowIndex, 0, PREFABS.TRAFFIC_BARRIER_B)
+        Game.Map.SpawnStaticObstacle(rowIndex, RowGenerator.MapConfig.MaxSlotIndex, PREFABS.TRAFFIC_BARRIER_B)
     elseif biomeType == BIOME.ROAD then
-        SpawnStaticObstacle(rowIndex, math.floor(RowGenerator.MapConfig.SlotCount / 2), PREFABS.ROADTILE)
+        Game.Map.SpawnStaticObstacle(rowIndex, math.floor(RowGenerator.MapConfig.SlotCount / 2), PREFABS.ROADTILE)
     elseif biomeType == BIOME.RAILWAY then
-        SpawnStaticObstacle(rowIndex, math.floor(RowGenerator.MapConfig.SlotCount / 2), PREFABS.RAILWAYTILE)
+        Game.Map.SpawnStaticObstacle(rowIndex, math.floor(RowGenerator.MapConfig.SlotCount / 2), PREFABS.RAILWAYTILE)
     end
 
     -- 2. 안전한 경로 계산 (-1 ~ 1 슬롯 이동)
     local nextSafeSlot = LastSafeSlot + math.random(-1, 1)
     nextSafeSlot = math.max(1, math.min(RowGenerator.MapConfig.MaxSlotIndex - 1, nextSafeSlot))
-    LastSafeSlot = nextSafeSlot -- 다음 Row를 위해 갱신
+    
 
     if biomeType == BIOME.GRASS then
         local obstacleChance = RowGenerator.GetObstacleChance(rowIndex)
@@ -237,6 +218,8 @@ function RowGenerator.GenerateRow(rowIndex)
             _G.AddDynamicSpawner(rowIndex, PREFABS.TRAIN, speed, interval, dirY)
         end
     end
+
+    LastSafeSlot = nextSafeSlot -- 다음 Row를 위해 갱신
 end
 
 return RowGenerator

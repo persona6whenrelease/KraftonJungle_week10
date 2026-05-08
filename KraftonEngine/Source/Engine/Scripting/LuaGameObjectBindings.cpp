@@ -19,6 +19,7 @@
 #include "Component/StaticMeshComponent.h"
 #include "Component/ActorComponent.h"
 #include "Component/CameraComponent.h"
+#include "Component/SpringArmComponent.h"
 #include "Component/Script/LuaScriptComponent.h"
 #include "Component/PawnOrientationComponent.h"
 
@@ -31,8 +32,6 @@
 #include "Component/Movement/ProjectileMovementComponent.h"
 #include "Component/Movement/InterpToMovementComponent.h"
 #include "Component/Movement/RotatingMovementComponent.h"
-#include "Component/Movement/HopMovementComponent.h"
-#include "Component/ParryComponent.h"
 
 #ifndef LUA_ENABLE_DEBUG_UUID_LOOKUP
 #define LUA_ENABLE_DEBUG_UUID_LOOKUP 0
@@ -88,6 +87,32 @@ void RegisterGameObjectBinding(sol::state& Lua)
 				Actor->SetFName(FName(Name));
 			}
 		),
+
+		"HasTag",
+		[](const FLuaGameObjectHandle& Self, const FString& Tag)
+		{
+			AActor* Actor = Self.Resolve();
+			return Actor ? Actor->HasTag(Tag) : false;
+		},
+
+		"AddTag",
+		[](const FLuaGameObjectHandle& Self, const FString& Tag)
+		{
+			AActor* Actor = Self.Resolve();
+			if (!Actor)
+			{
+				UE_LOG("[Lua] Invalid GameObject.AddTag Call.");
+				return;
+			}
+			Actor->AddTag(Tag);
+		},
+
+		"RemoveTag",
+		[](const FLuaGameObjectHandle& Self, const FString& Tag)
+		{
+			AActor* Actor = Self.Resolve();
+			return Actor ? Actor->RemoveTag(Tag) : false;
+		},
 
 		"Location",
 		sol::property(
@@ -185,33 +210,7 @@ void RegisterGameObjectBinding(sol::state& Lua)
 			return FLuaWorldLibrary::DestroyActor(Actor);
 		},
 
-		"ReleaseToPool",
-		[](const FLuaGameObjectHandle& Self)
-		{
-			AActor* Actor = Self.Resolve();
 
-			if (!Actor)
-			{
-				UE_LOG("[Lua] Invalid GameObject.ReleaseToPool Call.");
-				return false;
-			}
-
-			return FLuaWorldLibrary::ReleaseActorToPool(Actor);
-		},
-
-		"ReleaseToPool",
-		[](const FLuaGameObjectHandle& Self)
-		{
-			AActor* Actor = Self.Resolve();
-
-			if (!Actor)
-			{
-				UE_LOG("[Lua] Invalid GameObject.ReleaseToPool Call.");
-				return false;
-			}
-
-			return FLuaWorldLibrary::ReleaseActorToPool(Actor);
-		},
 
 		"AsPawn",
 		[](const FLuaGameObjectHandle& Self, sol::this_state State) -> sol::object
@@ -323,6 +322,24 @@ void RegisterGameObjectBinding(sol::state& Lua)
 			UCameraComponent
 		),
 
+
+		LUA_GAMEOBJECT_COMPONENT_PROPERTY(
+			"SpringArm",
+			FLuaSpringArmComponentHandle,
+			USpringArmComponent
+		),
+
+		LUA_GAMEOBJECT_GET_OR_ADD_COMPONENT_METHOD(
+			"GetOrAddSpringArm",
+			FLuaSpringArmComponentHandle,
+			USpringArmComponent
+		),
+
+		LUA_GAMEOBJECT_REMOVE_COMPONENT_METHOD(
+			"RemoveSpringArm",
+			USpringArmComponent
+		),
+
 		LUA_GAMEOBJECT_COMPONENT_PROPERTY(
 			"PawnOrientation",
 			FLuaPawnOrientationComponentHandle,
@@ -370,24 +387,6 @@ void RegisterGameObjectBinding(sol::state& Lua)
 			URotatingMovementComponent
 		),
 
-		LUA_GAMEOBJECT_COMPONENT_PROPERTY(
-			"HopMovement",
-			FLuaHopMovementComponentHandle,
-			UHopMovementComponent
-		),
-
-		LUA_GAMEOBJECT_COMPONENT_PROPERTY(
-			"Parry",
-			FLuaParryComponentHandle,
-			UParryComponent
-		),
-
-		LUA_GAMEOBJECT_GET_OR_ADD_COMPONENT_METHOD(
-			"GetOrAddParry",
-			FLuaParryComponentHandle,
-			UParryComponent
-		),
-
 		LUA_GAMEOBJECT_GET_OR_ADD_COMPONENT_METHOD(
 			"GetOrAddProjectileMovement",
 			FLuaProjectileMovementComponentHandle,
@@ -412,12 +411,6 @@ void RegisterGameObjectBinding(sol::state& Lua)
 			URotatingMovementComponent
 		),
 
-		LUA_GAMEOBJECT_GET_OR_ADD_COMPONENT_METHOD(
-			"GetOrAddHopMovement",
-			FLuaHopMovementComponentHandle,
-			UHopMovementComponent
-		),
-
 		LUA_GAMEOBJECT_REMOVE_COMPONENT_METHOD(
 			"RemoveProjectileMovement",
 			UProjectileMovementComponent
@@ -436,11 +429,6 @@ void RegisterGameObjectBinding(sol::state& Lua)
 		LUA_GAMEOBJECT_REMOVE_COMPONENT_METHOD(
 			"RemoveRotatingMovement",
 			URotatingMovementComponent
-		),
-
-		LUA_GAMEOBJECT_REMOVE_COMPONENT_METHOD(
-			"RemoveHopMovement",
-			UHopMovementComponent
 		),
 
 		LUA_GAMEOBJECT_SET_SHAPE_METHOD(

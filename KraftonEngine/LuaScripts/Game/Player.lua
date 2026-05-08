@@ -24,7 +24,7 @@ local CONFIG = {
     },
 
     ControllerInput = {
-        MoveSpeed = 10.0,
+        MoveSpeed = 0.0,
         SprintMultiplier = 2.5,
         LookSensitivity = 0.08,
         MinPitch = -89.0,
@@ -40,8 +40,9 @@ local CONFIG = {
     },
 
     HopMovement = {
+        ReceiveControllerInput = false,
         InitialSpeed = 8.0,
-        MaxSpeed = 18.0,
+        MaxSpeed = 16.0,
         HopCoefficient = 1.0,
         Acceleration = 2048.0,
         BrakingDeceleration = 4096.0,
@@ -166,7 +167,19 @@ local Player = {
     
     -- 카메라 전환 직후 마우스 델타 튐 방지용
     cameraSwitchGuardTime = 0.0,
-    dropMouseDeltaFrames = 0
+    dropMouseDeltaFrames = 0,
+
+    -- 사망 연출 상태
+    isDeadTriggered = false,
+    deathTimer = 0.0,
+    fadeStarted = false,
+    vignetteStarted = false,
+
+    -- [테스트] 카메라 셰이크 쿨다운
+    cameraShakeCooldown = 0.0,
+
+    -- 게임 상태 트래킹
+    wasPlayingLastFrame = false
 }
 
 local function Log(msg)
@@ -227,8 +240,28 @@ local function SafeDeltaTime(dt)
     return dt
 end
 
+
+local function ResolveCallableMember(value, owner)
+    if type(value) ~= "function" then
+        return value
+    end
+
+    local ok, result = pcall(value, owner)
+    if ok then
+        return result
+    end
+
+    ok, result = pcall(value)
+    if ok then
+        return result
+    end
+
+    return nil
+end
+
 local function IsValidHandle(handle)
-    if handle == nil then
+    handle = ResolveCallableMember(handle, Player.ownerObject)
+    if handle == nil or type(handle) == "function" then
         return false
     end
 
@@ -275,6 +308,40 @@ local function SafeAssign(target, key, value)
     end
 
     return true
+end
+
+local function ResetPostProcessEffect()
+    Player.isDeadTriggered = false
+    Player.deathTimer = 0.0
+    Player.fadeStarted = false
+    Player.vignetteStarted = false
+    
+    -- 렌더러가 사용하는 최신 카메라로 동기화 후 프로퍼티 리셋
+    if IsValidHandle(Player.controller) and Player.controller.GetActiveCamera ~= nil then
+        Player.camera = Player.controller:GetActiveCamera()
+    end
+
+    if IsValidHandle(Player.camera) then
+        -- [중요] 카메라 컴포넌트의 프로퍼티를 기본값으로 명시적 복구
+        Player.camera.VignetteIntensity = 1.0
+        Player.camera.FadeAlpha = 0.0
+    end
+    
+    if IsValidHandle(Player.controller) then
+        if Player.controller.StopVignette ~= nil then
+            Player.controller:StopVignette(0.0)
+        end
+        if Player.controller.StartFadeOut ~= nil then
+            Player.controller:StartFadeOut(0.0)
+        end
+    end
+
+    -- [연출] 부활 시 닭으로 메쉬 복구
+    if Player.ownerObject ~= nil and Player.ownerObject.SetStaticMesh ~= nil then
+        Player.ownerObject:SetStaticMesh("Data/Chicken/Chicken.obj")
+    end
+    
+    Log("[FX] PostProcess Effects Reset (Vignette=1.0, Fade=0.0)")
 end
 
 local function GetKey(name)
@@ -345,8 +412,8 @@ local function BuildInputState()
             Player.prevGuiMouse = guiMouse
         end
     end
+    
     if IsGuiUsingKeyboard() then
-        Log("!!! GUI IS CONSUMING KEYBOARD")
         return {
             W = false,
             A = false,
@@ -354,6 +421,7 @@ local function BuildInputState()
             D = false,
             SHIFT = false,
             Dash = false,
+            Parry = false,
             any = false,
             signature = "GUI_KEYBOARD_CAPTURED"
         }
@@ -364,10 +432,6 @@ local function BuildInputState()
     local manualEdge2 = mouse2Now and (not Player.prevMouse2)
     local dashEdge = engineEdge2 or manualEdge2
 
-    if dashEdge then
-        Log("!!! MOUSE2 EDGE DETECTED !!!")
-    end
-
     Player.prevMouse2 = mouse2Now
 
     -- Parry 에지 판정용 (직전 프레임의 MOUSE1 상태)
@@ -375,10 +439,6 @@ local function BuildInputState()
     local engineEdge1 = GetKeyDown("MOUSE1")
     local manualEdge1 = mouse1Now and (not Player.prevMouse1)
     local parryEdge = engineEdge1 or manualEdge1
-
-    if parryEdge then
-        Log("!!! MOUSE1 EDGE DETECTED (PARRY) !!!")
-    end
 
     Player.prevMouse1 = mouse1Now
 
@@ -399,7 +459,9 @@ local function BuildInputState()
         " A=" .. BoolStr(state.A) ..
         " S=" .. BoolStr(state.S) ..
         " D=" .. BoolStr(state.D) ..
-        " SHIFT=" .. BoolStr(state.SHIFT)
+        " SHIFT=" .. BoolStr(state.SHIFT) ..
+        " Dash=" .. BoolStr(state.Dash) ..
+        " Parry=" .. BoolStr(state.Parry)
 
     return state
 end
@@ -438,12 +500,12 @@ end
 
 local function SetupPawnMovementComponents()
     if Player.ownerObject.GetOrAddHopMovement ~= nil then
-        Player.hopMovement = Player.ownerObject:GetOrAddHopMovement()
+        Player.hopMovement = ResolveCallableMember(Player.ownerObject:GetOrAddHopMovement(), Player.ownerObject)
     end
 
     local hopGeneric = nil
     if Player.ownerObject.GetComponent ~= nil then
-        hopGeneric = Player.ownerObject:GetComponent("hopmovement")
+        hopGeneric = ResolveCallableMember(Player.ownerObject:GetComponent("hopmovement"), Player.ownerObject)
     end
 
     if IsValidHandle(Player.hopMovement) then
@@ -470,12 +532,12 @@ local function SetupPawnMovementComponents()
         SafeSetProperty(hopGeneric, "Auto Register Updated", true)
         SafeSetProperty(hopGeneric, "Updated Component", CONFIG.HopMovement.UpdatedComponent)
         SafeSetProperty(hopGeneric, "Visual Hop Component", CONFIG.HopMovement.VisualHopComponent)
-        SafeSetProperty(hopGeneric, "Receive Controller Input", true)
+        SafeSetProperty(hopGeneric, "Receive Controller Input", CONFIG.HopMovement.ReceiveControllerInput)
         SafeSetProperty(hopGeneric, "Controller Input Priority", CONFIG.HopMovement.ControllerInputPriority)
     end
 
     if Player.ownerObject.GetOrAddComponent ~= nil then
-        Player.pawnMovementComponent = Player.ownerObject:GetOrAddComponent("pawnmovement")
+        Player.pawnMovementComponent = ResolveCallableMember(Player.ownerObject:GetOrAddComponent("pawnmovement"), Player.ownerObject)
     end
 
     if IsValidHandle(Player.pawnMovementComponent) then
@@ -492,7 +554,7 @@ local function SetupPawnMovementComponents()
     end
 
     if Player.ownerObject.GetOrAddPawnOrientation ~= nil then
-        Player.orientation = Player.ownerObject:GetOrAddPawnOrientation()
+        Player.orientation = ResolveCallableMember(Player.ownerObject:GetOrAddPawnOrientation(), Player.ownerObject)
     end
 
     if IsValidHandle(Player.orientation) then
@@ -508,15 +570,64 @@ local function SetupPawnMovementComponents()
 end
 
 local function SetupCombatComponents()
+    Player.parryComp = nil
+
+    -- 먼저 이미 붙어 있는 ParryComponent를 찾습니다.
     if Player.ownerObject.Parry ~= nil then
-        Player.parryComp = Player.ownerObject.Parry
+        Player.parryComp = ResolveCallableMember(Player.ownerObject.Parry, Player.ownerObject)
+    end
+
+    -- 플레이어 기본 능력으로 Parry가 필요한 게임에서는 런타임 보정으로 붙입니다.
+    -- 에디터에서 수동으로 붙인 경우에는 위 경로가 우선 사용됩니다.
+    if not IsValidHandle(Player.parryComp) and Player.ownerObject.GetOrAddParry ~= nil then
+        Player.parryComp = ResolveCallableMember(Player.ownerObject:GetOrAddParry(), Player.ownerObject)
+    end
+
+    -- 범용 컴포넌트 API가 있는 빌드와의 호환 경로입니다.
+    if not IsValidHandle(Player.parryComp) and Player.ownerObject.GetOrAddComponent ~= nil then
+        Player.parryComp = ResolveCallableMember(Player.ownerObject:GetOrAddComponent("parry"), Player.ownerObject)
     end
 
     if IsValidHandle(Player.parryComp) then
-        Log("[PAWN] ParryComponent 획득 성공")
+        Log("[PAWN] ParryComponent 획득/생성 성공")
     else
         Log("[PAWN_WARN] ParryComponent를 얻지 못했습니다. (패링 불가)")
     end
+end
+
+
+local function ActorHasTag(actor, tag)
+    if actor == nil then
+        return false
+    end
+
+    if actor.HasTag ~= nil then
+        local ok, result = pcall(function()
+            return actor:HasTag(tag)
+        end)
+        if ok and result == true then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function IsVehicleActor(actor)
+    if actor == nil then
+        return false
+    end
+
+    if Game ~= nil and Game.Map ~= nil and Game.Map.IsVehicle ~= nil then
+        local ok, result = pcall(function()
+            return Game.Map.IsVehicle(actor)
+        end)
+        if ok and result == true then
+            return true
+        end
+    end
+
+    return ActorHasTag(actor, "Vehicle") or ActorHasTag(actor, "__RuntimeVehicle")
 end
 
 local function SetupController()
@@ -686,8 +797,6 @@ local function SetupCamera()
     ConfigureCameraProperties(Player.camera)
 
     -- ActiveCamera 연결.
-    -- SetActiveCamera는 ControlRotation을 카메라 월드 회전으로 덮어쓸 수 있으므로
-    -- 호출 직후 현재 yaw/pitch 기준으로 다시 복원합니다.
     Player.controller:SetActiveCamera(Player.camera)
 
     if Player.camera.SetAsActiveCamera ~= nil then
@@ -702,12 +811,10 @@ local function SetupCamera()
     Player.cameraSwitchGuardTime = CONFIG.ControllerInput.CameraSwitchLookGuardTime
     Player.dropMouseDeltaFrames = 2
 
-    -- 기존처럼 CONFIG.Controller.ControlRotation으로 0도 복원하지 않고
-    -- 현재 Player.yaw / Player.pitch를 유지합니다.
     Player.controller:SetControlRotation(Rot(Player.pitch, Player.yaw, 0.0))
     Player.pawn.Rotation = Rot(0.0, Player.yaw, 0.0)
 
-    Log("[CAMERA] CameraActor/CameraComponent 설정 완료: Follow Target = owner Pawn, ActiveCamera 연결")
+    Log("[CAMERA] CameraActor/CameraComponent 설정 완료")
 
     return true
 end
@@ -740,7 +847,9 @@ local function Bootstrap()
 
     Player.initialized = true
 
-    print("[Player.lua][BOOT_OK] 설정 완료: Pawn / PlayerController / CameraActor 구조를 씬 설정대로 구성했습니다.")
+    ResetPostProcessEffect()
+
+    print("[Player.lua][BOOT_OK] 설정 완료")
 
     return true
 end
@@ -750,15 +859,12 @@ local function UpdateLook(dt)
         return
     end
 
-    -- 카메라 전환 직후 몇 프레임은 마우스 델타를 읽어서 버립니다.
-    -- 읽지 않고 return만 하면 엔진에 따라 델타가 다음 프레임에 누적될 수 있습니다.
     if Player.dropMouseDeltaFrames ~= nil and Player.dropMouseDeltaFrames > 0 then
         GetMouseDelta()
         Player.dropMouseDeltaFrames = Player.dropMouseDeltaFrames - 1
         return
     end
 
-    -- 카메라 전환 직후 짧은 시간 동안 마우스 입력을 버립니다.
     if Player.cameraSwitchGuardTime ~= nil and Player.cameraSwitchGuardTime > 0.0 then
         GetMouseDelta()
         Player.cameraSwitchGuardTime = Player.cameraSwitchGuardTime - dt
@@ -773,7 +879,6 @@ local function UpdateLook(dt)
         return
     end
 
-    -- 한 프레임에 너무 큰 마우스 델타가 들어오면 화면이 뚝 끊겨 보일 수 있으므로 제한합니다.
     local maxDelta = CONFIG.ControllerInput.MaxMouseDeltaPerFrame or 80.0
     dx = Clamp(dx, -maxDelta, maxDelta)
     dy = Clamp(dy, -maxDelta, maxDelta)
@@ -788,9 +893,6 @@ local function UpdateLook(dt)
     )
 
     Player.controller:SetControlRotation(Rot(Player.pitch, Player.yaw, 0.0))
-
-    -- OrientationComponent도 ControlRotationYaw지만,
-    -- Tick 순서 문제를 피하려고 Pawn yaw를 즉시 맞춰줍니다.
     Player.pawn.Rotation = Rot(0.0, Player.yaw, 0.0)
 end
 
@@ -860,11 +962,6 @@ local function UpdateMovement(dt, inputState)
 
     local speed = CONFIG.ControllerInput.MoveSpeed * sprintScale
     Player.pawn.Location = Player.pawn.Location + worldDir * speed * dt
-
-    if not Player.printedMove then
-        print("[Player.lua][MOVE_FALLBACK] HopMovementComponent가 없어 Pawn.Location 직접 이동")
-        Player.printedMove = true
-    end
 end
 
 local function UpdateCombat(inputState)
@@ -874,6 +971,62 @@ local function UpdateCombat(inputState)
             Log("[Player.lua] Parry Triggered!")
         end
     end
+end
+
+function OnOverlap(otherActor)
+    if not IsVehicleActor(otherActor) or Player.isDeadTriggered then
+        return
+    end
+
+    if State == nil or State.IsPlaying == nil or not State.IsPlaying() then
+        return
+    end
+
+    if IsValidHandle(Player.parryComp) and Player.parryComp.IsParrying ~= nil then
+        local ok, isParrying = pcall(function()
+            return Player.parryComp:IsParrying()
+        end)
+        if ok and isParrying == true then
+            Log("[COLLISION] Vehicle overlap ignored while parrying")
+            return
+        end
+    end
+
+
+     Sound.PlayEffect("Crash")
+
+    -- 사망 연출 시작
+    Player.isDeadTriggered = true
+    Player.deathTimer = 2.0
+    Player.fadeStarted = false
+    Player.vignetteStarted = false
+    
+    -- [연출] 사망 시 KFC 박스로 메쉬 변경
+    if Player.ownerObject ~= nil and Player.ownerObject.SetStaticMesh ~= nil then
+        Player.ownerObject:SetStaticMesh("Data/Chicken/KFC.obj")
+    end
+    
+    if State ~= nil then
+        State.IsDying = true
+    end
+
+    if World ~= nil and World.StartSlomo ~= nil then
+        World.StartSlomo(0.2, 3.0)
+    end
+
+    if IsValidHandle(Player.controller) then
+        -- 피격 시 즉각적인 붉은 Vignette 효과 (0.3초 동안 intensity 0.4로)
+        if Player.controller.StartVignette ~= nil then
+            Player.controller:StartVignette(0.4, Vec(0.8, 0, 0), 0.3, 0.6)
+        end
+        
+        -- 강한 셰이크
+        if Player.controller.StartCameraShake ~= nil then
+            Player.controller:StartCameraShake(0.4, 0.15, 2.0, 30.0)
+        end
+    end
+
+    Log("[COLLISION] Vehicle hit! Actor: " .. tostring(otherActor.Name))
 end
 
 function BeginPlay()
@@ -887,10 +1040,28 @@ function OnInput(deltaTime)
         return
     end
 
-    if State ~= nil and State.IsPlaying ~= nil and not State.IsPlaying() then
-        Player.prevMouse1 = GetKey("MOUSE1")
-        Player.prevMouse2 = GetKey("MOUSE2")
+    local dt = SafeDeltaTime(deltaTime)
 
+    -- 셰이크 쿨다운 차감
+    if Player.cameraShakeCooldown > 0.0 then
+        Player.cameraShakeCooldown = Player.cameraShakeCooldown - dt
+    end
+
+    -- 게임 재시작/시작 감지 (상태 전이 체크)
+    local isPlayingNow = (State ~= nil and State.IsPlaying ~= nil and State.IsPlaying())
+    if isPlayingNow and not Player.wasPlayingLastFrame then
+        Log("[GAME] Playing State Entered. Resetting effects.")
+        ResetPostProcessEffect()
+    end
+    Player.wasPlayingLastFrame = isPlayingNow
+
+    -- 게임 중이 아닐 때 처리
+    if not isPlayingNow then
+        if Player.isDeadTriggered then
+            Log("[DEATH_ABORT] Game stopped. Resetting death FX.")
+            ResetPostProcessEffect()
+        end
+        
         if IsValidHandle(Player.hopMovement) then
             Player.hopMovement:ClearMovementInput()
         end
@@ -898,11 +1069,49 @@ function OnInput(deltaTime)
         if Input ~= nil and Input.SetMouseCaptured ~= nil then
             Input.SetMouseCaptured(false)
         end
-
         return
     end
 
-    local dt = SafeDeltaTime(deltaTime)
+    -- 사망 연출 처리
+    if Player.isDeadTriggered then
+        -- 매 프레임 최신 카메라 동기화
+        if IsValidHandle(Player.controller) and Player.controller.GetActiveCamera ~= nil then
+            Player.camera = Player.controller:GetActiveCamera()
+        end
+
+        if Player.deathTimer > 0 then
+            Player.deathTimer = Player.deathTimer - dt
+            
+            -- Phase 1: Vignette 연출 (남은 시간 2.0s ~ 1.5s 구간)
+            if Player.deathTimer > 1.5 then
+                if not Player.vignetteStarted then
+                    if IsValidHandle(Player.controller) and Player.controller.StartVignette ~= nil then
+                        -- 0.5초 동안 더 강한 Vignette(0.1)로 보간
+                        Player.controller:StartVignette(0.1, Vec(0.8, 0, 0), 0.5, 0.6)
+                    end
+                    Player.vignetteStarted = true
+                end
+            else
+                -- Phase 2: Fade Out 시작
+                if not Player.fadeStarted then
+                    if IsValidHandle(Player.controller) then
+                        Player.controller:StartFadeIn(1.5, 1.0, Vec(0, 0, 0))
+                    end
+                    Player.fadeStarted = true
+                end
+            end
+
+            if Player.deathTimer <= 0 then
+                Log("[DEATH] Sequence Finished")
+                if State.GameOver ~= nil then
+                    State.GameOver("Hit by vehicle")
+                elseif Game ~= nil and Game.DispatchEvent ~= nil then
+                    Game.DispatchEvent("Defeat", Player.ownerObject)
+                end
+            end
+        end
+        return 
+    end
 
     if Input ~= nil and Input.SetMouseCaptured ~= nil then
         Input.SetMouseCaptured(true)
@@ -914,10 +1123,6 @@ function OnInput(deltaTime)
     UpdateLook(dt)
     UpdateMovement(dt, inputState)
     UpdateCombat(inputState)
-
-    -- 여기서 매 프레임 SetActiveCamera를 다시 호출하지 않습니다.
-    -- PlayerController:SetActiveCamera()는 ControlRotation을 카메라 회전으로 덮어쓸 수 있어서
-    -- 마우스 yaw가 계속 0으로 돌아가는 문제가 생길 수 있습니다.
 end
 
 function EndPlay()

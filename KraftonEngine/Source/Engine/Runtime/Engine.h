@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "Object/Object.h"
 #include "GameFramework/World.h"
@@ -6,6 +6,7 @@
 #include "Render/Pipeline/Renderer.h"
 #include "Render/Pipeline/IRenderPipeline.h"
 #include "Runtime/TaskScheduler.h"
+#include "Runtime/RuntimeModuleManager.h"
 #include "Sound/SoundManager.h"
 #include <memory>
 
@@ -13,6 +14,8 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+
+#include "Core/Time/EngineTimeManager.h"
 
 class FWindowsWindow;
 class FTimer;
@@ -65,6 +68,11 @@ public:
 
 	FRenderer& GetRenderer() { return Renderer; }
 	FTaskScheduler& GetTaskScheduler() { return TaskScheduler; }
+	FRuntimeModuleManager& GetRuntimeModules() { return RuntimeModules; }
+	const FRuntimeModuleManager& GetRuntimeModules() const { return RuntimeModules; }
+
+	FEngineTimeManager& GetTimeManager() { return TimeManager; }
+	const FEngineTimeManager& GetTimeManager() const { return TimeManager; }
 
 	// Game Viewport Client — PIE/Standalone 용
 	void SetGameViewportClient(UGameViewportClient* InClient) { GameViewportClient = InClient; }
@@ -74,7 +82,7 @@ protected:
 	void Render(float DeltaTime);
 	void SetRenderPipeline(std::unique_ptr<IRenderPipeline> InPipeline);
 	IRenderPipeline* GetRenderPipeline() const { return RenderPipeline.get(); }
-	void WorldTick(float DeltaTime);
+	void WorldTick(float GameDeltaTime, float RawDeltaTime);
 
 protected:
 	FWindowsWindow* Window = nullptr;
@@ -87,6 +95,8 @@ protected:
 	UGameViewportClient* GameViewportClient = nullptr;
 	FRenderer Renderer;
 	FTaskScheduler TaskScheduler;
+	FRuntimeModuleManager RuntimeModules;
+	FEngineTimeManager TimeManager;
 
 private:
 	std::unique_ptr<IRenderPipeline> RenderPipeline;

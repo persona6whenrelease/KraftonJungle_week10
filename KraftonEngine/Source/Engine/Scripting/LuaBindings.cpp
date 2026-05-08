@@ -6,6 +6,7 @@
 // Lua에 함수를 바인딩함
 void RegisterLuaBindings(sol::state& Lua)
 {
+	RegisterFVector2Binding(Lua);
 	RegisterFVectorBinding(Lua);
 	RegisterFVector4Binding(Lua);
 	RegisterFRotatorBinding(Lua);
@@ -24,6 +25,7 @@ void RegisterLuaBindings(sol::state& Lua)
 
 	RegisterStaticMeshComponentBinding(Lua);
 	RegisterCameraComponentBinding(Lua);
+	RegisterSpringArmComponentBinding(Lua);
 	RegisterPawnOrientationComponentBinding(Lua);
 
 	RegisterMovementComponentBinding(Lua);
@@ -31,8 +33,6 @@ void RegisterLuaBindings(sol::state& Lua)
 	RegisterInterpToMovementComponentBinding(Lua);
 	RegisterPendulumMovementComponentBinding(Lua);
 	RegisterRotatingMovementComponentBinding(Lua);
-	RegisterHopMovementComponentBinding(Lua);
-	RegisterParryComponentBinding(Lua);
 
 	RegisterPawnBinding(Lua);
 	RegisterPlayerControllerBinding(Lua);
@@ -40,8 +40,6 @@ void RegisterLuaBindings(sol::state& Lua)
 	RegisterGameObjectBinding(Lua);
 	RegisterWorldExtendedBinding(Lua);
 	RegisterInputBinding(Lua);
+	RegisterSoundBinding(Lua);
 	RegisterDelegateBinding(Lua);
-	RegisterRowManagerBinding(Lua);
-	RegisterUiBinding(Lua);
-	RegisterSaveGameBinding(Lua);
 }

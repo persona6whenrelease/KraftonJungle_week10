@@ -11,6 +11,7 @@ struct FGameClientSettings
 	bool bFullscreen = false;
 
 	FString StartupScenePackagePath = "Asset/Scene/PackagedStart.Scene";
+	TArray<FString> RuntimeModules;
 
 	bool bRequireStartupScene = true;
 	bool bEnableOverlay = false;
