@@ -1,12 +1,12 @@
 ﻿#include "FBXImporter.h"
 #include "SkeletalMesh.h"
 #include "SkeletalMeshAsset.h"
- #include "Core/Log.h"
+#include "Core/Log.h"
 
 // FBX SDK Header
 #include <fbxsdk.h>
 
-/** 
+/**
  * FBX 전용 행렬(FbxAMatrix)을 엔진의 FMatrix로 변환하는 헬퍼 함수.
  */
 static FMatrix FbxMatrixToFMatrix(const fbxsdk::FbxAMatrix& FbxMat)
@@ -179,8 +179,6 @@ void FFbxImporter::ExtractMesh(FbxMesh* Mesh, FSkeletalMesh* RawMesh, USkeletalM
 			{
 				CPWeights[Indices[k]].push_back({ BoneIndex, (float)Weights[k] });
 			}
-
-			// (Optional) 여기서 Cluster의 TransformLinkMatrix를 이용해 BindPose Matrix를 보정할 수 있습니다.
 		}
 	}
 
@@ -311,7 +309,6 @@ void FFbxImporter::ExtractSkeleton(FbxScene* Scene, USkeletalMesh* OutMesh, FSke
 		// IBP는 ExtractMesh()의 Cluster에서 TransformLinkMatrix 기반으로 덮어씀.
 		// EvaluateGlobalTransform()은 현재 시간 기준 행렬이므로 IBP 계산에 부적합.
 		CurrentBone.InverseBindMatrix = FMatrix::Identity;
-
 	}
 
 	UE_LOG("Successfully extracted %d bones.", RawMesh->Bones.size());
