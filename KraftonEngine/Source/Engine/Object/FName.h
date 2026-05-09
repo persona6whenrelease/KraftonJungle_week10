@@ -34,6 +34,18 @@ private:
 	uint32 DisplayIndex;	// 원본 문자열의 풀 인덱스 (표시용)
 };
 
+// std::hash 특수화
+namespace std {
+	template<>
+	struct hash<FName>
+	{
+		size_t operator()(const FName& Name) const noexcept
+		{
+			return FName::Hash()(Name);
+		}
+	};
+}
+
 // ============================================================
 // FNamePool — 전역 문자열 풀 (싱글턴)
 // ============================================================

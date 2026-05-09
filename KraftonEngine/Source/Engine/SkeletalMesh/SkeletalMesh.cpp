@@ -1,6 +1,9 @@
 ﻿#include "SkeletalMesh.h"
 #include "Render/Resource/Buffer.h"
 
+IMPLEMENT_CLASS(USkeletalMesh, UObject)
+
+
 USkeletalMesh::~USkeletalMesh()
 {
 	if (SkeletalMeshAsset)

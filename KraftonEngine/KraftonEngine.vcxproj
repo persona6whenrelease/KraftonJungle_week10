@@ -526,6 +526,7 @@
     <ClCompile Include="Source\Engine\Serialization\CurveSaveManager.cpp" />
     <ClCompile Include="Source\Engine\Serialization\PrefabSaveManager.cpp" />
     <ClCompile Include="Source\Engine\Serialization\SceneSaveManager.cpp" />
+    <ClCompile Include="Source\Engine\SkeletalMesh\FBXImporter.cpp" />
     <ClCompile Include="Source\Engine\SkeletalMesh\SkeletalMesh.cpp" />
     <ClCompile Include="Source\Engine\Sound\SoundManager.cpp" />
     <ClCompile Include="Source\Engine\Texture\Texture2D.cpp" />
@@ -814,6 +815,7 @@
     <ClInclude Include="Source\Engine\Serialization\PrefabSaveManager.h" />
     <ClInclude Include="Source\Engine\Serialization\SceneSaveManager.h" />
     <ClInclude Include="Source\Engine\Serialization\WindowsArchive.h" />
+    <ClInclude Include="Source\Engine\SkeletalMesh\FBXImporter.h" />
     <ClInclude Include="Source\Engine\SkeletalMesh\SkeletalMesh.h" />
     <ClInclude Include="Source\Engine\SkeletalMesh\SkeletalMeshAsset.h" />
     <ClInclude Include="Source\Engine\Sound\SoundManager.h" />

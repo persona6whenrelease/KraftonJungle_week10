@@ -51,18 +51,18 @@ struct FSkeletalMeshVertex
 	FVector4 Tangent;
 	FVector4 Color;
 	FVector2 UV;
-	int boneIndices[4] = { 0,0,0,0 };
-	float boneWeights[4] = { 0.0f,0.0f,0.0f,0.0f };
+	int boneIndices[4];
+	float boneWeights[4];
 };
 
 struct FBone
 {
-	int32 ParentIndex = -1;
+	int32 ParentIndex;
 
-	FVector Scale = { 1.0f, 1.0f, 1.0f };
-	FQuat Rotation = { 0.0f, 0.0f, 0.0f, 1.0f };
-	FVector Translation = { 0.0f, 0.0f, 0.0f };
-	FMatrix InverseBindMatrix = FMatrix::Identity;
+	FVector Scale;
+	FQuat Rotation;
+	FVector Translation;
+	FMatrix InverseBindMatrix;
 };
 
 struct TSkeletalData

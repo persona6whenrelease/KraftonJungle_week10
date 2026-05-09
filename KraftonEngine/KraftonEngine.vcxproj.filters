@@ -1040,6 +1040,9 @@
     <ClCompile Include="Source\Engine\Serialization\SceneSaveManager.cpp">
       <Filter>Source\Engine\Serialization</Filter>
     </ClCompile>
+    <ClCompile Include="Source\Engine\SkeletalMesh\FBXImporter.cpp">
+      <Filter>Source\Engine\SkeletalMesh</Filter>
+    </ClCompile>
     <ClCompile Include="Source\Engine\SkeletalMesh\SkeletalMesh.cpp">
       <Filter>Source\Engine\SkeletalMesh</Filter>
     </ClCompile>
@@ -1897,6 +1900,9 @@
     </ClInclude>
     <ClInclude Include="Source\Engine\Serialization\WindowsArchive.h">
       <Filter>Source\Engine\Serialization</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\SkeletalMesh\FBXImporter.h">
+      <Filter>Source\Engine\SkeletalMesh</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\SkeletalMesh\SkeletalMesh.h">
       <Filter>Source\Engine\SkeletalMesh</Filter>

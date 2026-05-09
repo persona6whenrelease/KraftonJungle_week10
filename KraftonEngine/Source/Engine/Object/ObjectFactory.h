@@ -28,8 +28,8 @@ namespace {                                                            \
     struct ClassName##_HideFromComponentList {                         \
         ClassName##_HideFromComponentList() {                          \
             ClassName::StaticClass()->AddClassFlags(CF_HiddenInComponentList); \
-        }                                                              \
-    };                                                                 \
+        }																	\
+    };																		\
     ClassName##_HideFromComponentList G##ClassName##_HideFromComponentList; \
 }
 
