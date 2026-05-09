@@ -715,13 +715,13 @@ bool FFbxImporter::ImportStaticMesh(const FString& FbxFilePath, FStaticMesh& Out
 					FirstIndex) / 3;
 			}
 
-			BuildTangents(OutMesh);
-
-			UE_LOG("[FBX] StaticMesh built. Vertices=%zu, Indices=%zu, Sections=%zu, Materials=%zu",
-			       OutMesh.Vertices.size(),
-			       OutMesh.Indices.size(),
-			       OutMesh.Sections.size(),
-			       OutMaterials.size());
+			// BuildTangents(OutMesh);
+			//
+			// UE_LOG("[FBX] StaticMesh built. Vertices=%zu, Indices=%zu, Sections=%zu, Materials=%zu",
+			//        OutMesh.Vertices.size(),
+			//        OutMesh.Indices.size(),
+			//        OutMesh.Sections.size(),
+			//        OutMaterials.size());
 
 			int32 SafeMaterialIndex = MaterialIndex;
 
@@ -799,6 +799,32 @@ bool FFbxImporter::ImportStaticMesh(const FString& FbxFilePath, FStaticMesh& Out
 			OutMesh.Vertices.push_back(NewVertex);
 			OutMesh.Indices.push_back(NewVertexIndex);
 		}
+	}
+
+	if (CurrentSection)
+	{
+		CurrentSection->NumTriangles =
+			(static_cast<uint32>(OutMesh.Indices.size()) - CurrentSection->FirstIndex) / 3;
+	}
+
+	BuildTangents(OutMesh);
+
+	UE_LOG("[FBX] StaticMesh built. Vertices=%zu, Indices=%zu, Sections=%zu, Materials=%zu",
+	       OutMesh.Vertices.size(),
+	       OutMesh.Indices.size(),
+	       OutMesh.Sections.size(),
+	       OutMaterials.size());
+
+	for (int32 SectionIndex = 0; SectionIndex < static_cast<int32>(OutMesh.Sections.size()); ++SectionIndex)
+	{
+		const FStaticMeshSection& Section = OutMesh.Sections[SectionIndex];
+
+		UE_LOG("[FBX] Section[%d]: FirstIndex=%u, NumTriangles=%u, MaterialIndex=%d, Slot=%s",
+		       SectionIndex,
+		       Section.FirstIndex,
+		       Section.NumTriangles,
+		       Section.MaterialIndex,
+		       Section.MaterialSlotName.c_str());
 	}
 
 	const bool bHasMeshData =

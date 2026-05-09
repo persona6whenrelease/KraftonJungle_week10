@@ -194,6 +194,36 @@ FString FEditorPropertyWidget::OpenObjFileDialog()
 	return FString();
 }
 
+FString FEditorPropertyWidget::OpenFbxFileDialog()
+{
+	wchar_t FilePath[MAX_PATH] = {};
+
+	OPENFILENAMEW Ofn = {};
+	Ofn.lStructSize = sizeof(Ofn);
+	Ofn.hwndOwner = nullptr;
+	Ofn.lpstrFilter = L"FBX Files (*.fbx)\0*.fbx\0All Files (*.*)\0*.*\0";
+	Ofn.lpstrFile = FilePath;
+	Ofn.nMaxFile = MAX_PATH;
+	Ofn.lpstrTitle = L"Import FBX Mesh";
+	Ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+
+	if (GetOpenFileNameW(&Ofn))
+	{
+		std::filesystem::path AbsPath = std::filesystem::path(FilePath).lexically_normal();
+		auto RootPath = std::filesystem::path(FPaths::RootDir());
+		std::filesystem::path RelPath = AbsPath.lexically_relative(RootPath);
+
+		if (RelPath.empty() || RelPath.wstring().starts_with(L".."))
+		{
+			return FPaths::ToUtf8(AbsPath.generic_wstring());
+		}
+
+		return FPaths::ToUtf8(RelPath.generic_wstring());
+	}
+
+	return FString();
+}
+
 FString FEditorPropertyWidget::OpenLuaScriptFileDialog()
 {
 	const std::wstring ScriptDirectory = FPaths::ScriptDir();
@@ -1451,9 +1481,12 @@ bool FEditorPropertyWidget::RenderPropertyWidget(TArray<FPropertyDescriptor>& Pr
 		ImGui::Text("%s", Prop.Name.c_str());
 		ImGui::SameLine(120);
 
-		float ButtonWidth = ImGui::CalcTextSize("Import OBJ").x + ImGui::GetStyle().FramePadding.x * 2.0f;
+		float ObjButtonWidth = ImGui::CalcTextSize("Import OBJ").x + ImGui::GetStyle().FramePadding.x * 2.0f;
+		float FbxButtonWidth = ImGui::CalcTextSize("Import FBX").x + ImGui::GetStyle().FramePadding.x * 2.0f;
 		float Spacing = ImGui::GetStyle().ItemSpacing.x;
-		ImGui::SetNextItemWidth(-(ButtonWidth + Spacing));
+		float ButtonsWidth = ObjButtonWidth + FbxButtonWidth + Spacing;
+
+		ImGui::SetNextItemWidth(-(ButtonsWidth + Spacing));
 
 		if (ImGui::BeginCombo("##Mesh", Preview.c_str()))
 		{
@@ -1484,7 +1517,7 @@ bool FEditorPropertyWidget::RenderPropertyWidget(TArray<FPropertyDescriptor>& Pr
 		// .obj 임포트 버튼
 		ImGui::SameLine();
 
-		ImGui::SetCursorPosX(ImGui::GetWindowContentRegionMax().x - ButtonWidth);
+		ImGui::SetCursorPosX(ImGui::GetWindowContentRegionMax().x - ButtonsWidth);
 		if (ImGui::Button("Import OBJ"))
 		{
 			FString ObjPath = OpenObjFileDialog();
@@ -1499,6 +1532,24 @@ bool FEditorPropertyWidget::RenderPropertyWidget(TArray<FPropertyDescriptor>& Pr
 				}
 			}
 		}
+
+		ImGui::SameLine();
+
+		if (ImGui::Button("Import FBX"))
+		{
+			FString FbxPath = OpenFbxFileDialog();
+			if (!FbxPath.empty())
+			{
+				ID3D11Device* Device = GEngine->GetRenderer().GetFD3DDevice().GetDevice();
+				UStaticMesh* Loaded = FStaticMeshManager::LoadFbxStaticMesh(FbxPath, Device);
+				if (Loaded)
+				{
+					*Val = FbxPath;
+					bChanged = true;
+				}
+			}
+		}
+
 		break;
 	}
 	case EPropertyType::MaterialSlot:

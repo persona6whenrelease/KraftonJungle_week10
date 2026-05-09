@@ -12,7 +12,17 @@
 #include "Render/Proxy/PrimitiveSceneProxy.h"
 #include "Serialization/Archive.h"
 
+#include "Core/Log.h"
+
 IMPLEMENT_CLASS(UStaticMeshComponent, UMeshComponent)
+
+static bool IsFbxPath(const FString& Path)
+{
+	std::filesystem::path FilePath(FPaths::ToWide(Path));
+	std::wstring Ext = FilePath.extension().wstring();
+	std::transform(Ext.begin(), Ext.end(), Ext.begin(), ::towlower);
+	return Ext == L".fbx";
+}
 
 FPrimitiveSceneProxy* UStaticMeshComponent::CreateSceneProxy()
 {
@@ -21,6 +31,21 @@ FPrimitiveSceneProxy* UStaticMeshComponent::CreateSceneProxy()
 
 void UStaticMeshComponent::SetStaticMesh(UStaticMesh* InMesh)
 {
+	// if (InMesh && InMesh->GetStaticMeshAsset())
+	// {
+	// 	FStaticMesh* Asset = InMesh->GetStaticMeshAsset();
+	//
+	// 	UE_LOG("[FBX] SetStaticMesh. Path=%s, Vertices=%zu, Indices=%zu, Sections=%zu",
+	// 	       InMesh->GetAssetPathFileName().c_str(),
+	// 	       Asset->Vertices.size(),
+	// 	       Asset->Indices.size(),
+	// 	       Asset->Sections.size());
+	// }
+	// else
+	// {
+	// 	UE_LOG("[FBX] SetStaticMesh nullptr or empty asset.");
+	// }
+	
 	StaticMesh = InMesh;
 	if (InMesh)
 	{
@@ -232,7 +257,9 @@ void UStaticMeshComponent::PostDuplicate()
 	if (!StaticMeshPath.empty() && StaticMeshPath != "None")
 	{
 		ID3D11Device* Device = GEngine->GetRenderer().GetFD3DDevice().GetDevice();
-		UStaticMesh* Loaded = FStaticMeshManager::LoadObjStaticMesh(StaticMeshPath, Device);
+		UStaticMesh* Loaded = IsFbxPath(StaticMeshPath)
+			                      ? FStaticMeshManager::LoadFbxStaticMesh(StaticMeshPath, Device)
+			                      : FStaticMeshManager::LoadObjStaticMesh(StaticMeshPath, Device);
 		if (Loaded)
 		{
 			// SetStaticMesh는 MaterialSlots를 덮어쓰므로, 직렬화된 슬롯 정보를 백업·복원한다.
@@ -290,7 +317,9 @@ void UStaticMeshComponent::PostEditProperty(const char* PropertyName)
 		else
 		{
 			ID3D11Device* Device = GEngine->GetRenderer().GetFD3DDevice().GetDevice();
-			UStaticMesh* Loaded = FStaticMeshManager::LoadObjStaticMesh(StaticMeshPath, Device);
+			UStaticMesh* Loaded = IsFbxPath(StaticMeshPath)
+				                      ? FStaticMeshManager::LoadFbxStaticMesh(StaticMeshPath, Device)
+				                      : FStaticMeshManager::LoadObjStaticMesh(StaticMeshPath, Device);
 			SetStaticMesh(Loaded);
 		}
 		CacheLocalBounds();
