@@ -169,6 +169,9 @@
     <Filter Include="Source\Engine\Serialization">
       <UniqueIdentifier>{b03fb85a-4e75-0b00-08fd-bb38cdc05e3f}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source\Engine\SkeletalMesh">
+      <UniqueIdentifier>{0aeeefb2-6b24-d380-6eca-5ab435e5427b}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Source\Engine\Sound">
       <UniqueIdentifier>{7fe5b1dc-5182-7345-055b-136f48fc3a8b}</UniqueIdentifier>
     </Filter>
@@ -620,12 +623,6 @@
     <ClCompile Include="Source\Engine\Component\Script\LuaScriptComponent.cpp">
       <Filter>Source\Engine\Component\Script</Filter>
     </ClCompile>
-    <ClCompile Include="Source\Engine\Component\SkeletalMeshComponent.cpp">
-      <Filter>Source\Engine\Component</Filter>
-    </ClCompile>
-    <ClCompile Include="Source\Engine\Component\SkinnedMeshComponent.cpp">
-      <Filter>Source\Engine\Component</Filter>
-    </ClCompile>
     <ClCompile Include="Source\Engine\Component\SpringArmComponent.cpp">
       <Filter>Source\Engine\Component</Filter>
     </ClCompile>
@@ -740,9 +737,6 @@
     <ClCompile Include="Source\Engine\Mesh\ObjManager.cpp">
       <Filter>Source\Engine\Mesh</Filter>
     </ClCompile>
-    <ClCompile Include="Source\Engine\Mesh\SkeletalMesh.cpp">
-      <Filter>Source\Engine\Mesh</Filter>
-    </ClCompile>
     <ClCompile Include="Source\Engine\Mesh\StaticMesh.cpp">
       <Filter>Source\Engine\Mesh</Filter>
     </ClCompile>
@@ -828,9 +822,6 @@
       <Filter>Source\Engine\Render\Proxy</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Render\Proxy\PrimitiveSceneProxy.cpp">
-      <Filter>Source\Engine\Render\Proxy</Filter>
-    </ClCompile>
-    <ClCompile Include="Source\Engine\Render\Proxy\SkeletalMeshSceneProxy.cpp">
       <Filter>Source\Engine\Render\Proxy</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Render\Proxy\StaticMeshSceneProxy.cpp">
@@ -1048,6 +1039,9 @@
     </ClCompile>
     <ClCompile Include="Source\Engine\Serialization\SceneSaveManager.cpp">
       <Filter>Source\Engine\Serialization</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Engine\SkeletalMesh\SkeletalMesh.cpp">
+      <Filter>Source\Engine\SkeletalMesh</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Sound\SoundManager.cpp">
       <Filter>Source\Engine\Sound</Filter>
@@ -1403,12 +1397,6 @@
     <ClInclude Include="Source\Engine\Component\Script\LuaScriptComponent.h">
       <Filter>Source\Engine\Component\Script</Filter>
     </ClInclude>
-    <ClInclude Include="Source\Engine\Component\SkeletalMeshComponent.h">
-      <Filter>Source\Engine\Component</Filter>
-    </ClInclude>
-    <ClInclude Include="Source\Engine\Component\SkinnedMeshComponent.h">
-      <Filter>Source\Engine\Component</Filter>
-    </ClInclude>
     <ClInclude Include="Source\Engine\Component\SpringArmComponent.h">
       <Filter>Source\Engine\Component</Filter>
     </ClInclude>
@@ -1553,12 +1541,6 @@
     <ClInclude Include="Source\Engine\Mesh\ObjManager.h">
       <Filter>Source\Engine\Mesh</Filter>
     </ClInclude>
-    <ClInclude Include="Source\Engine\Mesh\SkeletalMesh.h">
-      <Filter>Source\Engine\Mesh</Filter>
-    </ClInclude>
-    <ClInclude Include="Source\Engine\Mesh\SkeletalMeshAsset.h">
-      <Filter>Source\Engine\Mesh</Filter>
-    </ClInclude>
     <ClInclude Include="Source\Engine\Mesh\StaticMesh.h">
       <Filter>Source\Engine\Mesh</Filter>
     </ClInclude>
@@ -1671,9 +1653,6 @@
       <Filter>Source\Engine\Render\Proxy</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Render\Proxy\PrimitiveSceneProxy.h">
-      <Filter>Source\Engine\Render\Proxy</Filter>
-    </ClInclude>
-    <ClInclude Include="Source\Engine\Render\Proxy\SkeletalMeshSceneProxy.h">
       <Filter>Source\Engine\Render\Proxy</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Render\Proxy\StaticMeshSceneProxy.h">
@@ -1918,6 +1897,12 @@
     </ClInclude>
     <ClInclude Include="Source\Engine\Serialization\WindowsArchive.h">
       <Filter>Source\Engine\Serialization</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\SkeletalMesh\SkeletalMesh.h">
+      <Filter>Source\Engine\SkeletalMesh</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\SkeletalMesh\SkeletalMeshAsset.h">
+      <Filter>Source\Engine\SkeletalMesh</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Sound\SoundManager.h">
       <Filter>Source\Engine\Sound</Filter>

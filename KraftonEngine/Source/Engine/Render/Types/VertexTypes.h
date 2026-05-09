@@ -2,6 +2,7 @@
 
 #include "Math/Vector.h"
 #include "Math/Matrix.h"
+#include "Math/Quat.h"
 #include "Render/Types/RenderTypes.h"
 #include <cassert>
 
@@ -46,14 +47,32 @@ struct FVertexPNCTT
 struct FSkeletalMeshVertex
 {
 	FVector Position;
-	int boneIndices[4] = {0,0,0,0};
+	FVector Normal;
+	FVector4 Tangent;
+	FVector4 Color;
+	FVector2 UV;
+	int boneIndices[4] = { 0,0,0,0 };
 	float boneWeights[4] = { 0.0f,0.0f,0.0f,0.0f };
 };
 
 struct FBone
 {
-	FMatrix skinningMatrix ; // = BoneTransform * InverseBindPose
+	int32 ParentIndex = -1;
+
+	FVector Scale = { 1.0f, 1.0f, 1.0f };
+	FQuat Rotation = { 0.0f, 0.0f, 0.0f, 1.0f };
+	FVector Translation = { 0.0f, 0.0f, 0.0f };
+	FMatrix InverseBindMatrix = FMatrix::Identity;
 };
+
+struct TSkeletalData
+{
+	TArray<FSkeletalMeshVertex> Vertices;
+	TArray<FBone> Bones;
+	TArray<uint32> Indices;
+};
+
+using FSkeletalData = TSkeletalData;
 
 template<typename VertexType>
 struct TMeshData

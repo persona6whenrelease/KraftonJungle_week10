@@ -51,7 +51,6 @@ private:
 	ID3D11Buffer* Buffer = nullptr;
 };
 
-
 class FIndexBuffer
 {
 public:
