@@ -1,4 +1,5 @@
 ﻿#include "SkeletalMeshComponent.h"
+#include "Render/Proxy/SkeletalMeshSceneProxy.h"
 #include "Core/Log.h"
 
 
@@ -112,8 +113,7 @@ FMeshDataView USkeletalMeshComponent::GetMeshDataView() const
 
 class FPrimitiveSceneProxy* USkeletalMeshComponent::CreateSceneProxy()
 {
-    // TODO: FSkeletalMeshSceneProxy implementation
-    return nullptr; 
+    return new FSkeletalMeshSceneProxy(this);
 }
 
 void USkeletalMeshComponent::SetSkeletalMesh(USkeletalMesh* InMesh)
@@ -142,5 +142,6 @@ int32 USkeletalMeshComponent::GetParentBoneIndex(int32 BoneIndex) const
 
 void USkeletalMeshComponent::GetEditableProperties(TArray<FPropertyDescriptor>& OutProps)
 {
+	//Todo
     // Super::GetEditableProperties(OutProps);
 }

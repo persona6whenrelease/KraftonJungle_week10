@@ -3,6 +3,7 @@
 #include "Component/SkinnedMeshComponent.h"
 #include "Mesh/SkeletalMesh.h"
 #include "Render/Resource/Buffer.h"
+#include "Materials/Material.h"
 
 class FSkeletalMeshSceneProxy;
 
@@ -30,6 +31,8 @@ public:
     void SetSkeletalMesh(USkeletalMesh* InMesh);
     USkeletalMesh* GetSkeletalMesh() const { return SkeletalMesh; }
 
+    const TArray<UMaterial*>& GetOverrideMaterials() const { return OverrideMaterials; }
+
     // USkinnedMeshComponent interface
     const TArray<FMatrix>& GetInverseBindPoses() const override;
     int32 GetParentBoneIndex(int32 BoneIndex) const override;
@@ -48,4 +51,6 @@ protected:
     
     /** Static index buffer from the asset. */
     FIndexBuffer* IndexBuffer = nullptr;
+
+    TArray<UMaterial*> OverrideMaterials;
 };

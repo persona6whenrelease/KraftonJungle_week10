@@ -154,7 +154,7 @@ void FDrawCommandBuilder::BuildCommandForProxy(const FPrimitiveSceneProxy& Proxy
 
 		// Section Material이 셰이더를 가지면 사용, 없으면 Proxy 폴백
 		FShader* SectionShader = (Section.Material && Section.Material->GetShader())
-			? Section.Material->GetShader()
+			? Section.Material->GetShader() 
 			: Proxy.GetShader();
 		FShader* EffectiveShader = SelectEffectiveShader(SectionShader, CollectViewMode);
 
