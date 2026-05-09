@@ -18,6 +18,8 @@ public:
 	FRenderBufferView GetRenderBufferView() const override;
 private:
 	USkinnedMeshComponent* GetSkinnedMeshComponent() const;
+	void RebuildSectionDraws();
+
 	std::unique_ptr<FSkinnedMeshBuffer> RenderBuffer;	//DynamicVertexBuffer 소유
 	TArray<FVertexPNCTT> SkinnedVertices;
 	uint32 CachedVertexCount = 0;

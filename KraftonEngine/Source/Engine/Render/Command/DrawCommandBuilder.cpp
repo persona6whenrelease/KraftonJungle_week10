@@ -144,15 +144,15 @@ void FDrawCommandBuilder::BuildCommandForProxy(const FPrimitiveSceneProxy& Proxy
 
 	// MeshBuffer → FDrawCommandBuffer 변환
 	FDrawCommandBuffer ProxyBuffer;
-	ProxyBuffer.VB = Proxy.GetMeshBuffer()->GetVertexBuffer().GetBuffer();
-	ProxyBuffer.VBStride = Proxy.GetMeshBuffer()->GetVertexBuffer().GetStride();
-	ProxyBuffer.IB = Proxy.GetMeshBuffer()->GetIndexBuffer().GetBuffer();
+	ProxyBuffer.VB = BufferView.VB;// Proxy.GetMeshBuffer()->GetVertexBuffer().GetBuffer();
+	ProxyBuffer.VBStride = BufferView.VBStride;//Proxy.GetMeshBuffer()->GetVertexBuffer().GetStride();
+	ProxyBuffer.IB = BufferView.IB;// Proxy.GetMeshBuffer()->GetIndexBuffer().GetBuffer();
 
 	// 섹션당 1개 커맨드 (per-section 셰이더)
 	for (const FMeshSectionDraw& Section : Proxy.GetSectionDraws())
 	{
 		if (Section.IndexCount == 0) continue;
-		if (!ProxyBuffer.IB) continue;
+		if (Section.FirstIndex + Section.IndexCount > BufferView.IndexCount) continue;
 
 		// Section Material이 셰이더를 가지면 사용, 없으면 Proxy 폴백
 		FShader* SectionShader = (Section.Material && Section.Material->GetShader())

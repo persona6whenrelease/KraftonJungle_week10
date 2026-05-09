@@ -78,11 +78,11 @@ void FShadowMapPass::SetupShadowRenderState(FD3DDevice& Device, FSystemResources
 
 	// Shadow CB 캐시 초기화 — Bias/SlopeBias/Sharpen은 RenderDirectionalShadows에서 per-light 값으로 갱신
 	ShadowCBCache = {};
-	ShadowCBCache.ShadowBias       = FShadowSettings::kDefaultBias;
-	ShadowCBCache.ShadowSlopeBias  = FShadowSettings::kDefaultSlopeBias;
+	ShadowCBCache.ShadowBias = FShadowSettings::kDefaultBias;
+	ShadowCBCache.ShadowSlopeBias = FShadowSettings::kDefaultSlopeBias;
 	ShadowCBCache.ShadowFilterMode = static_cast<uint32>(CurrentFilterMode);
-	ShadowCBCache.CSMBlendRange    = FShadowSettings::kDefaultCSMBlendRange;
-	ShadowCBCache.CSMBlendEnabled  = FShadowSettings::kDefaultCSMBlendEnabled ? 1u : 0u;
+	ShadowCBCache.CSMBlendRange = FShadowSettings::kDefaultCSMBlendRange;
+	ShadowCBCache.CSMBlendEnabled = FShadowSettings::kDefaultCSMBlendEnabled ? 1u : 0u;
 }
 
 // ============================================================
@@ -174,8 +174,8 @@ void FShadowMapPass::EndPass(const FPassContext& Ctx)
 
 	// 메인 뷰포트 복원
 	D3D11_VIEWPORT MainVP = {};
-	MainVP.Width    = Ctx.Frame.ViewportWidth;
-	MainVP.Height   = Ctx.Frame.ViewportHeight;
+	MainVP.Width = Ctx.Frame.ViewportWidth;
+	MainVP.Height = Ctx.Frame.ViewportHeight;
 	MainVP.MinDepth = 0.0f;
 	MainVP.MaxDepth = 1.0f;
 	DC->RSSetViewports(1, &MainVP);
@@ -195,7 +195,7 @@ void FShadowMapPass::PatchLightBuffer(const FPassContext& Ctx)
 	ID3D11DeviceContext* DC = Ctx.Device.GetDeviceContext();
 	const FSceneEnvironment& Env = Ctx.Scene->GetEnvironment();
 	const uint32 NumPoints = Env.GetNumPointLights();
-	const uint32 NumSpots  = Env.GetNumSpotLights();
+	const uint32 NumSpots = Env.GetNumSpotLights();
 
 	ID3D11Buffer* LightBuf = Ctx.Resources.ForwardLights.LightBuffer;
 	D3D11_MAPPED_SUBRESOURCE Mapped = {};
@@ -382,7 +382,7 @@ void FShadowMapPass::EnsureResources(const FPassContext& Ctx)
 		const FGlobalDirectionalLightParams& DirectionalParams = Env.GetGlobalDirectionalLightParams();
 		const float ScaledResolution = static_cast<float>(ProjShadow.CSMResolution) * DirectionalParams.ShadowResolutionScale;
 		uint32 Resolution = static_cast<uint32>((std::max)(64.0f, (std::min)(ScaledResolution, 8192.0f)));
-		
+
 		Res.EnsureCSM(Dev, Resolution);
 		if (bVSM) Res.EnsureCSM_VSM(Dev, Resolution);
 	}
@@ -459,7 +459,7 @@ void FShadowMapPass::EnsureResources(const FPassContext& Ctx)
 		// 해상도 내림차순 정렬 → area-budget 기반 페이지 분배
 		std::sort(SpotAllocs.begin(), SpotAllocs.end(), [](const FAlloc& a, const FAlloc& b) {
 			return a.snappedRes > b.snappedRes;
-		});
+			});
 
 		const float SpotPageBudget = SpotAtlasArea / PackingOverhead;
 		SpotPageGroups.resize(EstimatedSpotPages);
@@ -545,7 +545,7 @@ void FShadowMapPass::EnsureResources(const FPassContext& Ctx)
 		// 해상도 내림차순 정렬 → area-budget 기반 페이지 분배
 		std::sort(PointAllocs.begin(), PointAllocs.end(), [](const FAlloc& a, const FAlloc& b) {
 			return a.snappedRes > b.snappedRes;
-		});
+			});
 
 		const float PointPageBudget = PointAtlasArea / PackingOverhead;
 		PointPageGroups.resize(EstimatedPages);
@@ -580,7 +580,7 @@ void FShadowMapPass::UpdateShadowCB(const FPassContext& Ctx)
 	FShadowMapResources& Res = Ctx.Resources.ShadowResources;
 
 	ShadowCBCache.CSMResolution = Res.CSM.Resolution;
-	ShadowCBCache.SpotAtlasResolution  = Res.Spot.Resolution > 0 ? Res.Spot.Resolution : 4096;
+	ShadowCBCache.SpotAtlasResolution = Res.Spot.Resolution > 0 ? Res.Spot.Resolution : 4096;
 	ShadowCBCache.PointAtlasResolution = Res.Point.Resolution > 0 ? Res.Point.Resolution : 4096;
 
 	Ctx.Resources.ShadowConstantBuffer.Update(DC, &ShadowCBCache, sizeof(FShadowCBData));
@@ -627,8 +627,10 @@ void FShadowMapPass::DrawShadowCasters(ID3D11DeviceContext* DC, FScene& Scene, F
 
 		if (!Partition && !LightFrustum.IntersectAABB(Proxy->GetCachedBounds())) continue;
 
-		FMeshBuffer* Mesh = Proxy->GetMeshBuffer();
-		if (!Mesh || !Mesh->IsValid()) continue;
+		//FMeshBuffer* Mesh = Proxy->GetMeshBuffer();
+		//if (!Mesh || !Mesh->IsValid()) continue;
+		FRenderBufferView BufferView = Proxy->GetRenderBufferView();
+		if (!BufferView.VB || !BufferView.IB || BufferView.IndexCount == 0) return;
 
 		// Two-sided shadow: front-cull ↔ no-cull 전환
 		bool bTwoSided = Proxy->CastsShadowAsTwoSided();
@@ -644,12 +646,12 @@ void FShadowMapPass::DrawShadowCasters(ID3D11DeviceContext* DC, FScene& Scene, F
 		ID3D11Buffer* b1 = ShadowPerObjectCB.GetBuffer();
 		DC->VSSetConstantBuffers(ECBSlot::PerObject, 1, &b1);
 
-		ID3D11Buffer* VB = Mesh->GetVertexBuffer().GetBuffer();
-		uint32 VBStride = Mesh->GetVertexBuffer().GetStride();
+		ID3D11Buffer* VB = BufferView.VB;//Mesh->GetVertexBuffer().GetBuffer();
+		uint32 VBStride = BufferView.VBStride;// Mesh->GetVertexBuffer().GetStride();
 		uint32 Offset = 0;
 		DC->IASetVertexBuffers(0, 1, &VB, &VBStride, &Offset);
 
-		ID3D11Buffer* IB = Mesh->GetIndexBuffer().GetBuffer();
+		ID3D11Buffer* IB = BufferView.IB;// Mesh->GetIndexBuffer().GetBuffer();
 		if (IB)
 			DC->IASetIndexBuffer(IB, DXGI_FORMAT_R32_UINT, 0);
 
@@ -701,7 +703,7 @@ void FShadowMapPass::BlurVSMTexture(const FPassContext& Ctx, FShadowMapResources
 
 	// RTV/SRV unbind helpers
 	ID3D11ShaderResourceView* nullSRV = nullptr;
-	ID3D11RenderTargetView*   nullRTV = nullptr;
+	ID3D11RenderTargetView* nullRTV = nullptr;
 
 	// Shadow depth 렌더 후 남아있는 RTV 바인딩 해제 (R/W hazard 방지)
 	DC->OMSetRenderTargets(1, &nullRTV, nullptr);
@@ -713,56 +715,56 @@ void FShadowMapPass::BlurVSMTexture(const FPassContext& Ctx, FShadowMapResources
 		ID3D11ShaderResourceView* TempSRV,
 		ID3D11RenderTargetView* const* DstRTVs,
 		uint32 Resolution, uint32 SliceCount, float BlurRadius)
-	{
-		if (!SrcSRV || !TempSRV || BlurRadius <= 0.0f) return;
-
-		float TexelSize = 1.0f / static_cast<float>(Resolution);
-
-		D3D11_VIEWPORT VP = {};
-		VP.Width    = static_cast<float>(Resolution);
-		VP.Height   = static_cast<float>(Resolution);
-		VP.MinDepth = 0.0f;
-		VP.MaxDepth = 1.0f;
-		DC->RSSetViewports(1, &VP);
-
-		for (uint32 Slice = 0; Slice < SliceCount; ++Slice)
 		{
-			FVSMBlurCBData CBData;
-			CBData.ArraySlice = static_cast<float>(Slice);
-			CBData.BlurRadius = BlurRadius;
+			if (!SrcSRV || !TempSRV || BlurRadius <= 0.0f) return;
 
-			// Pass 1: Horizontal — Source → Temp
-			CBData.TexelDirX  = TexelSize;
-			CBData.TexelDirY  = 0.0f;
+			float TexelSize = 1.0f / static_cast<float>(Resolution);
 
-			ShadowLightCB.Update(DC, &CBData, sizeof(FVSMBlurCBData));
-			ID3D11Buffer* b2 = ShadowLightCB.GetBuffer();
-			DC->VSSetConstantBuffers(ECBSlot::PerShader0, 1, &b2);
-			DC->PSSetConstantBuffers(ECBSlot::PerShader0, 1, &b2);
+			D3D11_VIEWPORT VP = {};
+			VP.Width = static_cast<float>(Resolution);
+			VP.Height = static_cast<float>(Resolution);
+			VP.MinDepth = 0.0f;
+			VP.MaxDepth = 1.0f;
+			DC->RSSetViewports(1, &VP);
 
-			DC->OMSetRenderTargets(1, &TempRTVs[Slice], nullptr);
-			DC->PSSetShaderResources(0, 1, &SrcSRV);
-			DC->Draw(3, 0);
+			for (uint32 Slice = 0; Slice < SliceCount; ++Slice)
+			{
+				FVSMBlurCBData CBData;
+				CBData.ArraySlice = static_cast<float>(Slice);
+				CBData.BlurRadius = BlurRadius;
 
-			// Unbind RTV + SRV before pass 2 (Temp is now both src and was dst)
-			DC->OMSetRenderTargets(1, &nullRTV, nullptr);
-			DC->PSSetShaderResources(0, 1, &nullSRV);
+				// Pass 1: Horizontal — Source → Temp
+				CBData.TexelDirX = TexelSize;
+				CBData.TexelDirY = 0.0f;
 
-			// Pass 2: Vertical — Temp → Dest (original moment texture)
-			CBData.TexelDirX  = 0.0f;
-			CBData.TexelDirY  = TexelSize;
+				ShadowLightCB.Update(DC, &CBData, sizeof(FVSMBlurCBData));
+				ID3D11Buffer* b2 = ShadowLightCB.GetBuffer();
+				DC->VSSetConstantBuffers(ECBSlot::PerShader0, 1, &b2);
+				DC->PSSetConstantBuffers(ECBSlot::PerShader0, 1, &b2);
 
-			ShadowLightCB.Update(DC, &CBData, sizeof(FVSMBlurCBData));
+				DC->OMSetRenderTargets(1, &TempRTVs[Slice], nullptr);
+				DC->PSSetShaderResources(0, 1, &SrcSRV);
+				DC->Draw(3, 0);
 
-			DC->OMSetRenderTargets(1, &DstRTVs[Slice], nullptr);
-			DC->PSSetShaderResources(0, 1, &TempSRV);
-			DC->Draw(3, 0);
+				// Unbind RTV + SRV before pass 2 (Temp is now both src and was dst)
+				DC->OMSetRenderTargets(1, &nullRTV, nullptr);
+				DC->PSSetShaderResources(0, 1, &nullSRV);
 
-			// Unbind both for next slice (DstRTV[Slice] shares texture with SrcSRV)
-			DC->OMSetRenderTargets(1, &nullRTV, nullptr);
-			DC->PSSetShaderResources(0, 1, &nullSRV);
-		}
-	};
+				// Pass 2: Vertical — Temp → Dest (original moment texture)
+				CBData.TexelDirX = 0.0f;
+				CBData.TexelDirY = TexelSize;
+
+				ShadowLightCB.Update(DC, &CBData, sizeof(FVSMBlurCBData));
+
+				DC->OMSetRenderTargets(1, &DstRTVs[Slice], nullptr);
+				DC->PSSetShaderResources(0, 1, &TempSRV);
+				DC->Draw(3, 0);
+
+				// Unbind both for next slice (DstRTV[Slice] shares texture with SrcSRV)
+				DC->OMSetRenderTargets(1, &nullRTV, nullptr);
+				DC->PSSetShaderResources(0, 1, &nullSRV);
+			}
+		};
 
 	// Directional CSM 기본 sharpen (전체 CSM에 공통 적용)
 	float DirectionalSharpen = ShadowCBCache.ShadowSharpen;
@@ -841,12 +843,12 @@ void FShadowMapPass::RenderDirectionalShadows(const FPassContext& Ctx, FShadowMa
 
 	// b5 Bias/SlopeBias/Sharpen: FShadowSettings override > per-light 값
 	const auto& Settings = FShadowSettings::Get();
-	ShadowCBCache.ShadowBias       = Settings.GetBias().value_or(DirectionalParams.ShadowBias);
-	ShadowCBCache.ShadowSlopeBias  = Settings.GetSlopeBias().value_or(DirectionalParams.ShadowSlopeBias);
+	ShadowCBCache.ShadowBias = Settings.GetBias().value_or(DirectionalParams.ShadowBias);
+	ShadowCBCache.ShadowSlopeBias = Settings.GetSlopeBias().value_or(DirectionalParams.ShadowSlopeBias);
 	ShadowCBCache.ShadowNormalBias = DirectionalParams.ShadowNormalBias;
-	ShadowCBCache.ShadowSharpen    = Settings.GetSharpen().value_or(DirectionalParams.ShadowSharpen);
-	ShadowCBCache.CSMBlendRange    = (std::max)(0.0f, Settings.GetEffectiveCSMBlendRange());
-	ShadowCBCache.CSMBlendEnabled  = Settings.GetEffectiveCSMBlendEnabled() ? 1u : 0u;
+	ShadowCBCache.ShadowSharpen = Settings.GetSharpen().value_or(DirectionalParams.ShadowSharpen);
+	ShadowCBCache.CSMBlendRange = (std::max)(0.0f, Settings.GetEffectiveCSMBlendRange());
+	ShadowCBCache.CSMBlendEnabled = Settings.GetEffectiveCSMBlendEnabled() ? 1u : 0u;
 
 	FMatrix CameraView = Ctx.Frame.View;
 	FMatrix CameraProj = Ctx.Frame.Proj;
@@ -881,7 +883,7 @@ void FShadowMapPass::RenderDirectionalShadows(const FPassContext& Ctx, FShadowMa
 
 	ID3D11DeviceContext* DC = Ctx.Device.GetDeviceContext();
 
-	for(int32 i = 0; i < NumCascades; ++i)
+	for (int32 i = 0; i < NumCascades; ++i)
 	{
 		const float CascadeNearZ = CascadeRanges[i].NearZ;
 		const float CascadeFarZ = CascadeRanges[i].FarZ;
@@ -906,7 +908,7 @@ void FShadowMapPass::RenderDirectionalShadows(const FPassContext& Ctx, FShadowMa
 
 		if (CurrentFilterMode == EShadowFilterMode::VSM && Res.CSM.IsVSMValid())
 		{
-			float clearColor[4] = {0.f, 0.f, 0.f, 0.f};
+			float clearColor[4] = { 0.f, 0.f, 0.f, 0.f };
 			DC->ClearRenderTargetView(Res.CSM.VSMRTV[i], clearColor);
 			DC->ClearDepthStencilView(Res.CSM.VSMDSV[i], D3D11_CLEAR_DEPTH, 0.0f, 0);
 			DC->OMSetRenderTargets(1, &Res.CSM.VSMRTV[i], Res.CSM.VSMDSV[i]);
@@ -994,7 +996,7 @@ void FShadowMapPass::RenderSpotShadows(const FPassContext& Ctx, FShadowMapResour
 	{
 		if (bVSM && Res.Spot.IsVSMValid())
 		{
-			float clearColor[4] = {0.f, 0.f, 0.f, 0.f};
+			float clearColor[4] = { 0.f, 0.f, 0.f, 0.f };
 			DC->ClearRenderTargetView(Res.Spot.VSMRTVs[Page], clearColor);
 			DC->ClearDepthStencilView(Res.Spot.VSMDSVs[Page], D3D11_CLEAR_DEPTH, 0.0f, 0);
 		}
@@ -1023,8 +1025,8 @@ void FShadowMapPass::RenderSpotShadows(const FPassContext& Ctx, FShadowMapResour
 		// Shadow Viewport Computation
 		ShadowVP.TopLeftX = static_cast<float>(AtlasRegion.X);
 		ShadowVP.TopLeftY = static_cast<float>(AtlasRegion.Y);
-		ShadowVP.Width    = static_cast<float>(AtlasRegion.Size);
-		ShadowVP.Height   = static_cast<float>(AtlasRegion.Size);
+		ShadowVP.Width = static_cast<float>(AtlasRegion.Size);
+		ShadowVP.Height = static_cast<float>(AtlasRegion.Size);
 
 		auto VP = FLightFrustumUtils::BuildSpotLightViewProj(Env.GetSpotLight(LightIdx));
 		FConvexVolume LightFrustum;
@@ -1049,18 +1051,18 @@ void FShadowMapPass::RenderSpotShadows(const FPassContext& Ctx, FShadowMapResour
 		float HalfSize = std::round((1.0f - Sharpen) * 3.0f); // mirrors ComputePCFHalfSize
 		float PaddingUV = HalfSize / AtlasF;
 		FVector4 AtlasScaleBias = FVector4(static_cast<float>(AtlasRegion.Size) / AtlasF - 2 * PaddingUV,
-										   static_cast<float>(AtlasRegion.Size) / AtlasF - 2 * PaddingUV,
-										   static_cast<float>(AtlasRegion.X)	/ AtlasF + PaddingUV,
-										   static_cast<float>(AtlasRegion.Y)	/ AtlasF + PaddingUV);
+			static_cast<float>(AtlasRegion.Size) / AtlasF - 2 * PaddingUV,
+			static_cast<float>(AtlasRegion.X) / AtlasF + PaddingUV,
+			static_cast<float>(AtlasRegion.Y) / AtlasF + PaddingUV);
 		const FSpotLightParams& SpotLight = Env.GetSpotLight(LightIdx);
 		const auto& Settings = FShadowSettings::Get();
 
 		SpotGPUData[ShadowIdx].ViewProj = VP.ViewProj;
 		SpotGPUData[ShadowIdx].AtlasScaleBias = AtlasScaleBias;
 		SpotGPUData[ShadowIdx].PageIndex = PageIdx;
-		SpotGPUData[ShadowIdx].ShadowBias       = Settings.GetBias().value_or(SpotLight.ShadowBias);
-		SpotGPUData[ShadowIdx].ShadowSharpen    = Settings.GetSharpen().value_or(SpotLight.ShadowSharpen);
-		SpotGPUData[ShadowIdx].ShadowSlopeBias  = Settings.GetSlopeBias().value_or(SpotLight.ShadowSlopeBias);
+		SpotGPUData[ShadowIdx].ShadowBias = Settings.GetBias().value_or(SpotLight.ShadowBias);
+		SpotGPUData[ShadowIdx].ShadowSharpen = Settings.GetSharpen().value_or(SpotLight.ShadowSharpen);
+		SpotGPUData[ShadowIdx].ShadowSlopeBias = Settings.GetSlopeBias().value_or(SpotLight.ShadowSlopeBias);
 		SpotGPUData[ShadowIdx].ShadowNormalBias = SpotLight.ShadowNormalBias;
 
 		SpotShadowIndexMap[LightIdx] = static_cast<int32>(ShadowIdx);
@@ -1201,13 +1203,13 @@ void FShadowMapPass::RenderPointShadows(const FPassContext& Ctx, FShadowMapResou
 
 		FPointShadowDataGPU& ShadowData = PointLightShadowGPUData[ShadowedLightIndex];
 		ShadowData.NearZ = ShadowNearZ;
-		ShadowData.FarZ  = PointLight.AttenuationRadius;
+		ShadowData.FarZ = PointLight.AttenuationRadius;
 		ShadowData.PageIndex = PageIdx;
 
 		const auto& Settings = FShadowSettings::Get();
-		ShadowData.ShadowBias       = Settings.GetBias().value_or(PointLight.ShadowBias);
-		ShadowData.ShadowSharpen    = Settings.GetSharpen().value_or(PointLight.ShadowSharpen);
-		ShadowData.ShadowSlopeBias  = Settings.GetSlopeBias().value_or(PointLight.ShadowSlopeBias);
+		ShadowData.ShadowBias = Settings.GetBias().value_or(PointLight.ShadowBias);
+		ShadowData.ShadowSharpen = Settings.GetSharpen().value_or(PointLight.ShadowSharpen);
+		ShadowData.ShadowSlopeBias = Settings.GetSlopeBias().value_or(PointLight.ShadowSlopeBias);
 		ShadowData.ShadowNormalBias = PointLight.ShadowNormalBias;
 
 		float Sharpen = SceneEnvironment.GetPointLight(LightIdx).ShadowSharpen;
@@ -1231,8 +1233,8 @@ void FShadowMapPass::RenderPointShadows(const FPassContext& Ctx, FShadowMapResou
 			ShadowData.FaceAtlasScaleBias[FaceIndex] = FVector4(
 				static_cast<float>(Region.Size) / PointAtlasF - 2 * PaddingUV,
 				static_cast<float>(Region.Size) / PointAtlasF - 2 * PaddingUV,
-				static_cast<float>(Region.X)    / PointAtlasF + PaddingUV,
-				static_cast<float>(Region.Y)    / PointAtlasF + PaddingUV
+				static_cast<float>(Region.X) / PointAtlasF + PaddingUV,
+				static_cast<float>(Region.Y) / PointAtlasF + PaddingUV
 			);
 
 			FConvexVolume LightFrustum;
@@ -1241,8 +1243,8 @@ void FShadowMapPass::RenderPointShadows(const FPassContext& Ctx, FShadowMapResou
 
 			ShadowVP.TopLeftX = static_cast<float>(Region.X);
 			ShadowVP.TopLeftY = static_cast<float>(Region.Y);
-			ShadowVP.Width    = static_cast<float>(Region.Size);
-			ShadowVP.Height   = static_cast<float>(Region.Size);
+			ShadowVP.Width = static_cast<float>(Region.Size);
+			ShadowVP.Height = static_cast<float>(Region.Size);
 
 			if (bVSM && Res.Point.IsVSMValid())
 				DC->OMSetRenderTargets(1, &Res.Point.VSMRTVs[PageIdx], Res.Point.VSMDSVs[PageIdx]);

@@ -10,6 +10,7 @@ FSkinnedMesScenehProxy::FSkinnedMesScenehProxy(USkinnedMeshComponent* InComponen
 
 void FSkinnedMesScenehProxy::UpdateMaterial()
 {
+	RebuildSectionDraws();
 }
 
 void FSkinnedMesScenehProxy::UpdateMesh()
@@ -64,6 +65,7 @@ void FSkinnedMesScenehProxy::UpdateMesh()
 
 
 	SkinnedMeshBuffer = RenderBuffer.get();
+	RebuildSectionDraws();
 }
 
 void FSkinnedMesScenehProxy::UpdateDynamicData()
@@ -99,4 +101,51 @@ FRenderBufferView FSkinnedMesScenehProxy::GetRenderBufferView() const
 USkinnedMeshComponent* FSkinnedMesScenehProxy::GetSkinnedMeshComponent() const
 {
 	return static_cast<USkinnedMeshComponent*>(GetOwner());
+}
+
+void FSkinnedMesScenehProxy::RebuildSectionDraws()
+{
+	USkinnedMeshComponent* SMC = GetSkinnedMeshComponent();
+	if (!SMC)
+	{
+		SectionDraws.clear();
+		return;
+	}
+
+	USkeletalMesh* Mesh = SMC->GetSkeletalMesh();
+	if (!Mesh || !Mesh->GetSkeletalMeshAsset())
+	{
+		SectionDraws.clear();
+		return;
+	}
+
+	FStkeletalMesh* Asset = Mesh->GetSkeletalMeshAsset();
+
+	const TArray<FStaticMaterial>& Slots = Mesh->GetStaticMaterials();
+	const TArray<UMaterial*>& Overrides = SMC->GetOverrideMaterials();
+
+	SectionDraws.clear();
+	SectionDraws.reserve(Asset->MeshAsset.Sections.size());
+
+	for (const FSkeletalMeshSection& Section : Asset->MeshAsset.Sections)
+	{
+		FMeshSectionDraw Draw;
+		Draw.FirstIndex = Section.FirstIndex;
+		Draw.IndexCount = Section.NumTriangles * 3;
+
+		const int32 MaterialIndex = Section.MaterialIndex;
+		if (MaterialIndex >= 0 && MaterialIndex < static_cast<int32>(Slots.size()))
+		{
+			if (MaterialIndex < static_cast<int32>(Overrides.size()) && Overrides[MaterialIndex])
+			{
+				Draw.Material = Overrides[MaterialIndex];
+			}
+			else
+			{
+				Draw.Material = Slots[MaterialIndex].MaterialInterface;
+			}
+		}
+
+		SectionDraws.push_back(Draw);
+	}
 }
