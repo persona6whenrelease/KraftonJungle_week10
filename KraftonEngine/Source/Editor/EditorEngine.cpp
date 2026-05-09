@@ -26,6 +26,7 @@
 #include <filesystem>
 
 #include "Mesh/FbxImporter.h"
+#include "Mesh/StaticMeshAsset.h"
 
 IMPLEMENT_CLASS(UEditorEngine, UEngine)
 
@@ -50,10 +51,6 @@ void UEditorEngine::Init(FWindowsWindow* InWindow)
 	// 엔진 공통 초기화 (Renderer, D3D, 싱글턴 등)
 	UEngine::Init(InWindow);
 
-	// FBX 로드 확인용 (Saves/Logs/Engine.log)
-	const bool bLoaded = FFbxImporter::CanLoadScene("Data/SkeletalModel/SKM_Quinn_Simple.FBX");
-	UE_LOG("FBX CanLoadScene result: %s", bLoaded ? "Success" : "Failed");
-
 	{
 		SCOPE_STARTUP_STAT("ObjManager::ScanMeshAssets");
 		FObjManager::ScanMeshAssets();
@@ -73,6 +70,18 @@ void UEditorEngine::Init(FWindowsWindow* InWindow)
 		MainPanel.Create(Window, Renderer, this);
 	}
 
+	// FBX 로드 확인용. MainPanel 생성 이후라 Editor Console에도 UE_LOG가 출력된다.
+	ID3D11Device* Device = Renderer.GetFD3DDevice().GetDevice();
+
+	UStaticMesh* FbxMesh =
+		FObjManager::LoadFbxStaticMesh(
+			"Data/CarRacer_IllegalElbowPunch/CarRacer_IllegalElbowPunch.FBX",
+			Device
+		);
+
+	UE_LOG("[FBX] LoadFbxStaticMesh result: %s",
+	       FbxMesh ? "Success" : "Failed");
+
 	// 기본 월드 생성 — 모든 서브시스템 초기화의 기반
 	CreateWorldContext(EWorldType::Editor, FName("Default"));
 	SetActiveWorld(WorldList[0].ContextHandle);
@@ -90,6 +99,7 @@ void UEditorEngine::Init(FWindowsWindow* InWindow)
 		SCOPE_STARTUP_STAT("Editor::LoadStartLevel");
 		LoadStartLevel();
 	}
+
 	ApplyTransformSettingsToGizmo();
 
 	// Editor render pipeline

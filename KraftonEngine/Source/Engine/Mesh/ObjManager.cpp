@@ -8,6 +8,7 @@
 #include "Materials/MaterialManager.h"
 #include <filesystem>
 #include <algorithm>
+#include "Mesh/FbxImporter.h"
 
 TMap<FString, UStaticMesh*> FObjManager::StaticMeshCache;
 TArray<FMeshAssetListItem> FObjManager::AvailableMeshFiles;
@@ -251,6 +252,54 @@ UStaticMesh* FObjManager::LoadObjStaticMesh(const FString& PathFileName, ID3D11D
 	return StaticMesh;
 }
 
+UStaticMesh* FObjManager::LoadFbxStaticMesh(
+	const FString& PathFileName,
+	ID3D11Device* InDevice
+)
+{
+	FString CacheKey = GetBinaryFilePath(PathFileName);
+
+	auto It = StaticMeshCache.find(CacheKey);
+	if (It != StaticMeshCache.end())
+	{
+		return It->second;
+	}
+
+	UStaticMesh* StaticMesh = UObjectManager::Get().CreateObject<UStaticMesh>();
+
+	auto NewMeshAsset = new FStaticMesh();
+	TArray<FStaticMaterial> ParsedMaterials;
+
+	if (FFbxImporter::ImportStaticMesh(PathFileName, *NewMeshAsset, ParsedMaterials))
+	{
+		NewMeshAsset->PathFileName = PathFileName;
+
+		StaticMesh->SetStaticMaterials(std::move(ParsedMaterials));
+		StaticMesh->SetStaticMeshAsset(NewMeshAsset);
+
+		FString BinPath = CacheKey;
+		FWindowsBinWriter Writer(BinPath);
+
+		if (Writer.IsValid())
+		{
+			StaticMesh->Serialize(Writer);
+		}
+	}
+	else
+	{
+		delete NewMeshAsset;
+		NewMeshAsset = nullptr;
+	}
+
+	StaticMesh->InitResources(InDevice);
+
+	StaticMeshCache[CacheKey] = StaticMesh;
+
+	ScanMeshAssets();
+	FMaterialManager::Get().ScanMaterialAssets();
+
+	return StaticMesh;
+}
 
 void FObjManager::ReleaseAllGPU()
 {

@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "Core/CoreTypes.h"
 #include "Object/ObjectIterator.h"
@@ -30,6 +30,9 @@ public:
 	static std::string GetBinaryFilePath(const std::string& OriginalPath);
 	static UStaticMesh* LoadObjStaticMesh(const std::string& PathFileName, ID3D11Device* InDevice);
 	static UStaticMesh* LoadObjStaticMesh(const FString& PathFileName, const FImportOptions& Options, ID3D11Device* InDevice);
+
+	static UStaticMesh* LoadFbxStaticMesh(const FString& PathFileName, ID3D11Device* InDevice);
+	
 	static void ScanMeshAssets();
 	static const TArray<FMeshAssetListItem>& GetAvailableMeshFiles();
 	static void ScanObjSourceFiles();
