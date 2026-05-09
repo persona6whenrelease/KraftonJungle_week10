@@ -28,7 +28,7 @@
 #include "Component/StaticMeshComponent.h"
 #include "Component/TextRenderComponent.h"
 
-#include "Mesh/ObjManager.h"
+#include "Mesh/StaticMeshManager.h"
 #include "Mesh/StaticMesh.h"
 
 #include "Materials/Material.h"
@@ -353,7 +353,7 @@ bool FLuaWorldLibrary::SetStaticMesh(UStaticMeshComponent* MeshComponent, const 
 		return false;
 	}
 
-	UStaticMesh* Mesh = FObjManager::LoadObjStaticMesh(StaticMeshPath, Device);
+	UStaticMesh* Mesh = FStaticMeshManager::LoadObjStaticMesh(StaticMeshPath, Device);
 
 	if (!Mesh)
 	{

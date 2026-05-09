@@ -1,4 +1,4 @@
-#include "Mesh/ObjManager.h"
+#include "Mesh/StaticMeshManager.h"
 #include "Mesh/StaticMesh.h"
 #include "Mesh/ObjImporter.h"
 #include "Materials/Material.h"
@@ -10,9 +10,9 @@
 #include <algorithm>
 #include "Mesh/FbxImporter.h"
 
-TMap<FString, UStaticMesh*> FObjManager::StaticMeshCache;
-TArray<FMeshAssetListItem> FObjManager::AvailableMeshFiles;
-TArray<FMeshAssetListItem> FObjManager::AvailableObjFiles;
+TMap<FString, UStaticMesh*> FStaticMeshManager::StaticMeshCache;
+TArray<FMeshAssetListItem> FStaticMeshManager::AvailableMeshFiles;
+TArray<FMeshAssetListItem> FStaticMeshManager::AvailableObjFiles;
 
 static void EnsureMeshCacheDirExists()
 {
@@ -25,7 +25,7 @@ static void EnsureMeshCacheDirExists()
 	}
 }
 
-FString FObjManager::GetBinaryFilePath(const FString& OriginalPath)
+FString FStaticMeshManager::GetBinaryFilePath(const FString& OriginalPath)
 {
 	std::wstring OriginalDiskPath;
 	FString ResolveError;
@@ -49,7 +49,7 @@ FString FObjManager::GetBinaryFilePath(const FString& OriginalPath)
 }
 
 
-void FObjManager::ScanMeshAssets()
+void FStaticMeshManager::ScanMeshAssets()
 {
 	AvailableMeshFiles.clear();
 
@@ -78,7 +78,7 @@ void FObjManager::ScanMeshAssets()
 	}
 }
 
-void FObjManager::ScanObjSourceFiles()
+void FStaticMeshManager::ScanObjSourceFiles()
 {
 	AvailableObjFiles.clear();
 
@@ -110,17 +110,18 @@ void FObjManager::ScanObjSourceFiles()
 	}
 }
 
-const TArray<FMeshAssetListItem>& FObjManager::GetAvailableMeshFiles()
+const TArray<FMeshAssetListItem>& FStaticMeshManager::GetAvailableMeshFiles()
 {
 	return AvailableMeshFiles;
 }
 
-const TArray<FMeshAssetListItem>& FObjManager::GetAvailableObjFiles()
+const TArray<FMeshAssetListItem>& FStaticMeshManager::GetAvailableObjFiles()
 {
 	return AvailableObjFiles;
 }
 
-UStaticMesh* FObjManager::LoadObjStaticMesh(const FString& PathFileName, const FImportOptions& Options, ID3D11Device* InDevice)
+UStaticMesh* FStaticMeshManager::LoadObjStaticMesh(const FString& PathFileName, const FImportOptions& Options,
+                                                   ID3D11Device* InDevice)
 {
 	FString CacheKey = GetBinaryFilePath(PathFileName);
 
@@ -161,7 +162,7 @@ UStaticMesh* FObjManager::LoadObjStaticMesh(const FString& PathFileName, const F
 	return StaticMesh;
 }
 
-UStaticMesh* FObjManager::LoadObjStaticMesh(const FString& PathFileName, ID3D11Device* InDevice)
+UStaticMesh* FStaticMeshManager::LoadObjStaticMesh(const FString& PathFileName, ID3D11Device* InDevice)
 {
 	FString CacheKey = GetBinaryFilePath(PathFileName);
 
@@ -252,7 +253,7 @@ UStaticMesh* FObjManager::LoadObjStaticMesh(const FString& PathFileName, ID3D11D
 	return StaticMesh;
 }
 
-UStaticMesh* FObjManager::LoadFbxStaticMesh(
+UStaticMesh* FStaticMeshManager::LoadFbxStaticMesh(
 	const FString& PathFileName,
 	ID3D11Device* InDevice
 )
@@ -301,7 +302,7 @@ UStaticMesh* FObjManager::LoadFbxStaticMesh(
 	return StaticMesh;
 }
 
-void FObjManager::ReleaseAllGPU()
+void FStaticMeshManager::ReleaseAllGPU()
 {
 	for (auto& [Key, Mesh] : StaticMeshCache)
 	{

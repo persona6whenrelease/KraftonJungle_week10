@@ -2,7 +2,7 @@
 
 #include "Component/MeshComponent.h"
 #include "Core/PropertyTypes.h"
-#include "Mesh/ObjManager.h"
+#include "Mesh/StaticMeshManager.h"
 #include "Mesh/StaticMesh.h"
 #include "../Engine/Runtime/DelegateSubscriptionBox.h"
 

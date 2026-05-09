@@ -18,7 +18,7 @@ struct FMeshAssetListItem
 	FString FullPath;
 };
 
-class FObjManager
+class FStaticMeshManager
 {
 	// path → UStaticMesh* 캐시 (소유권은 UObjectManager)
 	static TMap<std::string, UStaticMesh*> StaticMeshCache;

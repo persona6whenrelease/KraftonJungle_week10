@@ -14,7 +14,7 @@
 #include "Editor/UI/EditorFileUtils.h"
 #include "Editor/Viewport/LevelEditorViewportClient.h"
 #include "Object/ObjectFactory.h"
-#include "Mesh/ObjManager.h"
+#include "Mesh/StaticMeshManager.h"
 #include "Core/ProjectSettings.h"
 #include "Input/InputSystem.h"
 #include "GameFramework/AActor.h"
@@ -53,7 +53,7 @@ void UEditorEngine::Init(FWindowsWindow* InWindow)
 
 	{
 		SCOPE_STARTUP_STAT("ObjManager::ScanMeshAssets");
-		FObjManager::ScanMeshAssets();
+		FStaticMeshManager::ScanMeshAssets();
 	}
 
 	{
@@ -74,7 +74,7 @@ void UEditorEngine::Init(FWindowsWindow* InWindow)
 	ID3D11Device* Device = Renderer.GetFD3DDevice().GetDevice();
 
 	UStaticMesh* FbxMesh =
-		FObjManager::LoadFbxStaticMesh(
+		FStaticMeshManager::LoadFbxStaticMesh(
 			"Data/CarRacer_IllegalElbowPunch/CarRacer_IllegalElbowPunch.FBX",
 			Device
 		);
