@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "Math/Vector.h"
+#include "Math/Matrix.h"
 #include "Render/Types/RenderTypes.h"
 #include <cassert>
 
@@ -50,6 +51,21 @@ struct TMeshData
 };
 
 using FMeshData = TMeshData<FVertex>;
+
+struct FSkeletalVertex {
+	FVector position;
+	FVector normal;
+	FVector4 Color;
+	FVector2 UV;
+	FVector4 Tangent;
+	int boneIndices[4];
+	float boneWeights[4];
+};
+
+struct Bone {
+	FMatrix skinningMatrix; // = BoneTransform * InverseBindPose
+};
+
 
 // 정점 타입에 무관하게 메시 데이터를 참조하는 뷰.
 // 모든 정점 구조체는 FVector Position을 첫 번째 멤버(offset 0)로 가져야 한다.
@@ -107,3 +123,20 @@ struct FMeshDataView
 		return View;
 	}
 };
+
+inline FVector SkinVertexPosition(const FSkeletalVertex& vertex, const std::vector<Bone>& bones) {
+	FVector result = { 0.0f, 0.0f, 0.0f };
+
+	for (int i = 0; i < 4; ++i) {
+		int boneIndex = vertex.boneIndices[i];
+		float weight = vertex.boneWeights[i];
+
+		if (weight > 0.0f && boneIndex >= 0 && boneIndex < bones.size()) {
+			const FMatrix& skinMat = bones[boneIndex].skinningMatrix;
+			FVector transformed = skinMat.TransformPosition(vertex.position);
+			result = result + (transformed * weight);
+		}
+	}
+
+	return result;
+}

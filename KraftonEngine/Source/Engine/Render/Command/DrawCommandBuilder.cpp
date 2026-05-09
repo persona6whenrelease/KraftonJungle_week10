@@ -119,7 +119,9 @@ void FDrawCommandBuilder::ApplyMaterialRenderState(FDrawCommandRenderState& OutS
 // ============================================================
 void FDrawCommandBuilder::BuildCommandForProxy(const FPrimitiveSceneProxy& Proxy, ERenderPass Pass)
 {
-	if (!Proxy.GetMeshBuffer() || !Proxy.GetMeshBuffer()->IsValid()) return;
+	//if (!Proxy.GetMeshBuffer() || !Proxy.GetMeshBuffer()->IsValid()) return;
+	FRenderBufferView BufferView = Proxy.GetRenderBufferView();
+	if (!BufferView.VB || !BufferView.IB || BufferView.IndexCount == 0) return;
 
 	ID3D11DeviceContext* Ctx = CachedContext;
 

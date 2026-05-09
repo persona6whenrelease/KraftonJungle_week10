@@ -45,10 +45,10 @@ struct FPropertyDescriptor
 
 	// Enum Metadata
 	const char** EnumNames = nullptr;
-	uint32		 EnumCount = 0;
+	uint32_t		 EnumCount = 0;
 
 	// Optional editor metadata. Existing property initializers can ignore these.
 	std::string Category = "Default";
 	std::string Tooltip;
-	uint32 Flags = 0;
+	uint32_t Flags = 0;
 };

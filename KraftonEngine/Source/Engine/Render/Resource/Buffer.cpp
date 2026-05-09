@@ -309,3 +309,9 @@ void FDynamicIndexBuffer::Bind(ID3D11DeviceContext* Context)
 {
 	Context->IASetIndexBuffer(Buffer, DXGI_FORMAT_R32_UINT, 0);
 }
+
+void FSkinnedMeshBuffer::Release()
+{
+	VertexBuffer.Release();
+	IndexBuffer.Release();
+}

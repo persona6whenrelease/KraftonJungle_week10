@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Core/CoreTypes.h"
 
@@ -12,6 +12,7 @@ enum class EDirtyFlag : uint32
 	Material   = 1 << 1,
 	Visibility = 1 << 2,
 	Mesh       = 1 << 3,
+	DynamicData = 1<<4,
 	All        = 0xFFFFFFFF,
 };
 

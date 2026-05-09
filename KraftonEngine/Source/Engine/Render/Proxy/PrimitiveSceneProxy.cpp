@@ -1,4 +1,4 @@
-#include "Render/Proxy/PrimitiveSceneProxy.h"
+﻿#include "Render/Proxy/PrimitiveSceneProxy.h"
 #include "Component/PrimitiveComponent.h"
 #include "GameFramework/AActor.h"
 #include "Render/Shader/ShaderManager.h"
@@ -36,6 +36,20 @@ FShader* FPrimitiveSceneProxy::GetShader() const
 	if (!SectionDraws.empty() && SectionDraws[0].Material)
 		return SectionDraws[0].Material->GetShader();
 	return nullptr;
+}
+
+FRenderBufferView FPrimitiveSceneProxy::GetRenderBufferView() const
+{
+	if (!MeshBuffer) return FRenderBufferView();
+
+	FRenderBufferView BufferView = {};
+	BufferView.VB = MeshBuffer->GetVertexBuffer().GetBuffer();
+	BufferView.VBStride = MeshBuffer->GetVertexBuffer().GetStride();
+	BufferView.IB = MeshBuffer->GetIndexBuffer().GetBuffer();
+	BufferView.IndexCount = MeshBuffer->GetIndexBuffer().GetIndexCount();
+
+	return BufferView;
+
 }
 
 void FPrimitiveSceneProxy::UpdateTransform()

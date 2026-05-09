@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Core/CoreTypes.h"
 #include "Render/Proxy/DirtyFlag.h"
@@ -64,6 +64,7 @@ public:
 	ERenderPass        GetRenderPass()  const;
 	FShader*           GetShader()      const;
 	FMeshBuffer*       GetMeshBuffer()  const { return MeshBuffer; }
+	virtual FRenderBufferView GetRenderBufferView() const;
 
 	const FPerObjectConstants&      GetPerObjectConstants() const { return PerObjectConstants; }
 	const FBoundingBox&             GetCachedBounds()       const { return CachedBounds; }
@@ -89,7 +90,7 @@ public:
 	virtual void UpdateMesh();
 	virtual void UpdateLOD(uint32 /*LODLevel*/) {}
 	virtual void UpdatePerViewport(const FFrameContext& /*Frame*/) {}
-
+	virtual void UpdateDynamicData() {}
 protected:
 	// ================================================================
 	// 서브클래스용 — Update*()에서 쓰기 가능한 캐시 데이터
@@ -105,6 +106,7 @@ protected:
 
 	// 렌더 데이터 캐시 (Update*에서 갱신)
 	FMeshBuffer* MeshBuffer = nullptr;
+	FSkinnedMeshBuffer* SkinnedMeshBuffer = nullptr;
 
 	// 기본 Material — Material 없는 프록시의 폴백
 	UMaterial* DefaultMaterial = nullptr;

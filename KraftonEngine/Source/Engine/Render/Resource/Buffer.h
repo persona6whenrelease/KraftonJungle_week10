@@ -4,6 +4,16 @@
 #include "Core/CoreTypes.h"
 #include "Render/Types/VertexTypes.h"
 
+
+struct FRenderBufferView	
+{
+	ID3D11Buffer* VB = nullptr;
+	uint32 VBStride = 0;
+	ID3D11Buffer* IB = nullptr;
+	uint32 IndexCount = 0;
+};
+
+
 class FVertexBuffer
 {
 public:
@@ -184,4 +194,57 @@ void FMeshBuffer::Create(ID3D11Device* InDevice, const TMeshData<VertexType>& In
 
 		IndexBuffer.Create(InDevice, InMeshData.Indices.data(), IndexCount, IndexByteWidth);
 	}
+}
+
+// ============================================================
+
+class FSkinnedMeshBuffer
+{
+public:
+	FSkinnedMeshBuffer() = default;
+	~FSkinnedMeshBuffer() { Release(); }
+
+	FSkinnedMeshBuffer(const FSkinnedMeshBuffer&) = delete;
+	FSkinnedMeshBuffer& operator=(const FSkinnedMeshBuffer&) = delete;
+	FSkinnedMeshBuffer(FSkinnedMeshBuffer&&) = default;
+	FSkinnedMeshBuffer& operator=(FSkinnedMeshBuffer&&) = default;
+
+	template<typename VertexType>
+	void Create(ID3D11Device* InDevice, const TMeshData<VertexType>& InMeshData);
+	void Release();
+
+	FDynamicVertexBuffer& GetVertexBuffer() { return VertexBuffer; }
+	FIndexBuffer& GetIndexBuffer() { return IndexBuffer; }
+	const FDynamicVertexBuffer& GetVertexBuffer() const { return VertexBuffer; }
+	const FIndexBuffer& GetIndexBuffer() const { return IndexBuffer; }
+	bool IsValid() const { return VertexBuffer.GetBuffer() != nullptr; }
+
+private:
+	FDynamicVertexBuffer VertexBuffer;
+	FIndexBuffer IndexBuffer;
+};
+
+template<typename VertexType>
+inline void FSkinnedMeshBuffer::Create(ID3D11Device* InDevice, const TMeshData<VertexType>& InMeshData)
+{
+	Release();
+
+	if (InMeshData.Vertices.empty())
+	{
+		return;
+	}
+
+	uint32 VertexCount = static_cast<uint32>(InMeshData.Vertices.size());
+	uint32 VertexByteWidth = VertexCount * sizeof(VertexType);
+
+	VertexBuffer.Create(InDevice, VertexCount, sizeof(VertexType));
+
+	if (!InMeshData.Indices.empty())
+	{
+		uint32 IndexCount = static_cast<uint32>(InMeshData.Indices.size());
+		uint32 IndexByteWidth = IndexCount * sizeof(uint32);
+
+		IndexBuffer.Create(InDevice, InMeshData.Indices.data(), IndexCount, IndexByteWidth);
+	}
+
 }

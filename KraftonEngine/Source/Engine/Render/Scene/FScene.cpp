@@ -199,6 +199,10 @@ void FScene::UpdateDirtyProxies()
 			// Mesh가 이미 갱신됐으면 Material도 포함되므로 else if
 			Proxy->UpdateMaterial();
 		}
+		if (HasFlag(FlagsToProcess, EDirtyFlag::DynamicData))
+		{
+			Proxy->UpdateDynamicData();
+		}
 
 		if (HasFlag(FlagsToProcess, EDirtyFlag::Transform))
 		{
