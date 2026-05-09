@@ -121,6 +121,16 @@ static FVector ToEngineVector(const FbxVector4& Value)
 	return FVector(static_cast<float>(Value[0]), static_cast<float>(Value[1]), static_cast<float>(Value[2]));
 }
 
+static FVector TransformFbxPosition(const FbxAMatrix& Transform, const FbxVector4& Position)
+{
+	return ToEngineVector(Transform.MultT(Position));
+}
+
+static FVector TransformFbxNormal(const FbxAMatrix& Transform, const FbxVector4& Normal)
+{
+	return ToEngineVector(Transform.MultR(Normal)).Normalized();
+}
+
 static void TraverseFbxNode(FbxNode* Node, int32 Depth)
 {
 	if (!Node) return;
@@ -195,28 +205,28 @@ static void TraverseFbxNode(FbxNode* Node, int32 Depth)
 
 #endif
 
-static FbxNode* FindFirstMeshNode(FbxNode* Node)
+static void CollectFbxMeshNodes(FbxNode* Node, TArray<FbxNode*>& OutMeshNodes)
 {
 	if (!Node)
 	{
-		return nullptr;
+		return;
 	}
 
 	FbxNodeAttribute* Attribute = Node->GetNodeAttribute();
 	if (Attribute && Attribute->GetAttributeType() == FbxNodeAttribute::eMesh && Node->GetMesh())
 	{
-		return Node;
+		FbxMesh* Mesh = Node->GetMesh();
+		if (Mesh->GetPolygonCount() > 0 && Mesh->GetControlPointsCount() > 0)
+		{
+			OutMeshNodes.push_back(Node);
+		}
 	}
 
 	const int32 ChildCount = static_cast<int32>(Node->GetChildCount());
 	for (int32 ChildIndex = 0; ChildIndex < ChildCount; ++ChildIndex)
 	{
-		if (FbxNode* FoundNode = FindFirstMeshNode(Node->GetChild(ChildIndex)))
-		{
-			return FoundNode;
-		}
+		CollectFbxMeshNodes(Node->GetChild(ChildIndex), OutMeshNodes);
 	}
-	return nullptr;
 }
 
 // Polygon Index를 넣으면 사용할 MaterialIndex를 반환
@@ -311,46 +321,6 @@ static FString GetFbxMaterialTextureFilePath(FbxSurfaceMaterial* Material, const
 	return "";
 }
 
-static void ExtractFbxStaticMaterials(FbxNode* MeshNode, TArray<FStaticMaterial>& OutMaterials)
-{
-	OutMaterials.clear();
-
-	if (!MeshNode)
-	{
-		return;
-	}
-
-	const int32 MaterialCount = static_cast<int32>(MeshNode->GetMaterialCount());
-
-	if (MaterialCount <= 0)
-	{
-		FStaticMaterial DefaultMaterial;
-		DefaultMaterial.MaterialInterface = nullptr;
-		DefaultMaterial.MaterialSlotName = "None";
-
-		OutMaterials.push_back(DefaultMaterial);
-		return;
-	}
-
-	for (int32 MaterialIndex = 0; MaterialIndex < MaterialCount; ++MaterialIndex)
-	{
-		FbxSurfaceMaterial* FbxMaterial = MeshNode->GetMaterial(MaterialIndex);
-
-		const FString DiffuseTexturePath = GetFbxMaterialTextureFilePath(FbxMaterial, FbxSurfaceMaterial::sDiffuse);
-
-		FStaticMaterial StaticMaterial;
-		StaticMaterial.MaterialInterface = nullptr;
-		StaticMaterial.MaterialSlotName = GetFbxMaterialSlotName(FbxMaterial, MaterialIndex);
-
-		OutMaterials.push_back(StaticMaterial);
-
-		UE_LOG("[FBX] Material[%d]: %s, DiffuseTexture=%s",
-		       MaterialIndex,
-		       StaticMaterial.MaterialSlotName.c_str(),
-		       DiffuseTexturePath.empty() ? "None" : DiffuseTexturePath.c_str());
-	}
-}
-
 static FVector GetFbxMaterialDiffuseColor(FbxSurfaceMaterial* Material)
 {
 	if (!Material)
@@ -373,13 +343,42 @@ static FVector GetFbxMaterialDiffuseColor(FbxSurfaceMaterial* Material)
 	);
 }
 
-static void ExtractFbxMaterialInfos(FbxNode* MeshNode, TArray<FFbxMaterialInfo>& OutMaterialInfo)
+static bool IsSameFbxMaterialInfo(const FFbxMaterialInfo& A, const FFbxMaterialInfo& B)
 {
-	OutMaterialInfo.clear();
+	return A.MaterialSlotName == B.MaterialSlotName
+		&& A.DiffuseTexturePath == B.DiffuseTexturePath
+		&& A.DiffuseColor.X == B.DiffuseColor.X
+		&& A.DiffuseColor.Y == B.DiffuseColor.Y
+		&& A.DiffuseColor.Z == B.DiffuseColor.Z;
+}
+
+static int32 FindOrAddFbxMaterialInfo(
+	TArray<FFbxMaterialInfo>& MaterialInfos,
+	const FFbxMaterialInfo& NewInfo
+)
+{
+	for (int32 Index = 0; Index < static_cast<int32>(MaterialInfos.size()); ++Index)
+	{
+		if (IsSameFbxMaterialInfo(MaterialInfos[Index], NewInfo))
+		{
+			return Index;
+		}
+	}
+
+	MaterialInfos.push_back(NewInfo);
+	return static_cast<int32>(MaterialInfos.size()) - 1;
+}
+
+static TArray<int32> BuildMaterialRemapForMeshNode(
+	FbxNode* MeshNode,
+	TArray<FFbxMaterialInfo>& GlobalMaterialInfos
+)
+{
+	TArray<int32> LocalToGlobalMaterialIndices;
 
 	if (!MeshNode)
 	{
-		return;
+		return LocalToGlobalMaterialIndices;
 	}
 
 	const int32 MaterialCount = static_cast<int32>(MeshNode->GetMaterialCount());
@@ -388,8 +387,12 @@ static void ExtractFbxMaterialInfos(FbxNode* MeshNode, TArray<FFbxMaterialInfo>&
 	{
 		FFbxMaterialInfo DefaultMaterialInfo;
 		DefaultMaterialInfo.MaterialSlotName = "None";
-		OutMaterialInfo.push_back(DefaultMaterialInfo);
-		return;
+
+		const int32 GlobalMaterialIndex =
+			FindOrAddFbxMaterialInfo(GlobalMaterialInfos, DefaultMaterialInfo);
+
+		LocalToGlobalMaterialIndices.push_back(GlobalMaterialIndex);
+		return LocalToGlobalMaterialIndices;
 	}
 
 	for (int32 MaterialIndex = 0; MaterialIndex < MaterialCount; ++MaterialIndex)
@@ -401,16 +404,13 @@ static void ExtractFbxMaterialInfos(FbxNode* MeshNode, TArray<FFbxMaterialInfo>&
 		MaterialInfo.DiffuseTexturePath = GetFbxMaterialTextureFilePath(FbxMaterial, FbxSurfaceMaterial::sDiffuse);
 		MaterialInfo.DiffuseColor = GetFbxMaterialDiffuseColor(FbxMaterial);
 
-		OutMaterialInfo.push_back(MaterialInfo);
+		const int32 GlobalMaterialIndex =
+			FindOrAddFbxMaterialInfo(GlobalMaterialInfos, MaterialInfo);
 
-		UE_LOG("[FBX] MaterialInfo[%d]: Slot=%s, Texture=%s, Color=(%.3f, %.3f, %.3f)",
-		       MaterialIndex,
-		       MaterialInfo.MaterialSlotName.c_str(),
-		       MaterialInfo.DiffuseTexturePath.empty() ? "None" : MaterialInfo.DiffuseTexturePath.c_str(),
-		       MaterialInfo.DiffuseColor.X,
-		       MaterialInfo.DiffuseColor.Y,
-		       MaterialInfo.DiffuseColor.Z);
+		LocalToGlobalMaterialIndices.push_back(GlobalMaterialIndex);
 	}
+
+	return LocalToGlobalMaterialIndices;
 }
 
 
@@ -598,6 +598,163 @@ static void BuildTangents(FStaticMesh& Mesh)
 	}
 }
 
+static void AppendFbxMeshNodeToStaticMesh(
+	FbxNode* MeshNode,
+	FStaticMesh& OutMesh,
+	const TArray<FStaticMaterial>& OutMaterials,
+	const TArray<int32>& LocalToGlobalMaterialIndices
+)
+{
+	if (!MeshNode || !MeshNode->GetMesh())
+	{
+		return;
+	}
+
+	FbxMesh* Mesh = MeshNode->GetMesh();
+
+	const int32 ControlPointCount = static_cast<int32>(Mesh->GetControlPointsCount());
+	const int32 PolygonCount = static_cast<int32>(Mesh->GetPolygonCount());
+
+	FbxStringList UVSetNames;
+	Mesh->GetUVSetNames(UVSetNames);
+
+	const char* UVSetName = nullptr;
+
+	if (UVSetNames.GetCount() > 0)
+	{
+		UVSetName = UVSetNames[0];
+		UE_LOG("[FBX] Mesh=%s, Using UV Set: %s", MeshNode->GetName(), UVSetName);
+	}
+	else
+	{
+		UE_LOG("[FBX] Mesh=%s has no UV set.", MeshNode->GetName());
+	}
+
+	const FbxAMatrix NodeGlobalTransform = MeshNode->EvaluateGlobalTransform();
+
+	int32 CurrentGlobalMaterialIndex = -1;
+	FStaticMeshSection* CurrentSection = nullptr;
+
+	FbxVector4* ControlPoints = Mesh->GetControlPoints();
+	for (int32 PolygonIndex = 0; PolygonIndex < PolygonCount; ++PolygonIndex)
+	{
+		const int32 PolygonSize = static_cast<int32>(Mesh->GetPolygonSize(PolygonIndex));
+
+		if (PolygonSize != 3)
+		{
+			UE_LOG("[FBX] Skip non-triangle polygon. Mesh=%s, Polygon=%d, Size=%d",
+			       MeshNode->GetName(),
+			       PolygonIndex,
+			       PolygonSize);
+			continue;
+		}
+
+		const int32 LocalMaterialIndex = GetPolygonMaterialIndex(Mesh, PolygonIndex);
+
+		int32 GlobalMaterialIndex = 0;
+		if (LocalMaterialIndex >= 0 &&
+			LocalMaterialIndex < static_cast<int32>(LocalToGlobalMaterialIndices.size()))
+		{
+			GlobalMaterialIndex = LocalToGlobalMaterialIndices[LocalMaterialIndex];
+		}
+
+		if (GlobalMaterialIndex < 0 || GlobalMaterialIndex >= static_cast<int32>(OutMaterials.size()))
+		{
+			GlobalMaterialIndex = 0;
+		}
+
+		if (GlobalMaterialIndex != CurrentGlobalMaterialIndex)
+		{
+			if (CurrentSection)
+			{
+				CurrentSection->NumTriangles =
+					(static_cast<uint32>(OutMesh.Indices.size()) - CurrentSection->FirstIndex) / 3;
+			}
+
+			FStaticMeshSection NewSection;
+			NewSection.MaterialIndex = GlobalMaterialIndex;
+			NewSection.MaterialSlotName = OutMaterials[GlobalMaterialIndex].MaterialSlotName;
+			NewSection.FirstIndex = static_cast<uint32>(OutMesh.Indices.size());
+			NewSection.NumTriangles = 0;
+
+			OutMesh.Sections.push_back(NewSection);
+
+			CurrentSection = &OutMesh.Sections.back();
+			CurrentGlobalMaterialIndex = GlobalMaterialIndex;
+		}
+
+		for (int32 VertexIndex = 0; VertexIndex < PolygonSize; ++VertexIndex)
+		{
+			const int32 ControlPointIndex =
+				static_cast<int32>(Mesh->GetPolygonVertex(PolygonIndex, VertexIndex));
+
+			if (ControlPointIndex < 0 || ControlPointIndex >= ControlPointCount)
+			{
+				UE_LOG("[FBX] Invalid ControlPointIndex. Mesh=%s, Polygon=%d, Vertex=%d, ControlPoint=%d",
+				       MeshNode->GetName(),
+				       PolygonIndex,
+				       VertexIndex,
+				       ControlPointIndex);
+				continue;
+			}
+
+			const FbxVector4& FbxPosition = ControlPoints[ControlPointIndex];
+			const FVector EnginePosition = TransformFbxPosition(NodeGlobalTransform, FbxPosition);
+
+			FbxVector4 FbxNormal;
+			const bool bHasNormal = Mesh->GetPolygonVertexNormal(PolygonIndex, VertexIndex, FbxNormal);
+
+			FVector EngineNormal = FVector(0.0f, 0.0f, 1.0f);
+			if (bHasNormal)
+			{
+				EngineNormal = TransformFbxNormal(NodeGlobalTransform, FbxNormal);
+			}
+
+			FVector2 EngineUV(0.0f, 0.0f);
+			if (UVSetName)
+			{
+				FbxVector2 FbxUV;
+				bool bUnmapped = false;
+
+				const bool bHasUV = Mesh->GetPolygonVertexUV(
+					PolygonIndex,
+					VertexIndex,
+					UVSetName,
+					FbxUV,
+					bUnmapped
+				);
+
+				if (bHasUV && !bUnmapped)
+				{
+					EngineUV = FVector2(
+						static_cast<float>(FbxUV[0]),
+						1.0f - static_cast<float>(FbxUV[1])
+					);
+				}
+			}
+
+			FNormalVertex NewVertex;
+			NewVertex.pos = EnginePosition;
+			NewVertex.normal = EngineNormal;
+			NewVertex.color = FVector4(1.0f, 1.0f, 1.0f, 1.0f);
+			NewVertex.tex = EngineUV;
+			NewVertex.tangent = FVector4(1.0f, 0.0f, 0.0f, 1.0f);
+
+			const uint32 NewVertexIndex = static_cast<uint32>(OutMesh.Vertices.size());
+			OutMesh.Vertices.push_back(NewVertex);
+			OutMesh.Indices.push_back(NewVertexIndex);
+		}
+	}
+
+	if (CurrentSection)
+	{
+		CurrentSection->NumTriangles =
+			(static_cast<uint32>(OutMesh.Indices.size()) - CurrentSection->FirstIndex) / 3;
+	}
+
+	UE_LOG("[FBX] Appended Mesh=%s, Polygons=%d", MeshNode->GetName(), PolygonCount);
+}
+
 bool FFbxImporter::CanLoadScene(const FString& FbxFilePath)
 {
 #if !WITH_FBX_SDK
@@ -654,160 +811,43 @@ bool FFbxImporter::ImportStaticMesh(const FString& FbxFilePath, FStaticMesh& Out
 	UE_LOG("[FBX] ImportStaticMesh scene loaded. File: %s", FbxFilePath.c_str());
 
 	FbxNode* RootNode = Context.Scene->GetRootNode();
-	FbxNode* MeshNode = FindFirstMeshNode(RootNode);
-	if (!MeshNode)
+	TArray<FbxNode*> MeshNodes;
+	CollectFbxMeshNodes(RootNode, MeshNodes);
+
+	if (MeshNodes.empty())
 	{
 		UE_LOG("[FBX] ImportStaticMesh failed: mesh node not found. File: %s", FbxFilePath.c_str());
 		DestroyFbxSceneContext(Context);
 		return false;
 	}
 
-	FbxMesh* Mesh = MeshNode->GetMesh();
+	UE_LOG("[FBX] ImportStaticMesh found mesh nodes: %zu", MeshNodes.size());
 
-	ExtractFbxStaticMaterials(MeshNode, OutMaterials);
+	TArray<FFbxMaterialInfo> GlobalMaterialInfos;
+	TArray<TArray<int32>> MeshMaterialRemaps;
+	MeshMaterialRemaps.reserve(MeshNodes.size());
 
-	TArray<FFbxMaterialInfo> FbxMaterialInfos;
-	ExtractFbxMaterialInfos(MeshNode, FbxMaterialInfos);
-	BuildStaticMaterialsFromFbxInfos(FbxMaterialInfos, OutMaterials);
-
-	const int32 ControlPointCount = static_cast<int32>(Mesh->GetControlPointsCount());
-	const int32 PolygonCount = static_cast<int32>(Mesh->GetPolygonCount());
-
-	FbxStringList UVSetNames;
-	Mesh->GetUVSetNames(UVSetNames);
-
-	const char* UVSetName = nullptr;
-
-	if (UVSetNames.GetCount() > 0)
+	for (FbxNode* MeshNode : MeshNodes)
 	{
-		UVSetName = UVSetNames[0];
-		UE_LOG("[FBX] Using UV Set: %s", UVSetName);
-	}
-	else
-	{
-		UE_LOG("[FBX] Mesh has no UV set.");
+		MeshMaterialRemaps.push_back(
+			BuildMaterialRemapForMeshNode(MeshNode, GlobalMaterialInfos)
+		);
 	}
 
-	// UE_LOG("[FBX] ImportStaticMesh target mesh: Node=%s, ControlPoints=%d, Polygons=%d",
-	//        MeshNode->GetName(), ControlPointCount, PolygonCount);
+	BuildStaticMaterialsFromFbxInfos(GlobalMaterialInfos, OutMaterials);
 
-	int32 CurrentMaterialIndex = -1;
-	FStaticMeshSection* CurrentSection = nullptr;
-
-	FbxVector4* ControlPoints = Mesh->GetControlPoints();
-	for (int32 PolygonIndex = 0; PolygonIndex < PolygonCount; ++PolygonIndex)
+	for (size_t MeshNodeIndex = 0; MeshNodeIndex < MeshNodes.size(); ++MeshNodeIndex)
 	{
-		const int32 PolygonSize = static_cast<int32>(Mesh->GetPolygonSize(PolygonIndex));
-
-		if (PolygonSize != 3)
-		{
-			UE_LOG("[FBX] Skip non-triangle polygon. Polygon=%d, Size=%d", PolygonIndex, PolygonSize);
-			continue;
-		}
-
-		const int32 MaterialIndex = GetPolygonMaterialIndex(Mesh, PolygonIndex);
-
-		if (MaterialIndex != CurrentMaterialIndex)
-		{
-			if (CurrentSection)
-			{
-				CurrentSection->NumTriangles = (static_cast<uint32>(OutMesh.Indices.size()) - CurrentSection->
-					FirstIndex) / 3;
-			}
-
-			// BuildTangents(OutMesh);
-			//
-			// UE_LOG("[FBX] StaticMesh built. Vertices=%zu, Indices=%zu, Sections=%zu, Materials=%zu",
-			//        OutMesh.Vertices.size(),
-			//        OutMesh.Indices.size(),
-			//        OutMesh.Sections.size(),
-			//        OutMaterials.size());
-
-			int32 SafeMaterialIndex = MaterialIndex;
-
-			if (SafeMaterialIndex < 0 || SafeMaterialIndex >= static_cast<int32>(OutMaterials.size()))
-			{
-				SafeMaterialIndex = 0;
-			}
-
-			FStaticMeshSection NewSection;
-			NewSection.MaterialIndex = SafeMaterialIndex;
-			NewSection.MaterialSlotName = OutMaterials[SafeMaterialIndex].MaterialSlotName;
-			NewSection.FirstIndex = static_cast<uint32>(OutMesh.Indices.size());
-			NewSection.NumTriangles = 0;
-
-			OutMesh.Sections.push_back(NewSection);
-
-			CurrentSection = &OutMesh.Sections.back();
-			CurrentMaterialIndex = MaterialIndex;
-		}
-
-		for (int32 VertexIndex = 0; VertexIndex < PolygonSize; ++VertexIndex)
-		{
-			const int32 ControlPointIndex = static_cast<int32>(Mesh->GetPolygonVertex(PolygonIndex, VertexIndex));
-
-			if (ControlPointIndex < 0 || ControlPointIndex >= ControlPointCount)
-			{
-				UE_LOG("[FBX] Invalid ControlPointIndex. Polygon=%d, Vertex=%d, ControlPoint=%d",
-				       PolygonIndex,
-				       VertexIndex,
-				       ControlPointIndex);
-				continue;
-			}
-
-			const FbxVector4& FbxPosition = ControlPoints[ControlPointIndex];
-			const FVector EnginePosition = ToEngineVector(FbxPosition);
-			FbxVector4 FbxNormal;
-			const bool bHasNormal = Mesh->GetPolygonVertexNormal(PolygonIndex, VertexIndex, FbxNormal);
-			auto EngineNormal = FVector(0.0f, 0.0f, 1.0f);
-			if (bHasNormal)
-			{
-				EngineNormal = ToEngineVector(FbxNormal).Normalized();
-			}
-
-			FVector2 EngineUV(0.0f, 0.0f);
-			if (UVSetName)
-			{
-				FbxVector2 FbxUV;
-				bool bUnmapped = false;
-
-				const bool bHasUV = Mesh->GetPolygonVertexUV(
-					PolygonIndex,
-					VertexIndex,
-					UVSetName,
-					FbxUV,
-					bUnmapped
-				);
-
-				if (bHasUV && !bUnmapped)
-				{
-					EngineUV = FVector2(
-						static_cast<float>(FbxUV[0]),
-						1.0f - static_cast<float>(FbxUV[1])
-					);
-				}
-			}
-
-			FNormalVertex NewVertex;
-			NewVertex.pos = EnginePosition;
-			NewVertex.normal = EngineNormal;
-			NewVertex.color = FVector4(1.0f, 1.0f, 1.0f, 1.0f);
-			NewVertex.tex = EngineUV;
-			NewVertex.tangent = FVector4(1.0f, 0.0f, 0.0f, 1.0f);
-
-			const uint32 NewVertexIndex = static_cast<uint32>(OutMesh.Vertices.size());
-			OutMesh.Vertices.push_back(NewVertex);
-			OutMesh.Indices.push_back(NewVertexIndex);
-		}
-	}
-
-	if (CurrentSection)
-	{
-		CurrentSection->NumTriangles =
-			(static_cast<uint32>(OutMesh.Indices.size()) - CurrentSection->FirstIndex) / 3;
+		AppendFbxMeshNodeToStaticMesh(
+			MeshNodes[MeshNodeIndex],
+			OutMesh,
+			OutMaterials,
+			MeshMaterialRemaps[MeshNodeIndex]
+		);
 	}
 
 	BuildTangents(OutMesh);
+	OutMesh.CacheBounds();
 
 	UE_LOG("[FBX] StaticMesh built. Vertices=%zu, Indices=%zu, Sections=%zu, Materials=%zu",
 	       OutMesh.Vertices.size(),
