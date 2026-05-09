@@ -28,6 +28,14 @@ bool FFBXImporter::Import(const char* fileName, FStkeletalMesh& OutMesh)
 
 	// 임포트 후 임포터는 해제하여 메모리 사용량을 줄입니다.
 	m_importer->Destroy();
+	
+	//언리얼 기준 좌표계 변환
+	FbxAxisSystem UnrealAxisSystem(
+		FbxAxisSystem::eZAxis,       // Up Vector는 Z
+		FbxAxisSystem::eParityEven,   // Front 방향 계산용 패리티 (보통 Odd)
+		FbxAxisSystem::eLeftHanded   // 왼손 좌표계
+	);
+	UnrealAxisSystem.ConvertScene(m_scene);
 
 	// 2. 삼각형화할 수 있는 노드를 삼각형화 시키기
 	FbxGeometryConverter converter(m_manager);
@@ -107,14 +115,14 @@ bool FFBXImporter::BuildReferenceSkeleton(FbxNode* InNode, TArray<FBoneInfo>& Ou
 		FString BoneName = InNode->GetName();
 		FbxAMatrix Local = InNode->EvaluateLocalTransform();
 		FTransform LocalBonePose(
-			FVector(Local.GetT()[0], Local.GetT()[1], Local.GetT()[2]) * 0.01f,
+			FVector(Local.GetT()[0], Local.GetT()[1], Local.GetT()[2]) ,
 			FQuat(Local.GetQ()[0], Local.GetQ()[1], Local.GetQ()[2], Local.GetQ()[3]),
 			FVector(Local.GetS()[0], Local.GetS()[1], Local.GetS()[2])
 		);
 
 		FbxAMatrix Global = InNode->EvaluateGlobalTransform();
 		FTransform GlobalBonePose(
-			FVector(Global.GetT()[0], Global.GetT()[1], Global.GetT()[2]) * 0.01f,
+			FVector(Global.GetT()[0], Global.GetT()[1], Global.GetT()[2]) ,
 			FQuat(Global.GetQ()[0], Global.GetQ()[1], Global.GetQ()[2], Global.GetQ()[3]),
 			FVector(Global.GetS()[0], Global.GetS()[1], Global.GetS()[2])
 		);
@@ -196,11 +204,24 @@ bool FFBXImporter::SaveVertexData(FbxMesh* InMesh, const TArray<TArray<VertexBle
 	// 순수 위치 데이터가 담긴 창고(Control Points)를 가져옵니다.
 	FbxVector4* controlPoints = InMesh->GetControlPoints();
 
+	//좌표축 변환
+	FbxNode* meshNode = InMesh->GetNode();
+	
+	FbxAMatrix meshGlobalTransform = meshNode->EvaluateGlobalTransform();
+
+	FbxVector4 geoT = meshNode->GetGeometricTranslation(FbxNode::eSourcePivot);
+	FbxVector4 geoR = meshNode->GetGeometricRotation(FbxNode::eSourcePivot);
+	FbxVector4 geoS = meshNode->GetGeometricScaling(FbxNode::eSourcePivot);
+	FbxAMatrix geoTransform(geoT, geoR, geoS);
+
+	// 최종 정점을 변환할  행렬
+	FbxAMatrix finalMeshTransform = meshGlobalTransform * geoTransform;
+
 	// 2. 모든 삼각형을 순회합니다.
 	for (int i = 0; i < polygonCount; ++i)
 	{
 		// 3. 하나의 삼각형은 3개의 꼭짓점(Vertex)으로 이루어져 있습니다.
-		for (int j = 0; j < 3; ++j)
+		for (int j = 0; j <3; ++j)
 		{
 			// 이 꼭짓점이 Control Points 창고의 몇 번째 점인지 인덱스를 알아냅니다.
 			int ctrlPointIndex = InMesh->GetPolygonVertex(i, j);
@@ -216,18 +237,25 @@ bool FFBXImporter::SaveVertexData(FbxMesh* InMesh, const TArray<TArray<VertexBle
 			vertex.Tangent = FVector4(1.0f, 0.0f, 0.0f, 1.0f); // 기본 탄젠트
 
 			// --- A. 위치 (Position) 추출 ---
-			// FBX(오른손, Y-up) -> DX(왼손, Y-up) 변환 (Z를 반전시키는 것이 일반적입니다)
-			float x = static_cast<float>(controlPoints[ctrlPointIndex][0]);
-			float y = static_cast<float>(controlPoints[ctrlPointIndex][1]);
-			float z = static_cast<float>(-controlPoints[ctrlPointIndex][2]);
-			vertex.Position = FVector(x, y, z);
+			FbxVector4 localPos = controlPoints[ctrlPointIndex];
+			FbxVector4 globalPos = finalMeshTransform.MultT(localPos);
+
+			vertex.Position = FVector(
+				-static_cast<float>(globalPos[0]),
+				static_cast<float>(globalPos[1]),
+				-static_cast<float>(globalPos[2])
+			);
 
 			//--- B. 법선 (Normal) 추출 (임시 수도코드) ---
 			FbxVector4 fbxNormal;
 			InMesh->GetPolygonVertexNormal(i, j, fbxNormal);
-			vertex.Normal.X = fbxNormal.mData[0];
-			vertex.Normal.Y = fbxNormal.mData[1];
-			vertex.Normal.Z = -fbxNormal.mData[2];
+			fbxNormal[3] = 0.0; // 노멀은 방향이므로 이동(Translation)을 무시하기 위해 W를 0으로 설정
+			FbxVector4 globalNormal = finalMeshTransform.MultT(fbxNormal);
+			globalNormal.Normalize(); // 크기를 1로 재정규화
+
+			vertex.Normal.X = -static_cast<float>(globalNormal[0]);
+			vertex.Normal.Y = static_cast<float>(globalNormal[1]);
+			vertex.Normal.Z = -static_cast<float>(globalNormal[2]);
 
 
 			// --- C. 텍스처 좌표 (UV) 추출 ---

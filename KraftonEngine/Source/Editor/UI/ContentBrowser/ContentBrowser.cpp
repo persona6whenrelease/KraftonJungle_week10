@@ -1,4 +1,4 @@
-﻿#include "ContentBrowser.h"
+#include "ContentBrowser.h"
 
 #include "ContentBrowserElement.h"
 #include "Editor/Settings/EditorSettings.h"
@@ -166,6 +166,7 @@ void FEditorContentBrowserWidget::Initialize(UEditorEngine* InEditor, ID3D11Devi
 	ICons[".Scene"] = FResourceManager::Get().FindLoadedTexture(FPaths::ToUtf8(IconDir + L"World_64x.png"));
 	ICons[".Prefab"] = FResourceManager::Get().FindLoadedTexture(FPaths::ToUtf8(IconDir + L"World_64x.png"));
 	ICons[".obj"] = FResourceManager::Get().FindLoadedTexture(FPaths::ToUtf8(IconDir + L"icon_MatEd_Mesh_40x.png"));
+	ICons[".fbx"] = FResourceManager::Get().FindLoadedTexture(FPaths::ToUtf8(IconDir + L"icon_MatEd_Mesh_40x.png"));
 	ICons[".mat"] = FResourceManager::Get().FindLoadedTexture(FPaths::ToUtf8(IconDir + L"Sphere_64x.png"));
 
 	ContentBrowserContext Context;
@@ -291,6 +292,11 @@ void FEditorContentBrowserWidget::RefreshContent()
 		{
 			element = std::make_shared<ObjectElement>();
 			element.get()->SetIcon(ICons[Extension].Get());
+		}
+		else if (Content.Path.extension() == ".fbx" || Content.Path.extension() == ".FBX")
+		{
+			element = std::make_shared<FbxElement>();
+			element.get()->SetIcon(ICons[".fbx"].Get());
 		}
 		else if (Content.Path.extension() == ".mat")
 		{

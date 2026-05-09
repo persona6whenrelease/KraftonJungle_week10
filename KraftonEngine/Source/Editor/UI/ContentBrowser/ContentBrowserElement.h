@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "Core/ClassTypes.h"
 #include "Editor/UI/ContentBrowser/ContentBrowserContext.h"
 #include "ContentItem.h"
@@ -51,6 +51,12 @@ class ObjectElement final : public ContentBrowserElement
 {
 public:
 	virtual const char* GetDragItemType() override { return "ObjectContentItem"; }
+};
+
+class FbxElement final : public ContentBrowserElement
+{
+public:
+	virtual const char* GetDragItemType() override { return "FbxContentItem"; }
 };
 
 class PNGElement final : public ContentBrowserElement
