@@ -31,6 +31,16 @@ enum class EMeshShape
 	ScaleGizmo,
 };
 
+// SceneProxy → DrawCommandBuilder 사이의 GPU 리소스 전달 뷰 (FMeshBuffer 디커플링용)
+struct FGPUGeometryView
+{
+	ID3D11Buffer* VB     = nullptr;
+	uint32        Stride = 0;
+	ID3D11Buffer* IB     = nullptr;
+
+	bool IsValid() const { return VB != nullptr; }
+};
+
 enum class ERenderPass : uint32
 {
 	PreDepth,		// Depth-only 프리패스 (color write 없음, Early-Z용)

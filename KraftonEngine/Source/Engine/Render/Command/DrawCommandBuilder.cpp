@@ -119,7 +119,8 @@ void FDrawCommandBuilder::ApplyMaterialRenderState(FDrawCommandRenderState& OutS
 // ============================================================
 void FDrawCommandBuilder::BuildCommandForProxy(const FPrimitiveSceneProxy& Proxy, ERenderPass Pass)
 {
-	if (!Proxy.GetMeshBuffer() || !Proxy.GetMeshBuffer()->IsValid()) return;
+	const FGPUGeometryView Geometry = Proxy.GetGeometryView();
+	if (!Geometry.IsValid()) return;
 
 	ID3D11DeviceContext* Ctx = CachedContext;
 
@@ -140,11 +141,11 @@ void FDrawCommandBuilder::BuildCommandForProxy(const FPrimitiveSceneProxy& Proxy
 
 	const bool bDepthOnly = (Pass == ERenderPass::PreDepth);
 
-	// MeshBuffer → FDrawCommandBuffer 변환
+	// GeometryView → FDrawCommandBuffer 변환 (정적/동적 메시 통합)
 	FDrawCommandBuffer ProxyBuffer;
-	ProxyBuffer.VB = Proxy.GetMeshBuffer()->GetVertexBuffer().GetBuffer();
-	ProxyBuffer.VBStride = Proxy.GetMeshBuffer()->GetVertexBuffer().GetStride();
-	ProxyBuffer.IB = Proxy.GetMeshBuffer()->GetIndexBuffer().GetBuffer();
+	ProxyBuffer.VB = Geometry.VB;
+	ProxyBuffer.VBStride = Geometry.Stride;
+	ProxyBuffer.IB = Geometry.IB;
 
 	// 섹션당 1개 커맨드 (per-section 셰이더)
 	for (const FMeshSectionDraw& Section : Proxy.GetSectionDraws())

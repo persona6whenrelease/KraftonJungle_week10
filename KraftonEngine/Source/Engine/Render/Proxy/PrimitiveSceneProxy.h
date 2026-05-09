@@ -65,6 +65,10 @@ public:
 	FShader*           GetShader()      const;
 	FMeshBuffer*       GetMeshBuffer()  const { return MeshBuffer; }
 
+	// GPU 지오메트리 뷰 — 정적/동적 버퍼를 통합한 다형성 진입점.
+	// 기본 구현은 MeshBuffer 멤버를 사용하며, 자체 버퍼를 가진 프록시는 오버라이드.
+	virtual FGPUGeometryView GetGeometryView() const;
+
 	const FPerObjectConstants&      GetPerObjectConstants() const { return PerObjectConstants; }
 	const FBoundingBox&             GetCachedBounds()       const { return CachedBounds; }
 	const FVector&                  GetCachedWorldPos()     const { return CachedWorldPos; }

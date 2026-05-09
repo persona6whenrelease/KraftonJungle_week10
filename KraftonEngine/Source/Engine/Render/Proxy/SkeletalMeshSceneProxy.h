@@ -18,6 +18,7 @@ public:
     // FPrimitiveSceneProxy interface
     void UpdateMesh() override;
     void UpdateMaterial() override;
+    FGPUGeometryView GetGeometryView() const override;
 
     // Getters for internal buffers (DrawCommandBuilder might need these)
     const FDynamicVertexBuffer& GetInternalVB() const { return InternalVB; }

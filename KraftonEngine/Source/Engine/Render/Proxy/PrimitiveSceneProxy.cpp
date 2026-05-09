@@ -38,6 +38,16 @@ FShader* FPrimitiveSceneProxy::GetShader() const
 	return nullptr;
 }
 
+FGPUGeometryView FPrimitiveSceneProxy::GetGeometryView() const
+{
+	if (!MeshBuffer || !MeshBuffer->IsValid()) return {};
+	return {
+		MeshBuffer->GetVertexBuffer().GetBuffer(),
+		MeshBuffer->GetVertexBuffer().GetStride(),
+		MeshBuffer->GetIndexBuffer().GetBuffer()
+	};
+}
+
 void FPrimitiveSceneProxy::UpdateTransform()
 {
 	PerObjectConstants = FPerObjectConstants::FromWorldMatrix(Owner->GetWorldMatrix());

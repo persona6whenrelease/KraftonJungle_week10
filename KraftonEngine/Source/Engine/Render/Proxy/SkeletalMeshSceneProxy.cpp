@@ -130,3 +130,12 @@ void FSkeletalMeshSceneProxy::UpdateMaterial()
     // Re-run the material part of UpdateMesh or just rebuild section draws
     UpdateMesh();
 }
+
+FGPUGeometryView FSkeletalMeshSceneProxy::GetGeometryView() const
+{
+    return {
+        InternalVB.GetBuffer(),
+        InternalVB.GetStride(),
+        InternalIB.GetBuffer()
+    };
+}
