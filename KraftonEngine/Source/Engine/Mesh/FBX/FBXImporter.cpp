@@ -127,6 +127,56 @@ namespace
 		return true;
 	}
 
+	const char* AxisToString(FbxAxisSystem::EUpVector Axis)
+	{
+		switch (Axis)
+		{
+		case FbxAxisSystem::eXAxis:
+			return "X";
+		case FbxAxisSystem::eYAxis:
+			return "Y";
+		case FbxAxisSystem::eZAxis:
+			return "Z";
+		default:
+			return "Unknown";
+		}
+	}
+
+	const char* FrontParityToString(FbxAxisSystem::EFrontVector Front)
+	{
+		switch (Front)
+		{
+		case FbxAxisSystem::eParityEven:
+			return "ParityEven";
+		case FbxAxisSystem::eParityOdd:
+			return "ParityOdd";
+		default:
+			return "Unknown";
+		}
+	}
+
+	const char* CoordSystemToString(FbxAxisSystem::ECoordSystem CoordSystem)
+	{
+		return CoordSystem == FbxAxisSystem::eLeftHanded ? "LeftHanded" : "RightHanded";
+	}
+
+	void LogAxisSystem(const char* Prefix, const FbxAxisSystem& AxisSystem)
+	{
+		int32 UpSign = 0;
+		int32 FrontSign = 0;
+		const FbxAxisSystem::EUpVector UpAxis = AxisSystem.GetUpVector(UpSign);
+		const FbxAxisSystem::EFrontVector FrontParity = AxisSystem.GetFrontVector(FrontSign);
+		const FbxAxisSystem::ECoordSystem CoordSystem = AxisSystem.GetCoorSystem();
+
+		UE_LOG("[FBXImporter] %s AxisSystem Up=%s Sign=%d Front=%s Sign=%d Coord=%s",
+			Prefix,
+			AxisToString(UpAxis),
+			UpSign,
+			FrontParityToString(FrontParity),
+			FrontSign,
+			CoordSystemToString(CoordSystem));
+	}
+
 	FMatrix GetSkeletonRootBindGlobal(const FFbxImportMeta& ImportMeta, const FFbxSkeletonMeta& SkeletonMeta)
 	{
 		if (IsValidIndex(ImportMeta.Bones, SkeletonMeta.RootBoneId))
@@ -1017,18 +1067,22 @@ void FBXImporter::PreprocessScene()
 		return;
 	}
 
+	LogAxisSystem("Source", Scene->GetGlobalSettings().GetAxisSystem());
+
 	FbxAxisSystem EngineAxisSystem;
-	FbxAxisSystem::ParseAxisSystem("yzx", EngineAxisSystem);
+	if (!FbxAxisSystem::ParseAxisSystem("yzx", EngineAxisSystem))
+	{
+		UE_LOG("[FBXImporter] Failed to parse engine axis system.");
+		return;
+	}
+
+	LogAxisSystem("Target", EngineAxisSystem);
+
+	// Engine convention: +X forward, +Y right, +Z up, left-handed.
+	// ConvertScene() only rotates roots and cannot faithfully represent handedness changes.
+	// DeepConvertScene() converts transforms, geometry, animation curves, and clusters consistently.
 	EngineAxisSystem.ConvertScene(Scene);
-
-	/*const FbxAxisSystem AxisSystem(
-		FbxAxisSystem::eZAxis,
-		FbxAxisSystem::eParityEven,
-		FbxAxisSystem::eLeftHanded);
-	AxisSystem.ConvertScene(Scene);*/
-
-	//const FbxAxisSystem DirectXAxisSystem(FbxAxisSystem::eDirectX);
-	//DirectXAxisSystem.ConvertScene(Scene);
+	LogAxisSystem("Converted", Scene->GetGlobalSettings().GetAxisSystem());
 
 	FbxSystemUnit::ConversionOptions UnitOptions = {};
 	UnitOptions.mConvertRrsNodes = true;

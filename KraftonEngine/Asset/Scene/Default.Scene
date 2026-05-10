@@ -1,18 +1,50 @@
 {
-  "Actors" : [],
+  "Actors" : [{
+      "ActorUUID" : 91,
+      "ClassName" : "AActor",
+      "NonSceneComponents" : [],
+      "RootComponent" : {
+        "Children" : [],
+        "ClassName" : "USkeletalMeshComponent",
+        "Properties" : {
+          "Blocks Movement" : true,
+          "Cast Shadow" : true,
+          "Element 0" : {
+            "Path" : "None"
+          },
+          "Element 1" : {
+            "Path" : "None"
+          },
+          "Element 2" : {
+            "Path" : "None"
+          },
+          "Generate Overlap Events" : true,
+          "Location" : [1.168377, 1.156161, 0.236591],
+          "Rotation" : [-0.000000, 0.000000, 0.000000],
+          "Scale" : [1.000000, 1.000000, 1.000000],
+          "Skeletal Mesh" : "Asset/SkeletalMeshCache/TestFBX.bin",
+          "Two Sided Shadow" : false,
+          "Visible" : true,
+          "bEditorOnly" : false,
+          "bTickEnable" : true
+        }
+      },
+      "Tags" : [],
+      "bVisible" : true
+    }],
   "ClassName" : "UWorld",
   "ContextHandle" : "NewScene",
   "ContextName" : "New Scene",
-  "Name" : "Untitled",
+  "Name" : "Default",
   "PerspectiveCamera" : {
     "AspectRatio" : 1.854027,
     "FOV" : 1.047198,
     "FarClip" : 1000.000000,
-    "Location" : [10.000000, 0.000000, 5.000000],
+    "Location" : [1.609433, 1.863789, -5.203156],
     "NearClip" : 0.100000,
     "OrthoWidth" : 10.000000,
     "Orthographic" : false,
-    "Rotation" : [0.000000, 26.565048, -179.999985]
+    "Rotation" : [-0.000000, 12.615304, -152.249771]
   },
   "Version" : 2,
   "WorldType" : "Editor"

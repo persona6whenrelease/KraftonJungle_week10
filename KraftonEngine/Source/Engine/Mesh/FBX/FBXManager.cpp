@@ -19,7 +19,7 @@ TArray<FMeshAssetListItem> FFBXManager::AvailableFbxFiles;
 namespace
 {
 	constexpr uint32 FBXCacheMagic = 0x58424653u; // "SFBX"
-	constexpr uint32 FBXCacheVersion = 2u;
+	constexpr uint32 FBXCacheVersion = 3u;
 
 	struct FFBXCacheHeader
 	{

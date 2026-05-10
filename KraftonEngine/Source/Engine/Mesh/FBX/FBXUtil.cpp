@@ -35,6 +35,8 @@ FVector2 FBXUtil::ConvertFbxVector2(const FbxVector2& V)
 FMatrix FBXUtil::ConvertFbxMatrix(const FbxAMatrix& M)
 {
 	FMatrix Result = FMatrix::Identity;
+	// FbxAMatrix stores translation in row 3, matching this engine's row-vector FMatrix convention.
+	// Do not transpose here; axis handedness is handled by FBXImporter::PreprocessScene().
 	for (int32 Row = 0; Row < 4; ++Row)
 	{
 		for (int32 Col = 0; Col < 4; ++Col)
