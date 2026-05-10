@@ -4,6 +4,9 @@
 #include "Mesh/FBXManager.h"
 #include "Serialization/PropertyTypeSerialization.h"
 #include "Math/MatrixSerialization.h"
+#include <cctype>
+#include <cmath>
+
 IMPLEMENT_CLASS(USkinnedMeshComponent, UMeshComponent)
 
 
@@ -345,6 +348,76 @@ void USkinnedMeshComponent::UpdateSkinning(float DeltaTime)
 	const FSkeletalMeshAsset& Asset = Mesh->MeshAsset;
 	const uint32 VertexCount =
 		static_cast<uint32>(Asset.SourceVertices.size());
+
+
+	//목 회전하는 거 하드코딩
+	/////////////////////////////////////////////////////
+	
+	const int32 BoneCount = static_cast<int32>(Asset.Bones.size());
+	if (BoneSkinMatrices.size() != BoneCount)
+	{
+		BoneSkinMatrices.resize(BoneCount);
+	}
+	if (CurrentBoneGlobals.size() != BoneCount)
+	{
+		CurrentBoneGlobals.resize(BoneCount);
+	}
+
+	static float DebugSkinningTime = 0.0f;
+	DebugSkinningTime += DeltaTime;
+
+	int32 DebugAnimatedBoneIndex = -1;
+	for (int32 BoneIndex = 0; BoneIndex < BoneCount; ++BoneIndex)
+	{
+		FString LowerName = Asset.Bones[BoneIndex].Name;
+		for (char& Ch : LowerName)
+		{
+			Ch = static_cast<char>(std::tolower(static_cast<unsigned char>(Ch)));
+		}
+
+		if (LowerName.find("head") != FString::npos)
+		{
+			DebugAnimatedBoneIndex = BoneIndex;
+			break;
+		}
+		if (DebugAnimatedBoneIndex < 0 && LowerName.find("neck") != FString::npos)
+		{
+			DebugAnimatedBoneIndex = BoneIndex;
+		}
+	}
+	if (DebugAnimatedBoneIndex < 0 && BoneCount > 0)
+	{
+		DebugAnimatedBoneIndex = BoneCount - 1;
+	}
+
+	FMatrix DebugBoneDelta = FMatrix::Identity;
+	if (DebugAnimatedBoneIndex >= 0)
+	{
+		const FVector Pivot = Asset.Bones[DebugAnimatedBoneIndex].BindPoseGlobal.GetLocation();
+		const float DebugAngle = static_cast<float>(std::sin(DebugSkinningTime * 3.0f)) * 0.6f;
+		DebugBoneDelta =
+			FMatrix::MakeTranslationMatrix(Pivot * -1.0f) *
+			FMatrix::MakeRotationZ(DebugAngle) *
+			FMatrix::MakeTranslationMatrix(Pivot);
+	}
+
+	for (int32 BoneIndex = 0; BoneIndex < BoneCount; ++BoneIndex)
+	{
+		bool bApplyDebugDelta = BoneIndex == DebugAnimatedBoneIndex;
+		for (int32 ParentIndex = Asset.Bones[BoneIndex].ParentIndex;
+			!bApplyDebugDelta && ParentIndex >= 0 && ParentIndex < BoneCount;
+			ParentIndex = Asset.Bones[ParentIndex].ParentIndex)
+		{
+			bApplyDebugDelta = ParentIndex == DebugAnimatedBoneIndex;
+		}
+
+		CurrentBoneGlobals[BoneIndex] = bApplyDebugDelta
+			? Asset.Bones[BoneIndex].BindPoseGlobal * DebugBoneDelta
+			: Asset.Bones[BoneIndex].BindPoseGlobal;
+		BoneSkinMatrices[BoneIndex] = Asset.Bones[BoneIndex].InverseBindPose * CurrentBoneGlobals[BoneIndex];
+	}
+	
+	//////////////////////////////////////////////////////
 
 	SkinnedVertices.resize(VertexCount);
 
