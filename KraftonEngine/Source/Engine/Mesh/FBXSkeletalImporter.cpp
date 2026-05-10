@@ -6,10 +6,9 @@
 #include <functional>
 #include <unordered_set>
 #include "FBXUtil.h"
+#include <fbxsdk.h>
 
 #include "Core/Log.h"
-
-using namespace FBXUtil;
 
 FBXSkeletalImporter::~FBXSkeletalImporter()
 {
@@ -361,7 +360,7 @@ bool FBXSkeletalImporter::CollectBoneNodes(FbxMesh* Mesh, TArray<FbxNode*>& OutB
 	{
 		FbxTime BindTime;
 		BindTime.SetSecondDouble(0.0);
-		MeshGlobalBindPose = ConvertFbxMatrix(MeshNode->EvaluateGlobalTransform(BindTime));
+		MeshGlobalBindPose = FBXUtil::ConvertFbxMatrix(MeshNode->EvaluateGlobalTransform(BindTime));
 	}
 
 	std::unordered_set<FbxNode*> UniqueNodes;
@@ -386,7 +385,7 @@ bool FBXSkeletalImporter::CollectBoneNodes(FbxMesh* Mesh, TArray<FbxNode*>& OutB
 
 			FbxAMatrix MeshBindMatrix;
 			Cluster->GetTransformMatrix(MeshBindMatrix);
-			MeshGlobalBindPose = ConvertFbxMatrix(MeshBindMatrix);
+			MeshGlobalBindPose = FBXUtil::ConvertFbxMatrix(MeshBindMatrix);
 
 			FbxNode* BoneNode = Cluster->GetLink();
 			if (!BoneNode)
@@ -396,7 +395,7 @@ bool FBXSkeletalImporter::CollectBoneNodes(FbxMesh* Mesh, TArray<FbxNode*>& OutB
 
 			FbxAMatrix BoneBindMatrix;
 			Cluster->GetTransformLinkMatrix(BoneBindMatrix);
-			MeshSpaceBoneMatrix[BoneNode] = ConvertFbxMatrix(BoneBindMatrix);
+			MeshSpaceBoneMatrix[BoneNode] = FBXUtil::ConvertFbxMatrix(BoneBindMatrix);
 
 			if (UniqueNodes.insert(BoneNode).second)
 			{
@@ -408,8 +407,8 @@ bool FBXSkeletalImporter::CollectBoneNodes(FbxMesh* Mesh, TArray<FbxNode*>& OutB
 	std::sort(OutBoneNodes.begin(), OutBoneNodes.end(),
 		[](FbxNode* A, FbxNode* B)
 		{
-			const int32 DepthA = GetNodeDepth(A);
-			const int32 DepthB = GetNodeDepth(B);
+			const int32 DepthA = FBXUtil::GetNodeDepth(A);
+			const int32 DepthB = FBXUtil::GetNodeDepth(B);
 			if (DepthA != DepthB)
 			{
 				return DepthA < DepthB;
@@ -480,7 +479,7 @@ void FBXSkeletalImporter::BuildBindPoseMatrices(const TArray<FbxNode*>& BoneNode
 		}
 		else if (BoneNodes[i])
 		{
-			BoneGlobal = ConvertFbxMatrix(BoneNodes[i]->EvaluateGlobalTransform(BindTime));
+			BoneGlobal = FBXUtil::ConvertFbxMatrix(BoneNodes[i]->EvaluateGlobalTransform(BindTime));
 		}
 
 		MeshLocalBindGlobals[i] = BoneGlobal * MeshGlobalInverse;
@@ -641,7 +640,7 @@ bool FBXSkeletalImporter::BuildVerticesIndicesAndSections(FbxMesh* Mesh, FSkelet
 
 	for (int32 PolyIndex = 0; PolyIndex < PolygonCount; ++PolyIndex)
 	{
-		const int32 MaterialIndex = ReadMaterialIndex(Mesh, PolyIndex);
+		const int32 MaterialIndex = FBXUtil::ReadMaterialIndex(Mesh, PolyIndex);
 		const int32 PolySize = Mesh->GetPolygonSize(PolyIndex);
 		if (PolySize < 3)
 		{
@@ -692,10 +691,10 @@ bool FBXSkeletalImporter::BuildVertexFromCorner(
 		return false;
 	}
 
-	OutVertex.pos = ReadPosition(Mesh, ControlPointIndex);
-	OutVertex.normal = ReadNormal(Mesh, PolyIndex, CornerIndex);
-	OutVertex.tex = ReadUV(Mesh, PolyIndex, CornerIndex, UVSetName);
-	OutVertex.tangent = ReadTangent(Mesh, ControlPointIndex, PolygonVertexIndex);
+	OutVertex.pos = FBXUtil::ReadPosition(Mesh, ControlPointIndex);
+	OutVertex.normal = FBXUtil::ReadNormal(Mesh, PolyIndex, CornerIndex);
+	OutVertex.tex = FBXUtil::ReadUV(Mesh, PolyIndex, CornerIndex, UVSetName);
+	OutVertex.tangent = FBXUtil::ReadTangent(Mesh, ControlPointIndex, PolygonVertexIndex);
 
 	if (ControlPointIndex < static_cast<int32>(ControlPointInfluences.size()))
 	{
@@ -713,28 +712,28 @@ bool FBXSkeletalImporter::BuildVertexFromCorner(
 FBXSkeletalImporter::FVertexKey FBXSkeletalImporter::MakeVertexKey(const FSkeletalVertex& Vertex) const
 {
 	FVertexKey Key = {};
-	Key.PosX = QuantizeFloat(Vertex.pos.X);
-	Key.PosY = QuantizeFloat(Vertex.pos.Y);
-	Key.PosZ = QuantizeFloat(Vertex.pos.Z);
-	Key.NormalX = QuantizeFloat(Vertex.normal.X);
-	Key.NormalY = QuantizeFloat(Vertex.normal.Y);
-	Key.NormalZ = QuantizeFloat(Vertex.normal.Z);
-	Key.UVX = QuantizeFloat(Vertex.tex.X);
-	Key.UVY = QuantizeFloat(Vertex.tex.Y);
-	Key.TangentX = QuantizeFloat(Vertex.tangent.X);
-	Key.TangentY = QuantizeFloat(Vertex.tangent.Y);
-	Key.TangentZ = QuantizeFloat(Vertex.tangent.Z);
-	Key.TangentW = QuantizeFloat(Vertex.tangent.W);
+	Key.PosX = FBXUtil::QuantizeFloat(Vertex.pos.X);
+	Key.PosY = FBXUtil::QuantizeFloat(Vertex.pos.Y);
+	Key.PosZ = FBXUtil::QuantizeFloat(Vertex.pos.Z);
+	Key.NormalX = FBXUtil::QuantizeFloat(Vertex.normal.X);
+	Key.NormalY = FBXUtil::QuantizeFloat(Vertex.normal.Y);
+	Key.NormalZ = FBXUtil::QuantizeFloat(Vertex.normal.Z);
+	Key.UVX = FBXUtil::QuantizeFloat(Vertex.tex.X);
+	Key.UVY = FBXUtil::QuantizeFloat(Vertex.tex.Y);
+	Key.TangentX = FBXUtil::QuantizeFloat(Vertex.tangent.X);
+	Key.TangentY = FBXUtil::QuantizeFloat(Vertex.tangent.Y);
+	Key.TangentZ = FBXUtil::QuantizeFloat(Vertex.tangent.Z);
+	Key.TangentW = FBXUtil::QuantizeFloat(Vertex.tangent.W);
 
 	for (int32 i = 0; i < 4; ++i)
 	{
 		Key.BoneIDs[i] = Vertex.BoneIDs[i];
 	}
 
-	Key.BoneWeight0 = QuantizeFloat(Vertex.BoneWeights[0]);
-	Key.BoneWeight1 = QuantizeFloat(Vertex.BoneWeights[1]);
-	Key.BoneWeight2 = QuantizeFloat(Vertex.BoneWeights[2]);
-	Key.BoneWeight3 = QuantizeFloat(Vertex.BoneWeights[3]);
+	Key.BoneWeight0 = FBXUtil::QuantizeFloat(Vertex.BoneWeights[0]);
+	Key.BoneWeight1 = FBXUtil::QuantizeFloat(Vertex.BoneWeights[1]);
+	Key.BoneWeight2 = FBXUtil::QuantizeFloat(Vertex.BoneWeights[2]);
+	Key.BoneWeight3 = FBXUtil::QuantizeFloat(Vertex.BoneWeights[3]);
 	return Key;
 }
 

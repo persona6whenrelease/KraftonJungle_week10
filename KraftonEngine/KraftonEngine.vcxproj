@@ -320,7 +320,7 @@
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="FBXUtil.cpp" />
+    <ClCompile Include="Source\Engine\Mesh\FBXUtil.cpp" />
     <ClCompile Include="Source\Engine\Mesh\FBXImporter.cpp" />
     <ClCompile Include="Source\Engine\Mesh\FBXSkeletalImporter.cpp" />
     <ClCompile Include="Source\Engine\Mesh\FBXManager.cpp" />
@@ -577,7 +577,7 @@
     <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="FBXUtil.h" />
+    <ClInclude Include="Source\Engine\Mesh\FBXUtil.h" />
     <ClInclude Include="Source\Engine\Mesh\FBXImporter.h" />
     <ClInclude Include="Source\Engine\Mesh\FBXSkeletalImporter.h" />
     <ClInclude Include="Source\Engine\Mesh\FBXManager.h" />

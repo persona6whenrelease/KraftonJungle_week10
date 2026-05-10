@@ -5,27 +5,7 @@
 
 #include <cstddef>
 #include <unordered_map>
-
-namespace fbxsdk
-{
-	class FbxAMatrix;
-	class FbxCluster;
-	class FbxManager;
-	class FbxMesh;
-	class FbxNode;
-	class FbxScene;
-	class FbxVector2;
-	class FbxVector4;
-}
-
-using FbxAMatrix = fbxsdk::FbxAMatrix;
-using FbxCluster = fbxsdk::FbxCluster;
-using FbxManager = fbxsdk::FbxManager;
-using FbxMesh = fbxsdk::FbxMesh;
-using FbxNode = fbxsdk::FbxNode;
-using FbxScene = fbxsdk::FbxScene;
-using FbxVector2 = fbxsdk::FbxVector2;
-using FbxVector4 = fbxsdk::FbxVector4;
+#include "FBXUtil.h"
 
 class FBXSkeletalImporter
 {

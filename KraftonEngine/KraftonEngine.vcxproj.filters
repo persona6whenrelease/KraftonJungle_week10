@@ -1087,7 +1087,7 @@
     </ClCompile>
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Source\Engine\Mesh\FBXImporter.cpp" />
-    <ClCompile Include="FBXUtil.cpp" />
+    <ClCompile Include="Source\Engine\Mesh\FBXUtil.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Source\Editor\EditorEngine.h">
@@ -2339,7 +2339,7 @@
       <Filter>ThirdParty\SimpleJSON</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Mesh\FBXImporter.h" />
-    <ClInclude Include="FBXUtil.h" />
+    <ClInclude Include="Source\Engine\Mesh\FBXUtil.h" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="KraftonEngine.rc" />
