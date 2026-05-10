@@ -11,6 +11,7 @@ namespace fbxsdk
 	class FbxMesh;
 	class FbxNode;
 	class FbxScene;
+	class FbxSkin;
 	class FbxVector2;
 	class FbxVector4;
 }
@@ -21,6 +22,7 @@ using FbxManager = fbxsdk::FbxManager;
 using FbxMesh = fbxsdk::FbxMesh;
 using FbxNode = fbxsdk::FbxNode;
 using FbxScene = fbxsdk::FbxScene;
+using FbxSkin = fbxsdk::FbxSkin;
 using FbxVector2 = fbxsdk::FbxVector2;
 using FbxVector4 = fbxsdk::FbxVector4;
 

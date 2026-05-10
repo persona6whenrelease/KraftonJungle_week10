@@ -1,9 +1,9 @@
-﻿#include "Mesh/FBXManager.h"
+﻿#include "Mesh/FBX/FBXManager.h"
 
 #include "Core/Log.h"
 #include "Engine/Platform/Paths.h"
 #include "Materials/MaterialManager.h"
-#include "Mesh/FBXSkeletalImporter.h"
+#include "Mesh/FBX/FBXImporterLegacy.h"
 #include "Mesh/SkeletalMesh.h"
 #include "Object/Object.h"
 #include "Serialization/WindowsArchive.h"
