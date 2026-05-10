@@ -29,13 +29,27 @@ struct FFBXAsset
 	TArray<FCameraAsset> CameraAssets;
 };
 
+struct FFbxMeshPartSection
+{
+	int32 SourceMeshId = -1;
+	int32 MaterialSlotIndex = 0;
+	int32 FirstIndex = 0;
+	int32 IndexCount = 0;
+};
+
 struct FFbxSkinnedMeshPart
 {
 	int32 MeshId = -1;
 	int32 SkinId = -1;
 	int32 SkeletonId = -1;
-	FbxNode* Node = nullptr;
-	FbxMesh* Mesh = nullptr;
+	int32 AttachedBoneId = -1;
+	int32 AttachedSkeletonBoneIndex = -1;
+	bool bRigidAttached = false;
+	bool bSkinned = false;
+	FString SourceNodePath;
+	TArray<FSkeletalVertex> Vertices;
+	TArray<uint32> Indices;
+	TArray<FFbxMeshPartSection> Sections;
 };
 
 class FBXImporter
@@ -48,7 +62,16 @@ private:
 	bool LoadScene(const FString& InFilePath);
 	bool ParseStaticMeshes(TArray<FStaticMesh>& OutStaticMeshAsset);
 	bool ParseSkeletalMeshes(TArray<FFbxSkinnedMeshPart>& OutSkinnedMeshParts);
+	bool ParseSkinnedMeshPart(int32 MeshId, FFbxSkinnedMeshPart& OutPart);
+	bool ParseRigidAttachedMeshPart(int32 MeshId, FFbxSkinnedMeshPart& OutPart);
 	bool AttachMeshes(const TArray<FFbxSkinnedMeshPart>& SkinnedMeshParts, TArray<FSkeletalMesh>& OutSkeletalMeshAssets);
+	bool BuildSkeletalMeshFromParts(
+		const FFbxSkeletonMeta& SkeletonMeta,
+		const TArray<const FFbxSkinnedMeshPart*>& Parts,
+		FSkeletalMesh& OutMesh);
+	bool ValidateSkinnedMeshPartForAttach(
+		const FFbxSkeletonMeta& SkeletonMeta,
+		const FFbxSkinnedMeshPart& Part) const;
 	bool FinalizeAsset();
 	void ShutdownSdk();
 
