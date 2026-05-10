@@ -680,7 +680,7 @@
     <ClCompile Include="Source\Engine\Mesh\ObjManager.cpp">
       <Filter>Source\Engine\Mesh</Filter>
     </ClCompile>
-    <ClCompile Include="Source\Engine\Mesh\FBXSkeletalImporter.cpp">
+    <ClCompile Include="Source\Engine\Mesh\FBXImporterLegacy.cpp">
       <Filter>Source\Engine\Mesh</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Mesh\FBXManager.cpp">
@@ -1088,6 +1088,7 @@
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Source\Engine\Mesh\FBXImporter.cpp" />
     <ClCompile Include="Source\Engine\Mesh\FBXUtil.cpp" />
+    <ClCompile Include="FbxSkeletalParser.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Source\Editor\EditorEngine.h">
@@ -1498,7 +1499,7 @@
     <ClInclude Include="Source\Engine\Mesh\ObjManager.h">
       <Filter>Source\Engine\Mesh</Filter>
     </ClInclude>
-    <ClInclude Include="Source\Engine\Mesh\FBXSkeletalImporter.h">
+    <ClInclude Include="Source\Engine\Mesh\FBXImporterLegacy.h">
       <Filter>Source\Engine\Mesh</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Mesh\FBXManager.h">
@@ -2340,6 +2341,7 @@
     </ClInclude>
     <ClInclude Include="Source\Engine\Mesh\FBXImporter.h" />
     <ClInclude Include="Source\Engine\Mesh\FBXUtil.h" />
+    <ClInclude Include="FbxSkeletalParser.h" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="KraftonEngine.rc" />

@@ -1,4 +1,4 @@
-﻿#include "Mesh/FBXSkeletalImporter.h"
+﻿#include "Mesh/FBXImporterLegacy.h"
 
 #include <algorithm>
 #include <cmath>
