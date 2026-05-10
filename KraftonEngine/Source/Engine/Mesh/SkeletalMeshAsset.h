@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Core/CoreTypes.h"
 #include "Math/Matrix.h"
@@ -22,15 +22,15 @@ struct FBoneInfo
 {
 	FString Name;
 	int32 ParentIndex = -1;
-	FMatrix LocalBindPose = FMatrix::Identity;
-	FMatrix InverseBindPose = FMatrix::Identity;
+	FMatrix BoneSpaceToMeshSpace = FMatrix::Identity;
+	FMatrix MeshSpaceToBoneSpace = FMatrix::Identity;
 
 	friend FArchive& operator<<(FArchive& Ar, FBoneInfo& Bone)
 	{
 		Ar << Bone.Name;
 		Ar << Bone.ParentIndex;
-		Ar.Serialize(&Bone.LocalBindPose, sizeof(FMatrix));
-		Ar.Serialize(&Bone.InverseBindPose, sizeof(FMatrix));
+		Ar.Serialize(&Bone.BoneSpaceToMeshSpace, sizeof(FMatrix));
+		Ar.Serialize(&Bone.MeshSpaceToBoneSpace, sizeof(FMatrix));
 		return Ar;
 	}
 };

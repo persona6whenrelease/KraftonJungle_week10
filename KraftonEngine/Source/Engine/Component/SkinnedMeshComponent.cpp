@@ -1,4 +1,4 @@
-#include "Component/SkinnedMeshComponent.h"
+﻿#include "Component/SkinnedMeshComponent.h"
 
 #include <cmath>
 #include <cstring>
@@ -247,8 +247,8 @@ void USkinnedMeshComponent::BuildReferencePoseMatrices()
 	{
 		const int32 ParentIndex = Bones[i].ParentIndex;
 		ReferenceBoneMatrices[i] = (ParentIndex >= 0 && ParentIndex < i)
-			? Bones[i].LocalBindPose * ReferenceBoneMatrices[ParentIndex]
-			: Bones[i].LocalBindPose;
+			? Bones[i].BoneSpaceToMeshSpace * ReferenceBoneMatrices[ParentIndex]
+			: Bones[i].BoneSpaceToMeshSpace;
 	}
 }
 
@@ -282,7 +282,7 @@ void USkinnedMeshComponent::SkinVerticesToReferencePose()
 			}
 
 			const FMatrix SkinMatrix =
-				Asset->Bones[BoneIndex].InverseBindPose * ReferenceBoneMatrices[BoneIndex];
+				Asset->Bones[BoneIndex].MeshSpaceToBoneSpace * ReferenceBoneMatrices[BoneIndex];
 			SkinnedPos += SkinMatrix.TransformPositionWithW(Source.pos) * Weight;
 			SkinnedNormal += SkinMatrix.TransformVector(Source.normal) * Weight;
 			TotalWeight += Weight;
