@@ -41,6 +41,12 @@ struct FGPUGeometryView
 	bool IsValid() const { return VB != nullptr; }
 };
 
+enum class ESkinningMode
+{
+	CPU,
+	GPU,
+};
+
 enum class ERenderPass : uint32
 {
 	PreDepth,		// Depth-only 프리패스 (color write 없음, Early-Z용)

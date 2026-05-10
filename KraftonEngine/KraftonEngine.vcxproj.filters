@@ -623,6 +623,12 @@
     <ClCompile Include="Source\Engine\Component\Script\LuaScriptComponent.cpp">
       <Filter>Source\Engine\Component\Script</Filter>
     </ClCompile>
+    <ClCompile Include="Source\Engine\Component\SkeletalMeshComponent.cpp">
+      <Filter>Source\Engine\Component</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Engine\Component\SkinnedMeshComponent.cpp">
+      <Filter>Source\Engine\Component</Filter>
+    </ClCompile>
     <ClCompile Include="Source\Engine\Component\SpringArmComponent.cpp">
       <Filter>Source\Engine\Component</Filter>
     </ClCompile>
@@ -1399,6 +1405,12 @@
     </ClInclude>
     <ClInclude Include="Source\Engine\Component\Script\LuaScriptComponent.h">
       <Filter>Source\Engine\Component\Script</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Component\SkeletalMeshComponent.h">
+      <Filter>Source\Engine\Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Component\SkinnedMeshComponent.h">
+      <Filter>Source\Engine\Component</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Component\SpringArmComponent.h">
       <Filter>Source\Engine\Component</Filter>
