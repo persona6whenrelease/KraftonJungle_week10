@@ -3,7 +3,7 @@
 #include "Core/Log.h"
 #include "Engine/Platform/Paths.h"
 #include "Materials/MaterialManager.h"
-#include "Mesh/FBX/FBXImporterLegacy.h"
+#include "Mesh/FBX/FBXImporter.h"
 #include "Mesh/SkeletalMesh.h"
 #include "Object/Object.h"
 #include "Serialization/WindowsArchive.h"
@@ -19,7 +19,7 @@ TArray<FMeshAssetListItem> FFBXManager::AvailableFbxFiles;
 namespace
 {
 	constexpr uint32 FBXCacheMagic = 0x58424653u; // "SFBX"
-	constexpr uint32 FBXCacheVersion = 1u;
+	constexpr uint32 FBXCacheVersion = 2u;
 
 	struct FFBXCacheHeader
 	{
@@ -283,15 +283,29 @@ USkeletalMesh* FFBXManager::LoadSkeletalMesh(const FString& PathFileName)
 			return nullptr;
 		}
 
-		FSkeletalMesh* ImportedMesh = new FSkeletalMesh();
-		FBXSkeletalImporter Importer;
-		if (!Importer.ImportSkeletalMesh(PathFileName, *ImportedMesh))
+		FFBXAsset ImportedAsset;
+		FBXImporter Importer;
+		if (!Importer.ImportFbxAsset(PathFileName, ImportedAsset) ||
+			ImportedAsset.SkeletalMeshes.empty())
 		{
-			delete ImportedMesh;
+			UE_LOG("[FBXManager] New FBX import failed or produced no skeletal meshes: %s", PathFileName.c_str());
 			UObjectManager::Get().DestroyObject(SkeletalMesh);
 			return nullptr;
 		}
 
+		UE_LOG("[FBXManager] Imported FBX via new importer. Path=%s SkeletalMeshes=%u StaticMeshes=%u",
+			PathFileName.c_str(),
+			static_cast<uint32>(ImportedAsset.SkeletalMeshes.size()),
+			static_cast<uint32>(ImportedAsset.StaticMeshes.size()));
+
+		if (ImportedAsset.SkeletalMeshes.size() > 1)
+		{
+			UE_LOG("[FBXManager] FBX produced multiple skeletal meshes. Using first for drag-drop preview. Path=%s Count=%u",
+				PathFileName.c_str(),
+				static_cast<uint32>(ImportedAsset.SkeletalMeshes.size()));
+		}
+
+		FSkeletalMesh* ImportedMesh = new FSkeletalMesh(std::move(ImportedAsset.SkeletalMeshes[0]));
 		ImportedMesh->PathFileName = BinPath;
 		if (!ImportedMesh->bBoundsValid)
 		{

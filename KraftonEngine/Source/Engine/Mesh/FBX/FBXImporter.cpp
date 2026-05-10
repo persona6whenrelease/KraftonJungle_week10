@@ -282,6 +282,9 @@ namespace
 				SectionIndices.push_back(PolygonVertexIndices[0]);
 				SectionIndices.push_back(PolygonVertexIndices[i]);
 				SectionIndices.push_back(PolygonVertexIndices[i + 1]);
+				//SectionIndices.push_back(PolygonVertexIndices[0]);
+				//SectionIndices.push_back(PolygonVertexIndices[i + 1]);
+				//SectionIndices.push_back(PolygonVertexIndices[i]);
 			}
 		}
 
@@ -596,17 +599,17 @@ bool FBXImporter::ParseSkinnedMeshPart(int32 MeshId, FFbxSkinnedMeshPart& OutPar
 	const int32 FallbackBoneIndex = GetFallbackSkeletonBoneIndex(SkeletonMeta);
 	int32 MissingInfluenceVertexCount = 0;
 	const auto AssignWeights = [&](int32 ControlPointIndex, FSkeletalVertex& Vertex)
-	{
-		if (ControlPointIndex >= 0 &&
-			ControlPointIndex < static_cast<int32>(ControlPointInfluences.size()) &&
-			NormalizeTop4Influences(ControlPointInfluences[ControlPointIndex], Vertex.BoneIDs, Vertex.BoneWeights))
 		{
-			return;
-		}
+			if (ControlPointIndex >= 0 &&
+				ControlPointIndex < static_cast<int32>(ControlPointInfluences.size()) &&
+				NormalizeTop4Influences(ControlPointInfluences[ControlPointIndex], Vertex.BoneIDs, Vertex.BoneWeights))
+			{
+				return;
+			}
 
-		AssignSingleBoneWeight(Vertex, FallbackBoneIndex);
-		++MissingInfluenceVertexCount;
-	};
+			AssignSingleBoneWeight(Vertex, FallbackBoneIndex);
+			++MissingInfluenceVertexCount;
+		};
 
 	OutPart = {};
 	OutPart.MeshId = MeshId;
@@ -674,9 +677,9 @@ bool FBXImporter::ParseRigidAttachedMeshPart(int32 MeshId, FFbxSkinnedMeshPart& 
 	}
 
 	const auto AssignWeights = [&](int32, FSkeletalVertex& Vertex)
-	{
-		AssignSingleBoneWeight(Vertex, AttachedSkeletonBoneIndex);
-	};
+		{
+			AssignSingleBoneWeight(Vertex, AttachedSkeletonBoneIndex);
+		};
 
 	OutPart = {};
 	OutPart.MeshId = MeshId;
@@ -703,9 +706,11 @@ bool FBXImporter::ParseRigidAttachedMeshPart(int32 MeshId, FFbxSkinnedMeshPart& 
 		return false;
 	}
 
-	UE_LOG("[FBXImporter] Parsed rigid attached mesh part. MeshId=%d BoneId=%d SkeletonBoneIndex=%d",
+	UE_LOG("[FBXImporter] Parsed rigid attached mesh part. MeshId=%d Node=%s BoneId=%d BoneName=%s SkeletonBoneIndex=%d",
 		MeshId,
+		MeshMeta.SourceNodePath.c_str(),
 		MeshMeta.AttachedBoneId,
+		ImportMeta.Bones[MeshMeta.AttachedBoneId].Name.c_str(),
 		AttachedSkeletonBoneIndex);
 
 	return true;
@@ -1012,8 +1017,18 @@ void FBXImporter::PreprocessScene()
 		return;
 	}
 
-	const FbxAxisSystem DirectXAxisSystem(FbxAxisSystem::eDirectX);
-	DirectXAxisSystem.ConvertScene(Scene);
+	FbxAxisSystem EngineAxisSystem;
+	FbxAxisSystem::ParseAxisSystem("yzx", EngineAxisSystem);
+	EngineAxisSystem.ConvertScene(Scene);
+
+	/*const FbxAxisSystem AxisSystem(
+		FbxAxisSystem::eZAxis,
+		FbxAxisSystem::eParityEven,
+		FbxAxisSystem::eLeftHanded);
+	AxisSystem.ConvertScene(Scene);*/
+
+	//const FbxAxisSystem DirectXAxisSystem(FbxAxisSystem::eDirectX);
+	//DirectXAxisSystem.ConvertScene(Scene);
 
 	FbxSystemUnit::ConversionOptions UnitOptions = {};
 	UnitOptions.mConvertRrsNodes = true;

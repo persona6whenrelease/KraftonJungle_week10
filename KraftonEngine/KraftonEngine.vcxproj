@@ -321,7 +321,6 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Source\Engine\Mesh\FBX\FbxMetaParser.cpp" />
-    <ClCompile Include="FbxSkeletalParser.cpp" />
     <ClCompile Include="Source\Engine\Mesh\FBX\FBXUtil.cpp" />
     <ClCompile Include="Source\Engine\Mesh\FBX\FBXImporter.cpp" />
     <ClCompile Include="Source\Engine\Mesh\FBX\FBXImporterLegacy.cpp" />
@@ -580,7 +579,6 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Source\Engine\Mesh\FBX\FbxMetaParser.h" />
-    <ClInclude Include="FbxSkeletalParser.h" />
     <ClInclude Include="Source\Engine\Mesh\FBX\FBXImportMeta.h" />
     <ClInclude Include="Source\Engine\Mesh\FBX\FBXUtil.h" />
     <ClInclude Include="Source\Engine\Mesh\FBX\FBXImporter.h" />
