@@ -2,6 +2,7 @@
 #include "Object/Object.h"
 
 #include "Core/CoreTypes.h"
+#include "Math/Matrix.h"
 #include "Math/Vector.h"
 #include "Render/Resource/Buffer.h"
 #include "Serialization/Archive.h"
@@ -17,12 +18,27 @@ struct FSkeletalSourceVertex
 {
 	FVector Position;      // bind pose position
 	FVector Normal;        // bind pose normal
+	FMatrix MeshBindGlobal;
 	FVector4 Tangent;
 	FVector2 UV;
 	FVector4 Color;
 	int32 BoneIndices[4];
 	float BoneWeights[4];
 };
+
+inline FArchive& operator<<(FArchive& Ar, FSkeletalSourceVertex& Vertex)
+{
+	Ar << Vertex.Position;
+	Ar << Vertex.Normal;
+	Ar.Serialize(Vertex.MeshBindGlobal.Data, sizeof(Vertex.MeshBindGlobal.Data));
+	Ar << Vertex.Tangent;
+	Ar << Vertex.UV;
+	Ar << Vertex.Color;
+	Ar.Serialize(Vertex.BoneIndices, sizeof(Vertex.BoneIndices));
+	Ar.Serialize(Vertex.BoneWeights, sizeof(Vertex.BoneWeights));
+	return Ar;
+}
+
 struct FBoneInfo
 {
 	FString Name;
@@ -93,16 +109,22 @@ struct FStkeletalMesh
 		bBoundsValid = false;
 		if (MeshAsset.SourceVertices.empty()) return;
 
-		FVector LocalMin = MeshAsset.SourceVertices[0].Position;
-		FVector LocalMax = MeshAsset.SourceVertices[0].Position;
+		auto GetBindPosePosition = [](const FSkeletalSourceVertex& V)
+			{
+				return V.MeshBindGlobal.TransformPositionWithW(V.Position);
+			};
+
+		FVector LocalMin = GetBindPosePosition(MeshAsset.SourceVertices[0]);
+		FVector LocalMax = LocalMin;
 		for (const FSkeletalSourceVertex& V : MeshAsset.SourceVertices)
 		{
-			LocalMin.X = (std::min)(LocalMin.X, V.Position.X);
-			LocalMin.Y = (std::min)(LocalMin.Y, V.Position.Y);
-			LocalMin.Z = (std::min)(LocalMin.Z, V.Position.Z);
-			LocalMax.X = (std::max)(LocalMax.X, V.Position.X);
-			LocalMax.Y = (std::max)(LocalMax.Y, V.Position.Y);
-			LocalMax.Z = (std::max)(LocalMax.Z, V.Position.Z);
+			const FVector BindPosePosition = GetBindPosePosition(V);
+			LocalMin.X = (std::min)(LocalMin.X, BindPosePosition.X);
+			LocalMin.Y = (std::min)(LocalMin.Y, BindPosePosition.Y);
+			LocalMin.Z = (std::min)(LocalMin.Z, BindPosePosition.Z);
+			LocalMax.X = (std::max)(LocalMax.X, BindPosePosition.X);
+			LocalMax.Y = (std::max)(LocalMax.Y, BindPosePosition.Y);
+			LocalMax.Z = (std::max)(LocalMax.Z, BindPosePosition.Z);
 		}
 
 		BoundsCenter = (LocalMin + LocalMax) * 0.5f;

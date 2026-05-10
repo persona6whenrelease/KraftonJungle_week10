@@ -1,6 +1,90 @@
 ﻿#include "FBXImporter.h"
 #include "Mesh/SkeletalMeshAsset.h"
 #include "Math/Transform.h"
+#include <algorithm>
+
+namespace
+{
+	constexpr float GFBXImportUniformScale = 0.01f;
+
+	FVector ConvertFbxVectorToEngineVector(const FbxVector4& Vector)
+	{
+		return FVector(
+			static_cast<float>(Vector[0]),
+			static_cast<float>(Vector[1]),
+			static_cast<float>(Vector[2])
+		);
+	}
+
+	// FBX SDK의 행렬 타입인 FbxAMatrix를 우리 엔진 행렬 타입인 FMatrix로 복사 변환하는 함수
+	FMatrix ConvertFbxMatrixToEngineMatrix(const FbxAMatrix& Matrix)
+	{
+		FMatrix Result;
+		for (int Row = 0; Row < 4; ++Row)
+		{
+			for (int Col = 0; Col < 4; ++Col)
+			{
+				Result.M[Row][Col] = static_cast<float>(Matrix.Get(Row, Col));
+			}
+		}
+
+		return Result;
+	}
+	
+	//FBX에서 가져온 global/bind matrix에 엔진용 import scale(현재 0.01)을 추가로 곱하는 함수
+	FMatrix ApplyImportScaleToGlobalMatrix(const FMatrix& Matrix)
+	{
+		if (GFBXImportUniformScale == 1.0f)
+		{
+			return Matrix;
+		}
+
+		const FVector Scale(
+			GFBXImportUniformScale,
+			GFBXImportUniformScale,
+			GFBXImportUniformScale
+		);
+		return Matrix * FMatrix::MakeScaleMatrix(Scale);
+	}
+
+	float GetBasisDeterminant(const FMatrix& Matrix)
+	{
+		return Matrix.M[0][0] * (Matrix.M[1][1] * Matrix.M[2][2] - Matrix.M[1][2] * Matrix.M[2][1])
+			- Matrix.M[0][1] * (Matrix.M[1][0] * Matrix.M[2][2] - Matrix.M[1][2] * Matrix.M[2][0])
+			+ Matrix.M[0][2] * (Matrix.M[1][0] * Matrix.M[2][1] - Matrix.M[1][1] * Matrix.M[2][0]);
+	}
+
+	int32 FindBoneIndexByName(const FString& BoneName, const TArray<FBoneInfo>& InBones)
+	{
+		for (int32 BoneIndex = 0; BoneIndex < static_cast<int32>(InBones.size()); ++BoneIndex)
+		{
+			if (InBones[BoneIndex].Name == BoneName)
+			{
+				return BoneIndex;
+			}
+		}
+
+		return -1;
+	}
+
+	int32 FindAncestorBoneIndex(FbxNode* MeshNode, const TArray<FBoneInfo>& InBones)
+	{
+		for (FbxNode* Parent = MeshNode ? MeshNode->GetParent() : nullptr; Parent; Parent = Parent->GetParent())
+		{
+			FbxNodeAttribute* Attribute = Parent->GetNodeAttribute();
+			if (Attribute && Attribute->GetAttributeType() == FbxNodeAttribute::eSkeleton)
+			{
+				const int32 BoneIndex = FindBoneIndexByName(Parent->GetName(), InBones);
+				if (BoneIndex >= 0)
+				{
+					return BoneIndex;
+				}
+			}
+		}
+
+		return -1;
+	}
+}
 
 bool FFBXImporter::Initialize()
 {
@@ -29,13 +113,21 @@ bool FFBXImporter::Import(const char* fileName, FStkeletalMesh& OutMesh)
 	// 임포트 후 임포터는 해제하여 메모리 사용량을 줄입니다.
 	m_importer->Destroy();
 	
-	//언리얼 기준 좌표계 변환
-	FbxAxisSystem UnrealAxisSystem(
-		FbxAxisSystem::eZAxis,       // Up Vector는 Z
-		FbxAxisSystem::eParityEven,   // Front 방향 계산용 패리티 (보통 Odd)
-		FbxAxisSystem::eLeftHanded   // 왼손 좌표계
-	);
-	UnrealAxisSystem.ConvertScene(m_scene);
+	// Convert the scene once and then use FBX skinning spaces consistently.
+	// Skinned vertices stay in mesh-local space; CPU skinning applies
+	// MeshBindGlobal * InverseBoneBindGlobal * CurrentBoneGlobal.
+	FbxAxisSystem EngineAxisSystem;
+	FbxAxisSystem::ParseAxisSystem("yzx", EngineAxisSystem); // +Y right, +Z up, +X forward
+	EngineAxisSystem.DeepConvertScene(m_scene);
+
+	// Normalize file units first. The engine import scale is applied later to
+	// mesh/bone global matrices, so avoid mixing size policy into FBX units.
+	FbxSystemUnit SceneSystemUnit = m_scene->GetGlobalSettings().GetSystemUnit();
+
+	if (SceneSystemUnit != FbxSystemUnit::cm)
+	{
+		FbxSystemUnit::cm.ConvertScene(m_scene);
+	}
 
 	// 2. 삼각형화할 수 있는 노드를 삼각형화 시키기
 	FbxGeometryConverter converter(m_manager);
@@ -112,26 +204,13 @@ bool FFBXImporter::BuildReferenceSkeleton(FbxNode* InNode, TArray<FBoneInfo>& Ou
 
 	if (attribute && attribute->GetAttributeType() == FbxNodeAttribute::eSkeleton)
 	{
-		FString BoneName = InNode->GetName();
-		FbxAMatrix Local = InNode->EvaluateLocalTransform();
-		FTransform LocalBonePose(
-			FVector(Local.GetT()[0], Local.GetT()[1], Local.GetT()[2]) ,
-			FQuat(Local.GetQ()[0], Local.GetQ()[1], Local.GetQ()[2], Local.GetQ()[3]),
-			FVector(Local.GetS()[0], Local.GetS()[1], Local.GetS()[2])
-		);
-
 		FbxAMatrix Global = InNode->EvaluateGlobalTransform();
-		FTransform GlobalBonePose(
-			FVector(Global.GetT()[0], Global.GetT()[1], Global.GetT()[2]) ,
-			FQuat(Global.GetQ()[0], Global.GetQ()[1], Global.GetQ()[2], Global.GetQ()[3]),
-			FVector(Global.GetS()[0], Global.GetS()[1], Global.GetS()[2])
-		);
 
 		FBoneInfo newBone = {};
 		newBone.Name = InNode->GetName();
 		newBone.ParentIndex = ParentIndex;
-		newBone.BindPoseGlobal = LocalBonePose.ToMatrix();
-		newBone.InverseBindPose = GlobalBonePose.ToMatrix();
+		newBone.BindPoseGlobal = ApplyImportScaleToGlobalMatrix(ConvertFbxMatrixToEngineMatrix(Global));
+		newBone.InverseBindPose = newBone.BindPoseGlobal.GetInverse();
 		OutBoneInfo.push_back(newBone);
 
 		CurrentIndex = OutBoneInfo.size() - 1;
@@ -148,7 +227,7 @@ bool FFBXImporter::BuildReferenceSkeleton(FbxNode* InNode, TArray<FBoneInfo>& Ou
 	return true;
 }
 
-bool FFBXImporter::BuildSkinningWeight(FbxMesh* InMesh, TArray<TArray<VertexBlendingInfo>>& OutWeights, const TArray<FBoneInfo>& InBones)
+bool FFBXImporter::BuildSkinningWeight(FbxMesh* InMesh, TArray<TArray<VertexBlendingInfo>>& OutWeights, TArray<FBoneInfo>& InBones)
 {
 	// 1. 점(Control Point)의 총 개수만큼 우편함을 만듭니다.
 	int cpCount = InMesh->GetControlPointsCount();
@@ -177,6 +256,11 @@ bool FFBXImporter::BuildSkinningWeight(FbxMesh* InMesh, TArray<TArray<VertexBlen
 			}
 			if (boneIndex == -1) continue; // 목록에 없는 뼈면 무시
 
+			FbxAMatrix LinkBindMatrix;
+			cluster->GetTransformLinkMatrix(LinkBindMatrix);
+			InBones[boneIndex].BindPoseGlobal = ApplyImportScaleToGlobalMatrix(ConvertFbxMatrixToEngineMatrix(LinkBindMatrix));
+			InBones[boneIndex].InverseBindPose = InBones[boneIndex].BindPoseGlobal.GetInverse();
+
 			// 3. 점들을 순회하며 Weight에 데이터를 넣습니다.
 			int indexCount = cluster->GetControlPointIndicesCount();
 			int* indices = cluster->GetControlPointIndices();
@@ -194,7 +278,6 @@ bool FFBXImporter::BuildSkinningWeight(FbxMesh* InMesh, TArray<TArray<VertexBlen
 	}
 	return true;
 }
-
 
 bool FFBXImporter::SaveVertexData(FbxMesh* InMesh, const TArray<TArray<VertexBlendingInfo>>& InWeights, const TArray<FBoneInfo>& InBones)
 {
@@ -216,10 +299,32 @@ bool FFBXImporter::SaveVertexData(FbxMesh* InMesh, const TArray<TArray<VertexBle
 
 	// 최종 정점을 변환할  행렬
 	FbxAMatrix finalMeshTransform = meshGlobalTransform * geoTransform;
+	FbxAMatrix meshBindTransform = finalMeshTransform;
+	const bool bSkinnedMesh = InMesh->GetDeformerCount(FbxDeformer::eSkin) > 0;
+	int32 RigidBindBoneIndex = -1;
+	if (bSkinnedMesh)
+	{
+		FbxSkin* skin = static_cast<FbxSkin*>(InMesh->GetDeformer(0, FbxDeformer::eSkin));
+		if (skin && skin->GetClusterCount() > 0)
+		{
+			skin->GetCluster(0)->GetTransformMatrix(meshBindTransform);
+		}
+	}
+	FMatrix MeshBindGlobal = ApplyImportScaleToGlobalMatrix(ConvertFbxMatrixToEngineMatrix(meshBindTransform));
+	if (!bSkinnedMesh)
+	{
+		// Rigid child meshes follow their ancestor bone, while root-level
+		// unskinned meshes stay in their converted node space.
+		RigidBindBoneIndex = FindAncestorBoneIndex(meshNode, InBones);
+	}
+	const bool bRigidBoundMesh = RigidBindBoneIndex >= 0;
+	const bool bReverseWinding = GetBasisDeterminant(MeshBindGlobal) < 0.0f;
 
 	// 2. 모든 삼각형을 순회합니다.
 	for (int i = 0; i < polygonCount; ++i)
 	{
+		uint32 TriangleIndices[3] = {};
+
 		// 3. 하나의 삼각형은 3개의 꼭짓점(Vertex)으로 이루어져 있습니다.
 		for (int j = 0; j <3; ++j)
 		{
@@ -235,27 +340,22 @@ bool FFBXImporter::SaveVertexData(FbxMesh* InMesh, const TArray<TArray<VertexBle
 			}
 			vertex.Color = FVector4(1.0f, 1.0f, 1.0f, 1.0f); // 기본 흰색
 			vertex.Tangent = FVector4(1.0f, 0.0f, 0.0f, 1.0f); // 기본 탄젠트
+			vertex.MeshBindGlobal = MeshBindGlobal;
 
 			// --- A. 위치 (Position) 추출 ---
 			FbxVector4 localPos = controlPoints[ctrlPointIndex];
-			FbxVector4 globalPos = finalMeshTransform.MultT(localPos);
+			FbxVector4 vertexPos = geoTransform.MultT(localPos);
 
-			vertex.Position = FVector(
-				-static_cast<float>(globalPos[0]),
-				static_cast<float>(globalPos[1]),
-				-static_cast<float>(globalPos[2])
-			);
+			vertex.Position = ConvertFbxVectorToEngineVector(vertexPos);
 
-			//--- B. 법선 (Normal) 추출 (임시 수도코드) ---
+			//--- B. 법선 (Normal) 추출  ---
 			FbxVector4 fbxNormal;
 			InMesh->GetPolygonVertexNormal(i, j, fbxNormal);
 			fbxNormal[3] = 0.0; // 노멀은 방향이므로 이동(Translation)을 무시하기 위해 W를 0으로 설정
-			FbxVector4 globalNormal = finalMeshTransform.MultT(fbxNormal);
+			FbxVector4 globalNormal = geoTransform.MultT(fbxNormal);
 			globalNormal.Normalize(); // 크기를 1로 재정규화
 
-			vertex.Normal.X = -static_cast<float>(globalNormal[0]);
-			vertex.Normal.Y = static_cast<float>(globalNormal[1]);
-			vertex.Normal.Z = -static_cast<float>(globalNormal[2]);
+			vertex.Normal = ConvertFbxVectorToEngineVector(globalNormal);
 
 
 			// --- C. 텍스처 좌표 (UV) 추출 ---
@@ -325,14 +425,30 @@ bool FFBXImporter::SaveVertexData(FbxMesh* InMesh, const TArray<TArray<VertexBle
 			}
 			else
 			{
-				// 이 점에 영향을 주는 뼈가 하나도 없을 때의 안전장치
-				vertex.BoneIndices[0] = 0;
-				vertex.BoneWeights[0] = 1.0f;
+				if (bRigidBoundMesh)
+				{
+					vertex.BoneIndices[0] = RigidBindBoneIndex;
+					vertex.BoneWeights[0] = 1.0f;
+				}
+				// 이 점에 영향을 주는 뼈가 없으면 UpdateSkinning에서 원본 정점을 그대로 씁니다.
 			}
 
 			// 5. 완성된 정점을 엔진 버퍼 배열에 밀어 넣기
+			TriangleIndices[j] = static_cast<uint32>(m_Vertices.size());
 			m_Vertices.push_back(vertex);
-			m_Indices.push_back(m_Vertices.size() - 1);
+		}
+
+		if (bReverseWinding)
+		{
+			m_Indices.push_back(TriangleIndices[0]);
+			m_Indices.push_back(TriangleIndices[2]);
+			m_Indices.push_back(TriangleIndices[1]);
+		}
+		else
+		{
+			m_Indices.push_back(TriangleIndices[0]);
+			m_Indices.push_back(TriangleIndices[1]);
+			m_Indices.push_back(TriangleIndices[2]);
 		}
 	}
 

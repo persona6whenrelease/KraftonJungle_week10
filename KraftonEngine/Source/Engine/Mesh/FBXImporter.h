@@ -41,7 +41,7 @@ public:
 private:
 	void FindMesh(FbxNode* InNode);
 	bool BuildReferenceSkeleton(FbxNode* InNode, TArray<FBoneInfo>& OutBoneInfo, int32 ParentIndex);
-	bool BuildSkinningWeight(FbxMesh* InMesh, TArray<TArray<VertexBlendingInfo>>& OutWeights, const TArray<FBoneInfo>& InBones);
+	bool BuildSkinningWeight(FbxMesh* InMesh, TArray<TArray<VertexBlendingInfo>>& OutWeights, TArray<FBoneInfo>& InBones);
 	bool SaveVertexData(FbxMesh* InMesh, const TArray<TArray<VertexBlendingInfo>>& InWeights, const TArray<FBoneInfo>& InBones);
 	void Shutdown();
 

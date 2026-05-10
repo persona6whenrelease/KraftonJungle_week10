@@ -93,8 +93,7 @@ void USkinnedMeshComponent::SetSkeletalMesh(USkeletalMesh* InMesh)
 				const FBoneInfo& Bone = Asset.Bones[BoneIndex];
 
 				CurrentBoneGlobals[BoneIndex] = Bone.BindPoseGlobal;
-				BoneSkinMatrices[BoneIndex] =
-					CurrentBoneGlobals[BoneIndex] * Bone.InverseBindPose;
+				BoneSkinMatrices[BoneIndex] = Bone.InverseBindPose * CurrentBoneGlobals[BoneIndex];
 			}
 
 			for (int32 VertexIndex = 0; VertexIndex < VertexCount; ++VertexIndex)
@@ -108,6 +107,7 @@ void USkinnedMeshComponent::SetSkeletalMesh(USkeletalMesh* InMesh)
 				Dst.Color = Src.Color;
 				Dst.Tangent = Src.Tangent;
 			}
+			UpdateSkinning(0.0f);
 		}
 	}
 	else
@@ -296,14 +296,13 @@ void USkinnedMeshComponent::UpdateSkinning(float DeltaTime)
 
 	SkinnedVertices.resize(VertexCount);
 
-	TArray<FBoneInfo> Bones = SkeletalMesh->GetSkeletalMeshAsset()->MeshAsset.Bones;
-
 	for (uint32 i = 0; i < VertexCount; ++i)
 	{
 		const FSkeletalSourceVertex& Src = Asset.SourceVertices[i];
 
 		FVector SkinnedPos(0, 0, 0);
 		FVector SkinnedNormal(0, 0, 0);
+		float AccumulatedWeight = 0.0f;
 
 		for (int32 InfluenceIndex = 0; InfluenceIndex < 4; ++InfluenceIndex)
 		{
@@ -313,15 +312,25 @@ void USkinnedMeshComponent::UpdateSkinning(float DeltaTime)
 			if (Weight <= 0.0f) continue;
 			if (BoneIndex < 0 || BoneIndex >= BoneSkinMatrices.size()) continue;
 
-			const FMatrix& SkinMatrix = BoneSkinMatrices[BoneIndex];
+			const FMatrix SkinMatrix = Src.MeshBindGlobal * BoneSkinMatrices[BoneIndex];
 
 			SkinnedPos += SkinMatrix.TransformPositionWithW(Src.Position) * Weight;
 			SkinnedNormal += SkinMatrix.TransformVector(Src.Normal) * Weight;
+			AccumulatedWeight += Weight;
 		}
 
 		FVertexPNCTT& Dst = SkinnedVertices[i];
-		Dst.Position = SkinnedPos;
-		Dst.Normal = SkinnedNormal.Normalized();
+		if (AccumulatedWeight > 0.0001f)
+		{
+			const float InvWeight = 1.0f / AccumulatedWeight;
+			Dst.Position = SkinnedPos * InvWeight;
+			Dst.Normal = SkinnedNormal.Normalized();
+		}
+		else
+		{
+			Dst.Position = Src.MeshBindGlobal.TransformPositionWithW(Src.Position);
+			Dst.Normal = Src.MeshBindGlobal.TransformVector(Src.Normal).Normalized();
+		}
 		Dst.UV = Src.UV;
 		Dst.Color = Src.Color;
 		Dst.Tangent = Src.Tangent;
