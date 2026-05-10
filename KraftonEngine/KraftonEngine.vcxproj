@@ -320,11 +320,12 @@
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="Source\Engine\Mesh\FBX\FbxMetaParser.cpp" />
     <ClCompile Include="FbxSkeletalParser.cpp" />
-    <ClCompile Include="Source\Engine\Mesh\FBXUtil.cpp" />
-    <ClCompile Include="Source\Engine\Mesh\FBXImporter.cpp" />
-    <ClCompile Include="Source\Engine\Mesh\FBXImporterLegacy.cpp" />
-    <ClCompile Include="Source\Engine\Mesh\FBXManager.cpp" />
+    <ClCompile Include="Source\Engine\Mesh\FBX\FBXUtil.cpp" />
+    <ClCompile Include="Source\Engine\Mesh\FBX\FBXImporter.cpp" />
+    <ClCompile Include="Source\Engine\Mesh\FBX\FBXImporterLegacy.cpp" />
+    <ClCompile Include="Source\Engine\Mesh\FBX\FBXManager.cpp" />
     <ClCompile Include="Source\Editor\EditorEngine.cpp" />
     <ClCompile Include="Source\Editor\EditorRenderPipeline.cpp" />
     <ClCompile Include="Source\Editor\Packaging\GamePackageAssetCollector.cpp" />
@@ -578,11 +579,13 @@
     <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Source\Engine\Mesh\FBX\FbxMetaParser.h" />
     <ClInclude Include="FbxSkeletalParser.h" />
-    <ClInclude Include="Source\Engine\Mesh\FBXUtil.h" />
-    <ClInclude Include="Source\Engine\Mesh\FBXImporter.h" />
-    <ClInclude Include="Source\Engine\Mesh\FBXImporterLegacy.h" />
-    <ClInclude Include="Source\Engine\Mesh\FBXManager.h" />
+    <ClInclude Include="Source\Engine\Mesh\FBX\FBXImportMeta.h" />
+    <ClInclude Include="Source\Engine\Mesh\FBX\FBXUtil.h" />
+    <ClInclude Include="Source\Engine\Mesh\FBX\FBXImporter.h" />
+    <ClInclude Include="Source\Engine\Mesh\FBX\FBXImporterLegacy.h" />
+    <ClInclude Include="Source\Engine\Mesh\FBX\FBXManager.h" />
     <ClInclude Include="Source\Editor\EditorEngine.h" />
     <ClInclude Include="Source\Editor\EditorRenderPipeline.h" />
     <ClInclude Include="Source\Editor\PIE\PIETypes.h" />
