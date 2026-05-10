@@ -1,7 +1,8 @@
 ﻿#include "SkinnedMeshComponent.h"
 #include "Engine/Runtime/Engine.h"
 #include "Mesh/FBXManager.h"
-
+#include "Serialization/PropertyTypeSerialization.h"
+#include "Math/MatrixSerialization.h"
 IMPLEMENT_CLASS(USkinnedMeshComponent, UMeshComponent)
 
 
@@ -157,6 +158,9 @@ UMaterial* USkinnedMeshComponent::GetMaterial(int32 ElementIndex) const
 void USkinnedMeshComponent::Serialize(FArchive& Ar)
 {
 	UMeshComponent::Serialize(Ar);
+	Ar << SkeletalMeshPath;
+	Ar << MaterialSlots;
+	Ar << BoneSkinMatrices;
 
 }
 

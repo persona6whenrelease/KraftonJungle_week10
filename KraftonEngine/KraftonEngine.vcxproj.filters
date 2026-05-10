@@ -2313,6 +2313,7 @@
     <ClInclude Include="Source\Engine\Mesh\SkeletalMesh.h" />
     <ClInclude Include="Source\Engine\Render\Proxy\SkinnedMeshSceneProxy.h" />
     <ClInclude Include="Source\Engine\Mesh\FBXManager.h" />
+    <ClInclude Include="Source\Engine\Math\MatrixSerialization.h" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="KraftonEngine.rc" />
