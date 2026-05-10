@@ -77,23 +77,29 @@ namespace
 	}
 }
 
+// 메타 빌드의 전체 실행 순서를 보여주는 진입점입니다.
+#pragma region Build Orchestration
+
 bool FFbxMetaParser::BuildFbxMeta(FbxScene* Scene)
 {
 	ImportMeta.Clear();
 
 	if (!Scene || !Scene->GetRootNode())
 	{
-		UE_LOG("[FBXImporter] Scene root is missing.");
+		UE_LOG("[FBXMetaParser] Scene root is missing.");
 		return false;
 	}
 
+	// 1. FBX 원본 노드와 mesh node 테이블을 구성합니다.
 	RegisterNodeRecursive(Scene->GetRootNode(), -1, "");
 
+	// 2. skin/cluster 테이블을 만들고 cluster link bone을 기록합니다.
 	for (int32 MeshId = 0; MeshId < static_cast<int32>(ImportMeta.Meshes.size()); ++MeshId)
 	{
 		RegisterSkinsForMesh(MeshId);
 	}
 
+	// 3. FBX 노드 계층을 바탕으로 BoneMeta parent-child 연결을 보정합니다.
 	for (int32 BoneId = 0; BoneId < static_cast<int32>(ImportMeta.Bones.size()); ++BoneId)
 	{
 		if (ImportMeta.Bones[BoneId].bReferencedByCluster)
@@ -101,14 +107,25 @@ bool FFbxMetaParser::BuildFbxMeta(FbxScene* Scene)
 			EnsureBoneParentChain(BoneId);
 		}
 	}
-
 	BuildRegisteredBoneHierarchyLinks();
+
+	// 4. skeleton root 기준으로 bone과 skinned mesh part를 그룹화합니다.
 	BuildSkeletonTables();
+
+	// 5. bone 아래 parent 된 non-skinned mesh를 skeletal assembly에 붙입니다.
 	AttachRigidMeshesToSkeletons();
+
+	// 6. 최종 import classification 배열을 생성합니다.
 	ClassifyMeshes();
 
+	// 7. 생성된 FBX import meta의 ID와 양방향 링크 무결성을 검증합니다.
 	return ValidateFbxMeta();
 }
+
+#pragma endregion
+
+// FBX 원본 노드와 mesh node 테이블을 구성합니다.
+#pragma region Node And Mesh Registration
 
 int32 FFbxMetaParser::RegisterNodeRecursive(FbxNode* Node, int32 ParentNodeId, const FString& ParentPath)
 {
@@ -174,6 +191,58 @@ int32 FFbxMetaParser::RegisterNodeRecursive(FbxNode* Node, int32 ParentNodeId, c
 	return NodeId;
 }
 
+void FFbxMetaParser::RegisterMeshFromNode(FbxNode* Node, int32 NodeId)
+{
+	if (!Node || !IsValidIndex(ImportMeta.Nodes, NodeId))
+	{
+		return;
+	}
+
+	FbxMesh* Mesh = Node->GetMesh();
+	if (!Mesh)
+	{
+		return;
+	}
+
+	const int32 MeshId = static_cast<int32>(ImportMeta.Meshes.size());
+	FFbxMeshMeta MeshMeta;
+	MeshMeta.MeshId = MeshId;
+	MeshMeta.NodeId = NodeId;
+	MeshMeta.Node = Node;
+	MeshMeta.Mesh = Mesh;
+	MeshMeta.Name = GetNodeName(Node);
+	MeshMeta.SourceNodePath = ImportMeta.Nodes[NodeId].FullPath;
+	MeshMeta.ControlPointCount = Mesh->GetControlPointsCount();
+	MeshMeta.PolygonCount = Mesh->GetPolygonCount();
+
+	const int32 MaterialCount = Node->GetMaterialCount();
+	for (int32 MaterialIndex = 0; MaterialIndex < MaterialCount; ++MaterialIndex)
+	{
+		MeshMeta.MaterialSlotIds.push_back(MaterialIndex);
+	}
+
+	auto FirstMeshIt = ImportMeta.MeshToMeshId.find(Mesh);
+	if (FirstMeshIt != ImportMeta.MeshToMeshId.end())
+	{
+		UE_LOG("[FBXMetaParser] Duplicate FbxMesh object used by multiple nodes. FirstMeshId=%d NewMeshId=%d Node=%s",
+			FirstMeshIt->second,
+			MeshId,
+			MeshMeta.SourceNodePath.c_str());
+	}
+	else
+	{
+		ImportMeta.MeshToMeshId[Mesh] = MeshId;
+	}
+
+	ImportMeta.FbxMeshToMeshIds[Mesh].push_back(MeshId);
+	ImportMeta.Meshes.push_back(MeshMeta);
+}
+
+#pragma endregion
+
+// skin/cluster 테이블을 만들고 cluster link bone을 기록합니다.
+#pragma region Skin And Cluster Registration
+
 void FFbxMetaParser::RegisterSkinsForMesh(int32 MeshId)
 {
 	if (!IsValidIndex(ImportMeta.Meshes, MeshId))
@@ -191,7 +260,7 @@ void FFbxMetaParser::RegisterSkinsForMesh(int32 MeshId)
 	MeshMeta.bHasSkin = SkinCount > 0;
 	if (SkinCount > 1)
 	{
-		UE_LOG("[FBXImporter] Mesh has multiple skins. MeshId=%d Node=%s SkinCount=%d",
+		UE_LOG("[FBXMetaParser] Mesh has multiple skins. MeshId=%d Node=%s SkinCount=%d",
 			MeshId,
 			MeshMeta.SourceNodePath.c_str(),
 			SkinCount);
@@ -236,6 +305,107 @@ void FFbxMetaParser::RegisterSkinsForMesh(int32 MeshId)
 		}
 	}
 }
+
+int32 FFbxMetaParser::RegisterCluster(int32 SkinId, FbxCluster* Cluster)
+{
+	if (!IsValidIndex(ImportMeta.Skins, SkinId))
+	{
+		return -1;
+	}
+
+	FFbxSkinMeta& SkinMeta = ImportMeta.Skins[SkinId];
+	const int32 ClusterId = static_cast<int32>(ImportMeta.Clusters.size());
+	FFbxClusterMeta ClusterMeta;
+	ClusterMeta.ClusterId = ClusterId;
+	ClusterMeta.SkinId = SkinId;
+	ClusterMeta.MeshId = SkinMeta.MeshId;
+	ClusterMeta.Cluster = Cluster;
+
+	if (Cluster)
+	{
+		if (ImportMeta.ClusterToClusterId.find(Cluster) == ImportMeta.ClusterToClusterId.end())
+		{
+			ImportMeta.ClusterToClusterId[Cluster] = ClusterId;
+		}
+
+		FbxAMatrix MeshBindMatrix;
+		Cluster->GetTransformMatrix(MeshBindMatrix);
+		ClusterMeta.MeshBindGlobalMatrix = FBXUtil::ConvertFbxMatrix(MeshBindMatrix);
+		ClusterMeta.bHasMeshBindMatrix = true;
+
+		FbxAMatrix BoneBindMatrix;
+		Cluster->GetTransformLinkMatrix(BoneBindMatrix);
+		ClusterMeta.BoneBindGlobalMatrix = FBXUtil::ConvertFbxMatrix(BoneBindMatrix);
+		ClusterMeta.bHasBoneBindMatrix = true;
+
+		ClusterMeta.ControlPointInfluenceCount = Cluster->GetControlPointIndicesCount();
+		const double* Weights = Cluster->GetControlPointWeights();
+		for (int32 InfluenceIndex = 0; InfluenceIndex < ClusterMeta.ControlPointInfluenceCount; ++InfluenceIndex)
+		{
+			if (Weights && Weights[InfluenceIndex] > 0.0)
+			{
+				++ClusterMeta.PositiveWeightCount;
+			}
+		}
+
+		ClusterMeta.LinkNode = Cluster->GetLink();
+		if (!ClusterMeta.LinkNode)
+		{
+			UE_LOG("[FBXMetaParser] Cluster link is null. SkinId=%d ClusterId=%d", SkinId, ClusterId);
+		}
+		else
+		{
+			ClusterMeta.LinkNodeName = GetNodeName(ClusterMeta.LinkNode);
+			auto NodeIt = ImportMeta.NodeToNodeId.find(ClusterMeta.LinkNode);
+			if (NodeIt != ImportMeta.NodeToNodeId.end())
+			{
+				ClusterMeta.LinkNodeId = NodeIt->second;
+			}
+			else
+			{
+				UE_LOG("[FBXMetaParser] Cluster link node is missing from node table. Link=%s",
+					ClusterMeta.LinkNodeName.c_str());
+			}
+
+			ClusterMeta.LinkBoneId = RegisterBoneNode(ClusterMeta.LinkNode, true, false);
+			if (IsValidIndex(ImportMeta.Bones, ClusterMeta.LinkBoneId))
+			{
+				FFbxBoneMeta& BoneMeta = ImportMeta.Bones[ClusterMeta.LinkBoneId];
+				if (ClusterMeta.bHasBoneBindMatrix)
+				{
+					BoneMeta.BindGlobalMatrix = ClusterMeta.BoneBindGlobalMatrix;
+					BoneMeta.InvBindGlobalMatrix = BoneMeta.BindGlobalMatrix.GetInverse();
+				}
+				AddUniqueId(SkinMeta.BoneIds, ClusterMeta.LinkBoneId);
+			}
+		}
+	}
+
+	ClusterMeta.bValid = ClusterMeta.LinkBoneId >= 0 &&
+		ClusterMeta.ControlPointInfluenceCount > 0 &&
+		ClusterMeta.PositiveWeightCount > 0 &&
+		ClusterMeta.LinkNodeId >= 0;
+
+	if (!ClusterMeta.bValid && ClusterMeta.LinkNode)
+	{
+		UE_LOG("[FBXMetaParser] Invalid cluster. Link=%s LinkBoneId=%d InfluenceCount=%d PositiveWeightCount=%d LinkNodeId=%d",
+			ClusterMeta.LinkNodeName.c_str(),
+			ClusterMeta.LinkBoneId,
+			ClusterMeta.ControlPointInfluenceCount,
+			ClusterMeta.PositiveWeightCount,
+			ClusterMeta.LinkNodeId);
+	}
+
+	SkinMeta.ClusterIds.push_back(ClusterId);
+	SkinMeta.TotalInfluenceCount += ClusterMeta.PositiveWeightCount;
+	ImportMeta.Clusters.push_back(ClusterMeta);
+	return ClusterId;
+}
+
+#pragma endregion
+
+// FBX 노드 계층을 바탕으로 BoneMeta parent-child 연결을 보정합니다.
+#pragma region Bone Hierarchy
 
 void FFbxMetaParser::EnsureBoneParentChain(int32 BoneId)
 {
@@ -379,113 +549,67 @@ void FFbxMetaParser::BuildRegisteredBoneHierarchyLinks()
 	}
 }
 
-int32 FFbxMetaParser::FindNearestParentBoneIdForNode(FbxNode* Node) const
+int32 FFbxMetaParser::RegisterBoneNode(FbxNode* Node, bool bReferencedByCluster, bool bInsertedAsParentChain)
 {
 	if (!Node)
 	{
 		return -1;
 	}
 
-	FbxNode* ParentNode = Node->GetParent();
-	while (ParentNode)
+	auto ExistingIt = ImportMeta.BoneNodeToBoneId.find(Node);
+	if (ExistingIt != ImportMeta.BoneNodeToBoneId.end())
 	{
-		if (IsSceneRootNode(ParentNode))
-		{
-			return -1;
-		}
-
-		FbxNodeAttribute* Attribute = ParentNode->GetNodeAttribute();
-		if (Attribute)
-		{
-			const FbxNodeAttribute::EType Type = Attribute->GetAttributeType();
-			if (Type == FbxNodeAttribute::eMesh ||
-				Type == FbxNodeAttribute::eCamera ||
-				Type == FbxNodeAttribute::eCameraStereo ||
-				Type == FbxNodeAttribute::eCameraSwitcher ||
-				Type == FbxNodeAttribute::eLight)
-			{
-				return -1;
-			}
-		}
-
-		auto BoneIt = ImportMeta.BoneNodeToBoneId.find(ParentNode);
-		if (BoneIt != ImportMeta.BoneNodeToBoneId.end())
-		{
-			return BoneIt->second;
-		}
-
-		ParentNode = ParentNode->GetParent();
+		FFbxBoneMeta& ExistingBone = ImportMeta.Bones[ExistingIt->second];
+		ExistingBone.bReferencedByCluster = ExistingBone.bReferencedByCluster || bReferencedByCluster;
+		ExistingBone.bInsertedAsParentChain = ExistingBone.bInsertedAsParentChain || bInsertedAsParentChain;
+		return ExistingIt->second;
 	}
 
-	return -1;
+	const int32 BoneId = static_cast<int32>(ImportMeta.Bones.size());
+	FFbxBoneMeta BoneMeta;
+	BoneMeta.BoneId = BoneId;
+	BoneMeta.Node = Node;
+	BoneMeta.Name = GetNodeName(Node);
+	BoneMeta.bReferencedByCluster = bReferencedByCluster;
+	BoneMeta.bInsertedAsParentChain = bInsertedAsParentChain;
+	BoneMeta.BindGlobalMatrix = FBXUtil::ConvertFbxMatrix(Node->EvaluateGlobalTransform());
+	BoneMeta.InvBindGlobalMatrix = BoneMeta.BindGlobalMatrix.GetInverse();
+
+	auto NodeIt = ImportMeta.NodeToNodeId.find(Node);
+	if (NodeIt != ImportMeta.NodeToNodeId.end())
+	{
+		BoneMeta.NodeId = NodeIt->second;
+		if (IsValidIndex(ImportMeta.Nodes, BoneMeta.NodeId))
+		{
+			BoneMeta.FullPath = ImportMeta.Nodes[BoneMeta.NodeId].FullPath;
+		}
+	}
+
+	ImportMeta.Bones.push_back(BoneMeta);
+	ImportMeta.BoneNodeToBoneId[Node] = BoneId;
+	return BoneId;
 }
 
-int32 FFbxMetaParser::FindSkeletonIdForBone(int32 BoneId) const
+int32 FFbxMetaParser::FindTopRootBone(int32 BoneId) const
 {
 	if (!IsValidIndex(ImportMeta.Bones, BoneId))
 	{
 		return -1;
 	}
 
-	const int32 BoneSkeletonId = ImportMeta.Bones[BoneId].SkeletonId;
-	if (IsValidIndex(ImportMeta.Skeletons, BoneSkeletonId))
+	int32 CurrentId = BoneId;
+	while (IsValidIndex(ImportMeta.Bones, ImportMeta.Bones[CurrentId].ParentBoneId))
 	{
-		return BoneSkeletonId;
+		CurrentId = ImportMeta.Bones[CurrentId].ParentBoneId;
 	}
 
-	for (const FFbxSkeletonMeta& SkeletonMeta : ImportMeta.Skeletons)
-	{
-		if (ContainsId(SkeletonMeta.BoneIds, BoneId))
-		{
-			return SkeletonMeta.SkeletonId;
-		}
-	}
-
-	return -1;
+	return CurrentId;
 }
 
-void FFbxMetaParser::AttachRigidMeshesToSkeletons()
-{
-	for (FFbxMeshMeta& MeshMeta : ImportMeta.Meshes)
-	{
-		if (MeshMeta.bHasSkin)
-		{
-			continue;
-		}
+#pragma endregion
 
-		MeshMeta.AttachedSkeletonId = -1;
-		MeshMeta.AttachedBoneId = -1;
-		MeshMeta.bAttachedToSkeleton = false;
-		MeshMeta.bRigidAttachedCandidate = false;
-		MeshMeta.bIndependentStaticCandidate = false;
-
-		const int32 AttachedBoneId = FindNearestParentBoneIdForNode(MeshMeta.Node);
-		const int32 AttachedSkeletonId = FindSkeletonIdForBone(AttachedBoneId);
-		if (!IsValidIndex(ImportMeta.Bones, AttachedBoneId) ||
-			!IsValidIndex(ImportMeta.Skeletons, AttachedSkeletonId))
-		{
-			MeshMeta.bIndependentStaticCandidate = true;
-			continue;
-		}
-
-		MeshMeta.bAttachedToSkeleton = true;
-		MeshMeta.bRigidAttachedCandidate = true;
-		MeshMeta.bIndependentStaticCandidate = false;
-		MeshMeta.AttachedBoneId = AttachedBoneId;
-		MeshMeta.AttachedSkeletonId = AttachedSkeletonId;
-		MeshMeta.SkeletonId = AttachedSkeletonId;
-
-		FFbxSkeletonMeta& SkeletonMeta = ImportMeta.Skeletons[AttachedSkeletonId];
-		AddUniqueId(SkeletonMeta.RigidAttachedMeshIds, MeshMeta.MeshId);
-		AddUniqueId(SkeletonMeta.MeshIds, MeshMeta.MeshId);
-
-		UE_LOG("[FBXImporter] Rigid mesh attached to skeleton. MeshId=%d Node=%s BoneId=%d SkeletonId=%d",
-			MeshMeta.MeshId,
-			MeshMeta.SourceNodePath.c_str(),
-			AttachedBoneId,
-			AttachedSkeletonId);
-	}
-}
+// skeleton root 기준으로 bone과 skinned mesh part를 그룹화합니다.
+#pragma region Skeleton Grouping
 
 void FFbxMetaParser::BuildSkeletonTables()
 {
@@ -502,7 +626,7 @@ void FFbxMetaParser::BuildSkeletonTables()
 		bool bSyntheticRoot = false;
 		if (RootBoneId < 0)
 		{
-			UE_LOG("[FBXImporter] Failed to find skeleton root. SkinId=%d", SkinMeta.SkinId);
+			UE_LOG("[FBXMetaParser] Failed to find skeleton root. SkinId=%d", SkinMeta.SkinId);
 
 			RootBoneId = static_cast<int32>(ImportMeta.Bones.size());
 			FFbxBoneMeta SyntheticRoot;
@@ -572,6 +696,176 @@ void FFbxMetaParser::BuildSkeletonTables()
 	}
 }
 
+void FFbxMetaParser::AddBoneDfs(int32 CurrentBoneId, FFbxSkeletonMeta& SkeletonMeta, uint32 SkeletonId)
+{
+	if (!IsValidIndex(ImportMeta.Bones, CurrentBoneId) ||
+		ContainsId(SkeletonMeta.BoneIds, CurrentBoneId))
+	{
+		return;
+	}
+
+	const int32 SkeletonBoneIndex = static_cast<int32>(SkeletonMeta.BoneIds.size());
+	SkeletonMeta.BoneIds.push_back(CurrentBoneId);
+	SkeletonMeta.BoneIdToSkeletonBoneIndex[CurrentBoneId] = SkeletonBoneIndex;
+
+	FFbxBoneMeta& BoneMeta = ImportMeta.Bones[CurrentBoneId];
+	BoneMeta.SkeletonId = SkeletonId;
+	BoneMeta.SkeletonBoneIndex = SkeletonBoneIndex;
+	if (BoneMeta.Node)
+	{
+		SkeletonMeta.BoneNodeToSkeletonBoneIndex[BoneMeta.Node] = SkeletonBoneIndex;
+	}
+
+	for (int32 ChildBoneId : BoneMeta.ChildBoneIds)
+	{
+		AddBoneDfs(ChildBoneId, SkeletonMeta, SkeletonId);
+	}
+};
+
+int32 FFbxMetaParser::FindSkeletonRootBoneForSkin(const TArray<int32>& BoneIds) const
+{
+	int32 SharedRootBoneId = -1;
+	for (int32 BoneId : BoneIds)
+	{
+		const int32 RootBoneId = FindTopRootBone(BoneId);
+		if (!IsValidIndex(ImportMeta.Bones, RootBoneId))
+		{
+			continue;
+		}
+
+		if (SharedRootBoneId < 0)
+		{
+			SharedRootBoneId = RootBoneId;
+			continue;
+		}
+
+		if (SharedRootBoneId != RootBoneId)
+		{
+			return -1;
+		}
+	}
+
+	return SharedRootBoneId;
+}
+
+int32 FFbxMetaParser::FindSkeletonIdForBone(int32 BoneId) const
+{
+	if (!IsValidIndex(ImportMeta.Bones, BoneId))
+	{
+		return -1;
+	}
+
+	const int32 BoneSkeletonId = ImportMeta.Bones[BoneId].SkeletonId;
+	if (IsValidIndex(ImportMeta.Skeletons, BoneSkeletonId))
+	{
+		return BoneSkeletonId;
+	}
+
+	for (const FFbxSkeletonMeta& SkeletonMeta : ImportMeta.Skeletons)
+	{
+		if (ContainsId(SkeletonMeta.BoneIds, BoneId))
+		{
+			return SkeletonMeta.SkeletonId;
+		}
+	}
+
+	return -1;
+}
+
+#pragma endregion
+
+// bone 아래 parent 된 non-skinned mesh를 skeletal assembly에 붙입니다.
+#pragma region Rigid Attached Meshes
+
+void FFbxMetaParser::AttachRigidMeshesToSkeletons()
+{
+	for (FFbxMeshMeta& MeshMeta : ImportMeta.Meshes)
+	{
+		if (MeshMeta.bHasSkin)
+		{
+			continue;
+		}
+
+		MeshMeta.AttachedSkeletonId = -1;
+		MeshMeta.AttachedBoneId = -1;
+		MeshMeta.bAttachedToSkeleton = false;
+		MeshMeta.bRigidAttachedCandidate = false;
+		MeshMeta.bIndependentStaticCandidate = false;
+
+		const int32 AttachedBoneId = FindNearestParentBoneIdForNode(MeshMeta.Node);
+		const int32 AttachedSkeletonId = FindSkeletonIdForBone(AttachedBoneId);
+		if (!IsValidIndex(ImportMeta.Bones, AttachedBoneId) ||
+			!IsValidIndex(ImportMeta.Skeletons, AttachedSkeletonId))
+		{
+			MeshMeta.bIndependentStaticCandidate = true;
+			continue;
+		}
+
+		MeshMeta.bAttachedToSkeleton = true;
+		MeshMeta.bRigidAttachedCandidate = true;
+		MeshMeta.bIndependentStaticCandidate = false;
+		MeshMeta.AttachedBoneId = AttachedBoneId;
+		MeshMeta.AttachedSkeletonId = AttachedSkeletonId;
+		MeshMeta.SkeletonId = AttachedSkeletonId;
+
+		FFbxSkeletonMeta& SkeletonMeta = ImportMeta.Skeletons[AttachedSkeletonId];
+		AddUniqueId(SkeletonMeta.RigidAttachedMeshIds, MeshMeta.MeshId);
+		AddUniqueId(SkeletonMeta.MeshIds, MeshMeta.MeshId);
+
+		UE_LOG("[FBXMetaParser] Rigid mesh attached to skeleton. MeshId=%d Node=%s BoneId=%d SkeletonId=%d",
+			MeshMeta.MeshId,
+			MeshMeta.SourceNodePath.c_str(),
+			AttachedBoneId,
+			AttachedSkeletonId);
+	}
+}
+
+int32 FFbxMetaParser::FindNearestParentBoneIdForNode(FbxNode* Node) const
+{
+	if (!Node)
+	{
+		return -1;
+	}
+
+	FbxNode* ParentNode = Node->GetParent();
+	while (ParentNode)
+	{
+		if (IsSceneRootNode(ParentNode))
+		{
+			return -1;
+		}
+
+		FbxNodeAttribute* Attribute = ParentNode->GetNodeAttribute();
+		if (Attribute)
+		{
+			const FbxNodeAttribute::EType Type = Attribute->GetAttributeType();
+			if (Type == FbxNodeAttribute::eMesh ||
+				Type == FbxNodeAttribute::eCamera ||
+				Type == FbxNodeAttribute::eCameraStereo ||
+				Type == FbxNodeAttribute::eCameraSwitcher ||
+				Type == FbxNodeAttribute::eLight)
+			{
+				return -1;
+			}
+		}
+
+		auto BoneIt = ImportMeta.BoneNodeToBoneId.find(ParentNode);
+		if (BoneIt != ImportMeta.BoneNodeToBoneId.end())
+		{
+			return BoneIt->second;
+		}
+
+		ParentNode = ParentNode->GetParent();
+	}
+
+	return -1;
+}
+
+#pragma endregion
+
+// 최종 import classification 배열을 생성합니다.
+#pragma region Mesh Classification
+
 void FFbxMetaParser::ClassifyMeshes()
 {
 	ImportMeta.StaticMeshIds.clear();
@@ -598,10 +892,10 @@ void FFbxMetaParser::ClassifyMeshes()
 				continue;
 			}
 
-			UE_LOG("[FBXImporter] Mesh has skin but no valid cluster; skipping classification. MeshId=%d Node=%s",
+			UE_LOG("[FBXMetaParser] Mesh has skin but no valid cluster; skipping classification. MeshId=%d Node=%s",
 				MeshMeta.MeshId,
 				MeshMeta.SourceNodePath.c_str());
-			UE_LOG("[FBXImporter] Mesh was not classified as static or skeletal. MeshId=%d Node=%s",
+			UE_LOG("[FBXMetaParser] Mesh was not classified as static or skeletal. MeshId=%d Node=%s",
 				MeshMeta.MeshId,
 				MeshMeta.SourceNodePath.c_str());
 			continue;
@@ -633,6 +927,11 @@ void FFbxMetaParser::ClassifyMeshes()
 	}
 }
 
+#pragma endregion
+
+// 생성된 FBX import meta의 ID와 양방향 링크 무결성을 검증합니다.
+#pragma region Validation
+
 bool FFbxMetaParser::ValidateFbxMeta() const
 {
 	bool bValid = true;
@@ -641,7 +940,7 @@ bool FFbxMetaParser::ValidateFbxMeta() const
 	{
 		if (!IsValidIndex(ImportMeta.Nodes, MeshMeta.NodeId))
 		{
-			UE_LOG("[FBXImporter] Validation failed: invalid MeshMeta.NodeId. MeshId=%d", MeshMeta.MeshId);
+			UE_LOG("[FBXMetaParser] Validation failed: invalid MeshMeta.NodeId. MeshId=%d", MeshMeta.MeshId);
 			bValid = false;
 		}
 	}
@@ -650,7 +949,7 @@ bool FFbxMetaParser::ValidateFbxMeta() const
 	{
 		if (!IsValidIndex(ImportMeta.Meshes, MeshId))
 		{
-			UE_LOG("[FBXImporter] Validation failed: invalid skeletal MeshId=%d", MeshId);
+			UE_LOG("[FBXMetaParser] Validation failed: invalid skeletal MeshId=%d", MeshId);
 			bValid = false;
 			continue;
 		}
@@ -659,7 +958,7 @@ bool FFbxMetaParser::ValidateFbxMeta() const
 		if (!IsValidIndex(ImportMeta.Skins, MeshMeta.PrimarySkinId) ||
 			!IsValidIndex(ImportMeta.Skeletons, MeshMeta.SkeletonId))
 		{
-			UE_LOG("[FBXImporter] Validation failed: skeletal mesh missing primary skin or skeleton. MeshId=%d",
+			UE_LOG("[FBXMetaParser] Validation failed: skeletal mesh missing primary skin or skeleton. MeshId=%d",
 				MeshId);
 			bValid = false;
 		}
@@ -669,7 +968,7 @@ bool FFbxMetaParser::ValidateFbxMeta() const
 	{
 		if (!IsValidIndex(ImportMeta.Meshes, MeshId))
 		{
-			UE_LOG("[FBXImporter] Validation failed: invalid rigid attached MeshId=%d", MeshId);
+			UE_LOG("[FBXMetaParser] Validation failed: invalid rigid attached MeshId=%d", MeshId);
 			bValid = false;
 			continue;
 		}
@@ -677,19 +976,19 @@ bool FFbxMetaParser::ValidateFbxMeta() const
 		const FFbxMeshMeta& MeshMeta = ImportMeta.Meshes[MeshId];
 		if (MeshMeta.bHasSkin)
 		{
-			UE_LOG("[FBXImporter] Validation failed: rigid attached mesh has skin. MeshId=%d", MeshId);
+			UE_LOG("[FBXMetaParser] Validation failed: rigid attached mesh has skin. MeshId=%d", MeshId);
 			bValid = false;
 		}
 		if (!IsValidIndex(ImportMeta.Bones, MeshMeta.AttachedBoneId))
 		{
-			UE_LOG("[FBXImporter] Validation failed: rigid attached mesh has invalid AttachedBoneId. MeshId=%d BoneId=%d",
+			UE_LOG("[FBXMetaParser] Validation failed: rigid attached mesh has invalid AttachedBoneId. MeshId=%d BoneId=%d",
 				MeshId,
 				MeshMeta.AttachedBoneId);
 			bValid = false;
 		}
 		if (!IsValidIndex(ImportMeta.Skeletons, MeshMeta.AttachedSkeletonId))
 		{
-			UE_LOG("[FBXImporter] Validation failed: rigid attached mesh has invalid AttachedSkeletonId. MeshId=%d SkeletonId=%d",
+			UE_LOG("[FBXMetaParser] Validation failed: rigid attached mesh has invalid AttachedSkeletonId. MeshId=%d SkeletonId=%d",
 				MeshId,
 				MeshMeta.AttachedSkeletonId);
 			bValid = false;
@@ -700,7 +999,7 @@ bool FFbxMetaParser::ValidateFbxMeta() const
 		if (!ContainsId(SkeletonMeta.RigidAttachedMeshIds, MeshId) ||
 			!ContainsId(SkeletonMeta.MeshIds, MeshId))
 		{
-			UE_LOG("[FBXImporter] Validation failed: rigid attached mesh missing from skeleton mesh lists. MeshId=%d SkeletonId=%d",
+			UE_LOG("[FBXMetaParser] Validation failed: rigid attached mesh missing from skeleton mesh lists. MeshId=%d SkeletonId=%d",
 				MeshId,
 				MeshMeta.AttachedSkeletonId);
 			bValid = false;
@@ -711,7 +1010,7 @@ bool FFbxMetaParser::ValidateFbxMeta() const
 	{
 		if (!IsValidIndex(ImportMeta.Meshes, MeshId))
 		{
-			UE_LOG("[FBXImporter] Validation failed: invalid independent static MeshId=%d", MeshId);
+			UE_LOG("[FBXMetaParser] Validation failed: invalid independent static MeshId=%d", MeshId);
 			bValid = false;
 			continue;
 		}
@@ -719,14 +1018,14 @@ bool FFbxMetaParser::ValidateFbxMeta() const
 		const FFbxMeshMeta& MeshMeta = ImportMeta.Meshes[MeshId];
 		if (MeshMeta.AttachedSkeletonId >= 0)
 		{
-			UE_LOG("[FBXImporter] Validation failed: independent static mesh has AttachedSkeletonId. MeshId=%d SkeletonId=%d",
+			UE_LOG("[FBXMetaParser] Validation failed: independent static mesh has AttachedSkeletonId. MeshId=%d SkeletonId=%d",
 				MeshId,
 				MeshMeta.AttachedSkeletonId);
 			bValid = false;
 		}
 		if (ContainsId(ImportMeta.RigidAttachedMeshIds, MeshId))
 		{
-			UE_LOG("[FBXImporter] Validation failed: mesh classified as both independent static and rigid attached. MeshId=%d",
+			UE_LOG("[FBXMetaParser] Validation failed: mesh classified as both independent static and rigid attached. MeshId=%d",
 				MeshId);
 			bValid = false;
 		}
@@ -738,7 +1037,7 @@ bool FFbxMetaParser::ValidateFbxMeta() const
 		{
 			if (!IsValidIndex(ImportMeta.Clusters, ClusterId))
 			{
-				UE_LOG("[FBXImporter] Validation failed: invalid ClusterId=%d in SkinId=%d",
+				UE_LOG("[FBXMetaParser] Validation failed: invalid ClusterId=%d in SkinId=%d",
 					ClusterId,
 					SkinMeta.SkinId);
 				bValid = false;
@@ -750,7 +1049,7 @@ bool FFbxMetaParser::ValidateFbxMeta() const
 	{
 		if (ClusterMeta.bValid && !IsValidIndex(ImportMeta.Bones, ClusterMeta.LinkBoneId))
 		{
-			UE_LOG("[FBXImporter] Validation failed: valid cluster has invalid LinkBoneId. ClusterId=%d",
+			UE_LOG("[FBXMetaParser] Validation failed: valid cluster has invalid LinkBoneId. ClusterId=%d",
 				ClusterMeta.ClusterId);
 			bValid = false;
 		}
@@ -760,14 +1059,14 @@ bool FFbxMetaParser::ValidateFbxMeta() const
 	{
 		if (!IsValidIndex(ImportMeta.Bones, SkeletonMeta.RootBoneId))
 		{
-			UE_LOG("[FBXImporter] Validation failed: invalid Skeleton RootBoneId. SkeletonId=%d",
+			UE_LOG("[FBXMetaParser] Validation failed: invalid Skeleton RootBoneId. SkeletonId=%d",
 				SkeletonMeta.SkeletonId);
 			bValid = false;
 		}
 
 		if (SkeletonMeta.MeshIds.empty())
 		{
-			UE_LOG("[FBXImporter] Skeleton has no meshes. SkeletonId=%d", SkeletonMeta.SkeletonId);
+			UE_LOG("[FBXMetaParser] Skeleton has no meshes. SkeletonId=%d", SkeletonMeta.SkeletonId);
 		}
 	}
 
@@ -777,7 +1076,7 @@ bool FFbxMetaParser::ValidateFbxMeta() const
 		{
 			if (!IsValidIndex(ImportMeta.Bones, ChildBoneId))
 			{
-				UE_LOG("[FBXImporter] Validation failed: invalid child bone. BoneId=%d ChildBoneId=%d",
+				UE_LOG("[FBXMetaParser] Validation failed: invalid child bone. BoneId=%d ChildBoneId=%d",
 					BoneMeta.BoneId,
 					ChildBoneId);
 				bValid = false;
@@ -786,7 +1085,7 @@ bool FFbxMetaParser::ValidateFbxMeta() const
 
 			if (ImportMeta.Bones[ChildBoneId].ParentBoneId != BoneMeta.BoneId)
 			{
-				UE_LOG("[FBXImporter] Bone parent-child relation mismatch. ParentBoneId=%d ChildBoneId=%d",
+				UE_LOG("[FBXMetaParser] Bone parent-child relation mismatch. ParentBoneId=%d ChildBoneId=%d",
 					BoneMeta.BoneId,
 					ChildBoneId);
 				bValid = false;
@@ -797,254 +1096,4 @@ bool FFbxMetaParser::ValidateFbxMeta() const
 	return bValid;
 }
 
-int32 FFbxMetaParser::RegisterBoneNode(FbxNode* Node, bool bReferencedByCluster, bool bInsertedAsParentChain)
-{
-	if (!Node)
-	{
-		return -1;
-	}
-
-	auto ExistingIt = ImportMeta.BoneNodeToBoneId.find(Node);
-	if (ExistingIt != ImportMeta.BoneNodeToBoneId.end())
-	{
-		FFbxBoneMeta& ExistingBone = ImportMeta.Bones[ExistingIt->second];
-		ExistingBone.bReferencedByCluster = ExistingBone.bReferencedByCluster || bReferencedByCluster;
-		ExistingBone.bInsertedAsParentChain = ExistingBone.bInsertedAsParentChain || bInsertedAsParentChain;
-		return ExistingIt->second;
-	}
-
-	const int32 BoneId = static_cast<int32>(ImportMeta.Bones.size());
-	FFbxBoneMeta BoneMeta;
-	BoneMeta.BoneId = BoneId;
-	BoneMeta.Node = Node;
-	BoneMeta.Name = GetNodeName(Node);
-	BoneMeta.bReferencedByCluster = bReferencedByCluster;
-	BoneMeta.bInsertedAsParentChain = bInsertedAsParentChain;
-	BoneMeta.BindGlobalMatrix = FBXUtil::ConvertFbxMatrix(Node->EvaluateGlobalTransform());
-	BoneMeta.InvBindGlobalMatrix = BoneMeta.BindGlobalMatrix.GetInverse();
-
-	auto NodeIt = ImportMeta.NodeToNodeId.find(Node);
-	if (NodeIt != ImportMeta.NodeToNodeId.end())
-	{
-		BoneMeta.NodeId = NodeIt->second;
-		if (IsValidIndex(ImportMeta.Nodes, BoneMeta.NodeId))
-		{
-			BoneMeta.FullPath = ImportMeta.Nodes[BoneMeta.NodeId].FullPath;
-		}
-	}
-
-	ImportMeta.Bones.push_back(BoneMeta);
-	ImportMeta.BoneNodeToBoneId[Node] = BoneId;
-	return BoneId;
-}
-
-void FFbxMetaParser::RegisterMeshFromNode(FbxNode* Node, int32 NodeId)
-{
-	if (!Node || !IsValidIndex(ImportMeta.Nodes, NodeId))
-	{
-		return;
-	}
-
-	FbxMesh* Mesh = Node->GetMesh();
-	if (!Mesh)
-	{
-		return;
-	}
-
-	const int32 MeshId = static_cast<int32>(ImportMeta.Meshes.size());
-	FFbxMeshMeta MeshMeta;
-	MeshMeta.MeshId = MeshId;
-	MeshMeta.NodeId = NodeId;
-	MeshMeta.Node = Node;
-	MeshMeta.Mesh = Mesh;
-	MeshMeta.Name = GetNodeName(Node);
-	MeshMeta.SourceNodePath = ImportMeta.Nodes[NodeId].FullPath;
-	MeshMeta.ControlPointCount = Mesh->GetControlPointsCount();
-	MeshMeta.PolygonCount = Mesh->GetPolygonCount();
-
-	const int32 MaterialCount = Node->GetMaterialCount();
-	for (int32 MaterialIndex = 0; MaterialIndex < MaterialCount; ++MaterialIndex)
-	{
-		MeshMeta.MaterialSlotIds.push_back(MaterialIndex);
-	}
-
-	auto FirstMeshIt = ImportMeta.MeshToMeshId.find(Mesh);
-	if (FirstMeshIt != ImportMeta.MeshToMeshId.end())
-	{
-		UE_LOG("[FBXImporter] Duplicate FbxMesh object used by multiple nodes. FirstMeshId=%d NewMeshId=%d Node=%s",
-			FirstMeshIt->second,
-			MeshId,
-			MeshMeta.SourceNodePath.c_str());
-	}
-	else
-	{
-		ImportMeta.MeshToMeshId[Mesh] = MeshId;
-	}
-
-	ImportMeta.FbxMeshToMeshIds[Mesh].push_back(MeshId);
-	ImportMeta.Meshes.push_back(MeshMeta);
-}
-
-int32 FFbxMetaParser::RegisterCluster(int32 SkinId, FbxCluster* Cluster)
-{
-	if (!IsValidIndex(ImportMeta.Skins, SkinId))
-	{
-		return -1;
-	}
-
-	FFbxSkinMeta& SkinMeta = ImportMeta.Skins[SkinId];
-	const int32 ClusterId = static_cast<int32>(ImportMeta.Clusters.size());
-	FFbxClusterMeta ClusterMeta;
-	ClusterMeta.ClusterId = ClusterId;
-	ClusterMeta.SkinId = SkinId;
-	ClusterMeta.MeshId = SkinMeta.MeshId;
-	ClusterMeta.Cluster = Cluster;
-
-	if (Cluster)
-	{
-		if (ImportMeta.ClusterToClusterId.find(Cluster) == ImportMeta.ClusterToClusterId.end())
-		{
-			ImportMeta.ClusterToClusterId[Cluster] = ClusterId;
-		}
-
-		FbxAMatrix MeshBindMatrix;
-		Cluster->GetTransformMatrix(MeshBindMatrix);
-		ClusterMeta.MeshBindGlobalMatrix = FBXUtil::ConvertFbxMatrix(MeshBindMatrix);
-		ClusterMeta.bHasMeshBindMatrix = true;
-
-		FbxAMatrix BoneBindMatrix;
-		Cluster->GetTransformLinkMatrix(BoneBindMatrix);
-		ClusterMeta.BoneBindGlobalMatrix = FBXUtil::ConvertFbxMatrix(BoneBindMatrix);
-		ClusterMeta.bHasBoneBindMatrix = true;
-
-		ClusterMeta.ControlPointInfluenceCount = Cluster->GetControlPointIndicesCount();
-		const double* Weights = Cluster->GetControlPointWeights();
-		for (int32 InfluenceIndex = 0; InfluenceIndex < ClusterMeta.ControlPointInfluenceCount; ++InfluenceIndex)
-		{
-			if (Weights && Weights[InfluenceIndex] > 0.0)
-			{
-				++ClusterMeta.PositiveWeightCount;
-			}
-		}
-
-		ClusterMeta.LinkNode = Cluster->GetLink();
-		if (!ClusterMeta.LinkNode)
-		{
-			UE_LOG("[FBXImporter] Cluster link is null. SkinId=%d ClusterId=%d", SkinId, ClusterId);
-		}
-		else
-		{
-			ClusterMeta.LinkNodeName = GetNodeName(ClusterMeta.LinkNode);
-			auto NodeIt = ImportMeta.NodeToNodeId.find(ClusterMeta.LinkNode);
-			if (NodeIt != ImportMeta.NodeToNodeId.end())
-			{
-				ClusterMeta.LinkNodeId = NodeIt->second;
-			}
-			else
-			{
-				UE_LOG("[FBXImporter] Cluster link node is missing from node table. Link=%s",
-					ClusterMeta.LinkNodeName.c_str());
-			}
-
-			ClusterMeta.LinkBoneId = RegisterBoneNode(ClusterMeta.LinkNode, true, false);
-			if (IsValidIndex(ImportMeta.Bones, ClusterMeta.LinkBoneId))
-			{
-				FFbxBoneMeta& BoneMeta = ImportMeta.Bones[ClusterMeta.LinkBoneId];
-				if (ClusterMeta.bHasBoneBindMatrix)
-				{
-					BoneMeta.BindGlobalMatrix = ClusterMeta.BoneBindGlobalMatrix;
-					BoneMeta.InvBindGlobalMatrix = BoneMeta.BindGlobalMatrix.GetInverse();
-				}
-				AddUniqueId(SkinMeta.BoneIds, ClusterMeta.LinkBoneId);
-			}
-		}
-	}
-
-	ClusterMeta.bValid = ClusterMeta.LinkBoneId >= 0 &&
-		ClusterMeta.ControlPointInfluenceCount > 0 &&
-		ClusterMeta.PositiveWeightCount > 0 &&
-		ClusterMeta.LinkNodeId >= 0;
-
-	if (!ClusterMeta.bValid && ClusterMeta.LinkNode)
-	{
-		UE_LOG("[FBXImporter] Invalid cluster. Link=%s LinkBoneId=%d InfluenceCount=%d PositiveWeightCount=%d LinkNodeId=%d",
-			ClusterMeta.LinkNodeName.c_str(),
-			ClusterMeta.LinkBoneId,
-			ClusterMeta.ControlPointInfluenceCount,
-			ClusterMeta.PositiveWeightCount,
-			ClusterMeta.LinkNodeId);
-	}
-
-	SkinMeta.ClusterIds.push_back(ClusterId);
-	SkinMeta.TotalInfluenceCount += ClusterMeta.PositiveWeightCount;
-	ImportMeta.Clusters.push_back(ClusterMeta);
-	return ClusterId;
-}
-
-int32 FFbxMetaParser::FindTopRootBone(int32 BoneId) const
-{
-	if (!IsValidIndex(ImportMeta.Bones, BoneId))
-	{
-		return -1;
-	}
-
-	int32 CurrentId = BoneId;
-	while (IsValidIndex(ImportMeta.Bones, ImportMeta.Bones[CurrentId].ParentBoneId))
-	{
-		CurrentId = ImportMeta.Bones[CurrentId].ParentBoneId;
-	}
-
-	return CurrentId;
-}
-
-int32 FFbxMetaParser::FindSkeletonRootBoneForSkin(const TArray<int32>& BoneIds) const
-{
-	int32 SharedRootBoneId = -1;
-	for (int32 BoneId : BoneIds)
-	{
-		const int32 RootBoneId = FindTopRootBone(BoneId);
-		if (!IsValidIndex(ImportMeta.Bones, RootBoneId))
-		{
-			continue;
-		}
-
-		if (SharedRootBoneId < 0)
-		{
-			SharedRootBoneId = RootBoneId;
-			continue;
-		}
-
-		if (SharedRootBoneId != RootBoneId)
-		{
-			return -1;
-		}
-	}
-
-	return SharedRootBoneId;
-}
-
-void FFbxMetaParser::AddBoneDfs(int32 CurrentBoneId, FFbxSkeletonMeta& SkeletonMeta, uint32 SkeletonId)
-{
-	if (!IsValidIndex(ImportMeta.Bones, CurrentBoneId) ||
-		ContainsId(SkeletonMeta.BoneIds, CurrentBoneId))
-	{
-		return;
-	}
-
-	const int32 SkeletonBoneIndex = static_cast<int32>(SkeletonMeta.BoneIds.size());
-	SkeletonMeta.BoneIds.push_back(CurrentBoneId);
-	SkeletonMeta.BoneIdToSkeletonBoneIndex[CurrentBoneId] = SkeletonBoneIndex;
-
-	FFbxBoneMeta& BoneMeta = ImportMeta.Bones[CurrentBoneId];
-	BoneMeta.SkeletonId = SkeletonId;
-	BoneMeta.SkeletonBoneIndex = SkeletonBoneIndex;
-	if (BoneMeta.Node)
-	{
-		SkeletonMeta.BoneNodeToSkeletonBoneIndex[BoneMeta.Node] = SkeletonBoneIndex;
-	}
-
-	for (int32 ChildBoneId : BoneMeta.ChildBoneIds)
-	{
-		AddBoneDfs(ChildBoneId, SkeletonMeta, SkeletonId);
-	}
-};
+#pragma endregion
