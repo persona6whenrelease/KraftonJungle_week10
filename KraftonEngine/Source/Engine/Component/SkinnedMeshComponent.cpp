@@ -1,4 +1,5 @@
 ﻿#include "SkinnedMeshComponent.h"
+#include "Core/RayTypes.h"
 #include "Engine/Runtime/Engine.h"
 #include "Mesh/FBXManager.h"
 #include "Serialization/PropertyTypeSerialization.h"
@@ -21,6 +22,7 @@ USkinnedMeshComponent::~USkinnedMeshComponent()
 void USkinnedMeshComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction& ThisTickFunction)
 {
 	UpdateSkinning(DeltaTime);
+	bSkinnedMeshPickingBVHDirty = true;
 	MarkProxyDirty(EDirtyFlag::DynamicData);
 }
 
@@ -57,6 +59,7 @@ void USkinnedMeshComponent::SetSkeletalMesh(USkeletalMesh* InMesh)
 	BoneSkinMatrices.clear();
 	CurrentBoneGlobals.clear();
 	SkinnedVertices.clear();
+	bSkinnedMeshPickingBVHDirty = true;
 
 	if (InMesh)
 	{
@@ -125,6 +128,51 @@ void USkinnedMeshComponent::SetSkeletalMesh(USkeletalMesh* InMesh)
 USkeletalMesh* USkinnedMeshComponent::GetSkeletalMesh() const
 {
 	return SkeletalMesh;
+}
+
+bool USkinnedMeshComponent::LineTraceComponent(const FRay& Ray, FHitResult& OutHitResult)
+{
+	if (!SkeletalMesh)
+	{
+		return false;
+	}
+
+	FStkeletalMesh* Asset = SkeletalMesh->GetSkeletalMeshAsset();
+	if (!Asset || SkinnedVertices.empty() || Asset->MeshAsset.Indices.size() < 3)
+	{
+		return false;
+	}
+
+	FMeshDataView View;
+	View.VertexData = SkinnedVertices.data();
+	View.VertexCount = static_cast<uint32>(SkinnedVertices.size());
+	View.Stride = sizeof(FVertexPNCTT);
+	View.IndexData = Asset->MeshAsset.Indices.data();
+	View.IndexCount = static_cast<uint32>(Asset->MeshAsset.Indices.size());
+
+	if (bSkinnedMeshPickingBVHDirty)
+	{
+		SkinnedMeshPickingBVH.BuildNow(View);
+		bSkinnedMeshPickingBVHDirty = false;
+	}
+
+	const FMatrix& WorldMatrix = GetWorldMatrix();
+	const FMatrix& WorldInverse = GetWorldInverseMatrix();
+
+	FVector LocalOrigin = WorldInverse.TransformPositionWithW(Ray.Origin);
+	FVector LocalDirection = WorldInverse.TransformVector(Ray.Direction);
+	LocalDirection.Normalize();
+
+	if (SkinnedMeshPickingBVH.RaycastLocal(LocalOrigin, LocalDirection, View, OutHitResult))
+	{
+		const FVector LocalHitPoint = LocalOrigin + LocalDirection * OutHitResult.Distance;
+		const FVector WorldHitPoint = WorldMatrix.TransformPositionWithW(LocalHitPoint);
+		OutHitResult.Distance = FVector::Distance(Ray.Origin, WorldHitPoint);
+		OutHitResult.HitComponent = this;
+		return true;
+	}
+
+	return false;
 }
 
 void USkinnedMeshComponent::SetMaterial(int32 ElementIndex, UMaterial* InMaterial)

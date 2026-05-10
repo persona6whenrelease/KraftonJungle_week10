@@ -1,5 +1,8 @@
 ﻿#include "SkeletalMesh.h"
 
+#include "Engine/Profiling/MemoryStats.h"
+#include "Render/Types/VertexTypes.h"
+
 IMPLEMENT_CLASS(USkeletalMesh, UObject)
 
 const FString USkeletalMesh::EmptyPath = "";
@@ -78,6 +81,7 @@ void USkeletalMesh::SetSkeletalMeshAsset(FStkeletalMesh* InMesh)
 				}
 			}
 		}
+		EnsureMeshTrianglePickingBVHBuilt();
 	}
 }
 
@@ -95,6 +99,54 @@ void USkeletalMesh::SetStaticMaterials(TArray<FStaticMaterial>&& InMaterials)
 const TArray<FStaticMaterial>& USkeletalMesh::GetStaticMaterials() const
 {
 	return StaticMaterials;
+}
+void USkeletalMesh::EnsureMeshTrianglePickingBVHBuilt() const
+{
+	if (!SkeletalMeshAsset)
+	{
+		return;
+	}
+
+	FMeshDataView View;
+	const FSkeletalMeshAsset& Asset = SkeletalMeshAsset->MeshAsset;
+	if (!Asset.SourceVertices.empty())
+	{
+		View.VertexData = Asset.SourceVertices.data();
+		View.VertexCount = static_cast<uint32>(Asset.SourceVertices.size());
+		View.Stride = sizeof(FSkeletalSourceVertex);
+	}
+	if (!Asset.Indices.empty())
+	{
+		View.IndexData = Asset.Indices.data();
+		View.IndexCount = static_cast<uint32>(Asset.Indices.size());
+	}
+
+	MeshTrianglePickingBVH.EnsureBuilt(View);
+}
+bool USkeletalMesh::RaycastMeshTrianglesWithBVHLocal(const FVector& LocalOrigin, const FVector& LocalDirection, FHitResult& OutHitResult) const
+{
+	if (!SkeletalMeshAsset)
+	{
+		return false;
+	}
+
+	EnsureMeshTrianglePickingBVHBuilt();
+	FMeshDataView View;
+	const FSkeletalMeshAsset& Asset = SkeletalMeshAsset->MeshAsset;
+	if (!Asset.SourceVertices.empty())
+	{
+		View.VertexData = Asset.SourceVertices.data();
+		View.VertexCount = static_cast<uint32>(Asset.SourceVertices.size());
+		View.Stride = sizeof(FSkeletalSourceVertex);
+	}
+	if (!Asset.Indices.empty())
+	{
+		View.IndexData = Asset.Indices.data();
+		View.IndexCount = static_cast<uint32>(Asset.Indices.size());
+	}
+
+	return MeshTrianglePickingBVH.RaycastLocal(LocalOrigin, LocalDirection, View, OutHitResult);
+
 }
 //
 //void USkeletalMesh::InitResources(ID3D11Device* InDevice)

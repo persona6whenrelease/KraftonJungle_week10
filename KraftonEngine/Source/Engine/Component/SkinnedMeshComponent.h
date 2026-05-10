@@ -26,6 +26,7 @@ public:	//proxy를 제외하고 모든 함수
 
 
 	void UpdateWorldAABB() const override;
+	bool LineTraceComponent(const FRay& Ray, FHitResult& OutHitResult) override;
 
 	void SetSkeletalMesh(USkeletalMesh* InMesh);
 	USkeletalMesh* GetSkeletalMesh() const;
@@ -68,5 +69,8 @@ private:
 	//매프레임마다 계산될 버텍스 정보(변경o)
 	TArray<FVertexPNCTT> SkinnedVertices;
 	TArray<FMatrix> CurrentBoneGlobals;
+
+	mutable FMeshTriangleBVH SkinnedMeshPickingBVH;
+	mutable bool bSkinnedMeshPickingBVHDirty = true;
 };
 

@@ -4,6 +4,7 @@
 #include "Collision/RayUtilsSIMD.h"
 #include "Mesh/StaticMeshAsset.h"
 #include "Core/EngineTypes.h"
+#include "Render/Types/VertexTypes.h"
 
 #include <algorithm>
 #include <bit>
@@ -44,25 +45,43 @@ namespace
 
 void FMeshTriangleBVH::BuildNow(const FStaticMesh& Mesh)
 {
+	FMeshDataView MeshView;
+	if (!Mesh.Vertices.empty())
+	{
+		MeshView.VertexData = Mesh.Vertices.data();
+		MeshView.VertexCount = static_cast<uint32>(Mesh.Vertices.size());
+		MeshView.Stride = sizeof(FNormalVertex);
+	}
+	if (!Mesh.Indices.empty())
+	{
+		MeshView.IndexData = Mesh.Indices.data();
+		MeshView.IndexCount = static_cast<uint32>(Mesh.Indices.size());
+	}
+
+	BuildNow(MeshView);
+}
+
+void FMeshTriangleBVH::BuildNow(const FMeshDataView& MeshView)
+{
 	//메시가 바뀌었을 때 triangle leaf와 packet, node 배열을 통째로 다시 만듭니다.
 	TriangleLeaves.clear();
 	LeafPackets.clear();
 	Nodes.clear();
 
-	if (Mesh.Vertices.empty() || Mesh.Indices.size() < 3)
+	if (!MeshView.IsValid() || MeshView.VertexCount == 0 || MeshView.IndexCount < 3)
 	{
 		return;
 	}
 
-	TriangleLeaves.reserve(Mesh.Indices.size() / 3);
-	LeafPackets.reserve((Mesh.Indices.size() / 3 + 7) / 8);
+	TriangleLeaves.reserve(MeshView.IndexCount / 3);
+	LeafPackets.reserve((MeshView.IndexCount / 3 + 7) / 8);
 
 	//인덱스 버퍼를 삼각형 단위로 훑으면서 각 삼각형의 bounds와 시작 인덱스를 leaf로 만듭니다.
-	for (size_t Index = 0; Index + 2 < Mesh.Indices.size(); Index += 3)
+	for (uint32 Index = 0; Index + 2 < MeshView.IndexCount; Index += 3)
 	{
-		const FVector& V0 = Mesh.Vertices[Mesh.Indices[Index]].pos;
-		const FVector& V1 = Mesh.Vertices[Mesh.Indices[Index + 1]].pos;
-		const FVector& V2 = Mesh.Vertices[Mesh.Indices[Index + 2]].pos;
+		const FVector& V0 = MeshView.GetPosition(MeshView.IndexData[Index]);
+		const FVector& V1 = MeshView.GetPosition(MeshView.IndexData[Index + 1]);
+		const FVector& V2 = MeshView.GetPosition(MeshView.IndexData[Index + 2]);
 
 		FTriangleLeaf Leaf;
 		Leaf.TriangleStartIndex = static_cast<int32>(Index);
@@ -72,21 +91,57 @@ void FMeshTriangleBVH::BuildNow(const FStaticMesh& Mesh)
 
 	if (!TriangleLeaves.empty())
 	{
-		BuildRecursive(Mesh, 0, static_cast<int32>(TriangleLeaves.size()));
+		BuildRecursive(MeshView, 0, static_cast<int32>(TriangleLeaves.size()));
 	}
 }
 
 void FMeshTriangleBVH::EnsureBuilt(const FStaticMesh& Mesh)
+{
+	FMeshDataView MeshView;
+	if (!Mesh.Vertices.empty())
+	{
+		MeshView.VertexData = Mesh.Vertices.data();
+		MeshView.VertexCount = static_cast<uint32>(Mesh.Vertices.size());
+		MeshView.Stride = sizeof(FNormalVertex);
+	}
+	if (!Mesh.Indices.empty())
+	{
+		MeshView.IndexData = Mesh.Indices.data();
+		MeshView.IndexCount = static_cast<uint32>(Mesh.Indices.size());
+	}
+
+	EnsureBuilt(MeshView);
+}
+
+void FMeshTriangleBVH::EnsureBuilt(const FMeshDataView& MeshView)
 {
 	//static mesh asset은 로드 후 고정된다고 보고, 아직 비어 있을 때만 1회 빌드합니다.
 	if (!Nodes.empty())
 	{
 		return;
 	}
-	BuildNow(Mesh);
+	BuildNow(MeshView);
 }
 
 bool FMeshTriangleBVH::RaycastLocal(const FVector& LocalOrigin, const FVector& LocalDirection, const FStaticMesh& Mesh, FHitResult& OutHitResult) const
+{
+	FMeshDataView MeshView;
+	if (!Mesh.Vertices.empty())
+	{
+		MeshView.VertexData = Mesh.Vertices.data();
+		MeshView.VertexCount = static_cast<uint32>(Mesh.Vertices.size());
+		MeshView.Stride = sizeof(FNormalVertex);
+	}
+	if (!Mesh.Indices.empty())
+	{
+		MeshView.IndexData = Mesh.Indices.data();
+		MeshView.IndexCount = static_cast<uint32>(Mesh.Indices.size());
+	}
+
+	return RaycastLocal(LocalOrigin, LocalDirection, MeshView, OutHitResult);
+}
+
+bool FMeshTriangleBVH::RaycastLocal(const FVector& LocalOrigin, const FVector& LocalDirection, const FMeshDataView& MeshView, FHitResult& OutHitResult) const
 {
 	//로컬 공간 ray로 메시 BVH를 front-to-back 순회하면서 가장 가까운 삼각형 hit를 찾습니다
 	struct FTraversalEntry
@@ -96,7 +151,7 @@ bool FMeshTriangleBVH::RaycastLocal(const FVector& LocalOrigin, const FVector& L
 	};
 
 	OutHitResult = {};
-	if (Nodes.empty() || Mesh.Vertices.empty() || Mesh.Indices.size() < 3)
+	if (Nodes.empty() || !MeshView.IsValid() || MeshView.VertexCount == 0 || MeshView.IndexCount < 3)
 	{
 		return false;
 	}
@@ -235,6 +290,24 @@ bool FMeshTriangleBVH::RaycastLocal(const FVector& LocalOrigin, const FVector& L
 
 int32 FMeshTriangleBVH::BuildRecursive(const FStaticMesh& Mesh, int32 Start, int32 End)
 {
+	FMeshDataView MeshView;
+	if (!Mesh.Vertices.empty())
+	{
+		MeshView.VertexData = Mesh.Vertices.data();
+		MeshView.VertexCount = static_cast<uint32>(Mesh.Vertices.size());
+		MeshView.Stride = sizeof(FNormalVertex);
+	}
+	if (!Mesh.Indices.empty())
+	{
+		MeshView.IndexData = Mesh.Indices.data();
+		MeshView.IndexCount = static_cast<uint32>(Mesh.Indices.size());
+	}
+
+	return BuildRecursive(MeshView, Start, End);
+}
+
+int32 FMeshTriangleBVH::BuildRecursive(const FMeshDataView& MeshView, int32 Start, int32 End)
+{
 	//triangle leaf 구간 [Start, End)를 하나의 node로 만들고, 필요하면 재귀 분할합니다.
 	const int32 NodeIndex = static_cast<int32>(Nodes.size());
 	Nodes.emplace_back();
@@ -264,9 +337,9 @@ int32 FMeshTriangleBVH::BuildRecursive(const FStaticMesh& Mesh, int32 Start, int
 			if (i < LeafCount)
 			{
 				const int32 TriStartIndex = TriangleLeaves[Start + i].TriangleStartIndex;
-				const FVector& V0 = Mesh.Vertices[Mesh.Indices[TriStartIndex]].pos;
-				const FVector& V1 = Mesh.Vertices[Mesh.Indices[TriStartIndex + 1]].pos;
-				const FVector& V2 = Mesh.Vertices[Mesh.Indices[TriStartIndex + 2]].pos;
+				const FVector& V0 = MeshView.GetPosition(MeshView.IndexData[TriStartIndex]);
+				const FVector& V1 = MeshView.GetPosition(MeshView.IndexData[TriStartIndex + 1]);
+				const FVector& V2 = MeshView.GetPosition(MeshView.IndexData[TriStartIndex + 2]);
 				const FVector Edge1 = V1 - V0;
 				const FVector Edge2 = V2 - V0;
 
@@ -370,7 +443,7 @@ int32 FMeshTriangleBVH::BuildRecursive(const FStaticMesh& Mesh, int32 Start, int
 				continue;
 			}
 
-			const int32 ChildIdx = BuildRecursive(Mesh, RangeStart, RangeEnd);
+			const int32 ChildIdx = BuildRecursive(MeshView, RangeStart, RangeEnd);
 			const int32 LocalChildIdx = Nodes[NodeIndex].ChildCount;
 
 			Nodes[NodeIndex].Children[LocalChildIdx] = ChildIdx;
@@ -440,7 +513,7 @@ int32 FMeshTriangleBVH::BuildRecursive(const FStaticMesh& Mesh, int32 Start, int
 					continue;
 				}
 
-				const int32 ChildIdx = BuildRecursive(Mesh, RangeStart, RangeEnd);
+				const int32 ChildIdx = BuildRecursive(MeshView, RangeStart, RangeEnd);
 				const int32 LocalChildIdx = Nodes[NodeIndex].ChildCount;
 
 				Nodes[NodeIndex].Children[LocalChildIdx] = ChildIdx;
@@ -468,7 +541,7 @@ int32 FMeshTriangleBVH::BuildRecursive(const FStaticMesh& Mesh, int32 Start, int
 					++RangeEnd;
 				}
 
-				const int32 ChildIdx = BuildRecursive(Mesh, RangeStart, RangeEnd);
+				const int32 ChildIdx = BuildRecursive(MeshView, RangeStart, RangeEnd);
 				const int32 LocalChildIdx = Nodes[NodeIndex].ChildCount;
 
 				Nodes[NodeIndex].Children[LocalChildIdx] = ChildIdx;

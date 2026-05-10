@@ -7,10 +7,19 @@
 #include "Math/Vector.h"
 
 struct FStaticMesh;
+struct FMeshDataView;
 
 class FMeshTriangleBVH
 {
 public:
+	void BuildNow(const FMeshDataView& MeshView);
+	void EnsureBuilt(const FMeshDataView& MeshView);
+	bool RaycastLocal(const FVector& LocalOrigin,
+		const FVector& LocalDirection,
+		const FMeshDataView& MeshView,
+		FHitResult& OutHitResult
+		) const;
+
 	// 메시의 모든 삼각형을 leaf로 수집한 뒤 로컬 공간 BVH를 즉시 다시 빌드합니다.
 	void BuildNow(const FStaticMesh& Mesh);
 	// 현재는 static mesh asset이 로드 후 고정된다고 보고, 아직 트리가 없을 때만 1회 빌드합니다.
@@ -83,4 +92,6 @@ private:
 	TArray<FTrianglePacket> LeafPackets;
 	// 루트부터 자식까지 연속 저장한 BVH 노드 배열입니다.
 	TArray<FNode> Nodes;
+
+	int32 BuildRecursive(const FMeshDataView& MeshView, int32 Start, int32 End);
 };

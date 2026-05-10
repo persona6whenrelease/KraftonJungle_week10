@@ -77,7 +77,7 @@ struct FMeshDataView
 	uint32 IndexCount  = 0;
 	uint32 Stride      = 0;
 
-	bool IsValid() const { return VertexData && IndexCount > 0; }
+	bool IsValid() const { return VertexData && IndexData && Stride > 0 && VertexCount > 0 && IndexCount > 0; }
 	uint32 GetTriangleCount() const { return IndexCount / 3; }
 
 	// N번째 정점을 T 타입으로 반환
