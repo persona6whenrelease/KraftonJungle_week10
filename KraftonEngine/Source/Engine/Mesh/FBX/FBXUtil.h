@@ -39,4 +39,5 @@ public:
 	static FVector2 ReadUV(FbxMesh* Mesh, int32 PolyIndex, int32 CornerIndex, const char* UVSetName);
 	static FVector4 ReadTangent(FbxMesh* Mesh, int32 ControlPointIndex, int32 PolygonVertexIndex);
 	static int32 QuantizeFloat(float Value);
+	static 	FString GetNodeName(FbxNode* Node);
 };

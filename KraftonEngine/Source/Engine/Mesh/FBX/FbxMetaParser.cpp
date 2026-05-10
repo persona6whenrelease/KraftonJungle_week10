@@ -31,11 +31,6 @@ namespace
 		Items.erase(std::remove(Items.begin(), Items.end(), Id), Items.end());
 	}
 
-	FString GetNodeName(FbxNode* Node)
-	{
-		return Node && Node->GetName() ? Node->GetName() : "";
-	}
-
 	const char* AttributeTypeToName(FbxNodeAttribute::EType Type)
 	{
 		switch (Type)
@@ -139,7 +134,7 @@ int32 FFbxMetaParser::RegisterNodeRecursive(FbxNode* Node, int32 ParentNodeId, c
 	NodeMeta.NodeId = NodeId;
 	NodeMeta.ParentNodeId = ParentNodeId;
 	NodeMeta.Node = Node;
-	NodeMeta.Name = GetNodeName(Node);
+	NodeMeta.Name = FBXUtil::GetNodeName(Node);
 	NodeMeta.FullPath = ParentPath.empty() ? ("/" + NodeMeta.Name) : (ParentPath + "/" + NodeMeta.Name);
 	NodeMeta.LocalTransform = FBXUtil::ConvertFbxMatrix(Node->EvaluateLocalTransform());
 	NodeMeta.GlobalTransform = FBXUtil::ConvertFbxMatrix(Node->EvaluateGlobalTransform());
@@ -210,7 +205,7 @@ void FFbxMetaParser::RegisterMeshFromNode(FbxNode* Node, int32 NodeId)
 	MeshMeta.NodeId = NodeId;
 	MeshMeta.Node = Node;
 	MeshMeta.Mesh = Mesh;
-	MeshMeta.Name = GetNodeName(Node);
+	MeshMeta.Name = FBXUtil::GetNodeName(Node);
 	MeshMeta.SourceNodePath = ImportMeta.Nodes[NodeId].FullPath;
 	MeshMeta.ControlPointCount = Mesh->GetControlPointsCount();
 	MeshMeta.PolygonCount = Mesh->GetPolygonCount();
@@ -355,7 +350,7 @@ int32 FFbxMetaParser::RegisterCluster(int32 SkinId, FbxCluster* Cluster)
 		}
 		else
 		{
-			ClusterMeta.LinkNodeName = GetNodeName(ClusterMeta.LinkNode);
+			ClusterMeta.LinkNodeName = FBXUtil::GetNodeName(ClusterMeta.LinkNode);
 			auto NodeIt = ImportMeta.NodeToNodeId.find(ClusterMeta.LinkNode);
 			if (NodeIt != ImportMeta.NodeToNodeId.end())
 			{
@@ -569,7 +564,7 @@ int32 FFbxMetaParser::RegisterBoneNode(FbxNode* Node, bool bReferencedByCluster,
 	FFbxBoneMeta BoneMeta;
 	BoneMeta.BoneId = BoneId;
 	BoneMeta.Node = Node;
-	BoneMeta.Name = GetNodeName(Node);
+	BoneMeta.Name = FBXUtil::GetNodeName(Node);
 	BoneMeta.bReferencedByCluster = bReferencedByCluster;
 	BoneMeta.bInsertedAsParentChain = bInsertedAsParentChain;
 	BoneMeta.BindGlobalMatrix = FBXUtil::ConvertFbxMatrix(Node->EvaluateGlobalTransform());

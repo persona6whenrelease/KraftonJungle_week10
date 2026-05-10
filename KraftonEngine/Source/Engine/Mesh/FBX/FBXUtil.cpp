@@ -180,3 +180,8 @@ int32 FBXUtil::QuantizeFloat(float Value)
 	constexpr float Scale = 100000.0f;
 	return static_cast<int32>(std::round(Value * Scale));
 }
+
+FString FBXUtil::GetNodeName(FbxNode* Node)
+{
+	return Node && Node->GetName() ? Node->GetName() : "";
+}
