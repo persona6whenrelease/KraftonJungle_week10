@@ -39,11 +39,11 @@ public:
 	TArray<uint32> GetVertexIdx() { return m_Indices; }
 
 private:
-	void FindMesh(FbxNode* InNode);
+	void FindMesh(FbxNode* InNod, const char* fileName);
 	bool BuildReferenceSkeleton(FbxNode* InNode, TArray<FBoneInfo>& OutBoneInfo, int32 ParentIndex);
 	bool BuildSkinningWeight(FbxMesh* InMesh, TArray<TArray<VertexBlendingInfo>>& OutWeights, TArray<FBoneInfo>& InBones);
 	bool SaveVertexData(FbxMesh* InMesh, const TArray<TArray<VertexBlendingInfo>>& InWeights, const TArray<FBoneInfo>& InBones);
-	FString ConvertSurfaceMatToMaterialJSON(FbxSurfaceMaterial* InMaterial);
+	FString ConvertSurfaceMatToMaterialJSON(FbxSurfaceMaterial* InMaterial, const char* fileName);
 	
 	void Shutdown();
 

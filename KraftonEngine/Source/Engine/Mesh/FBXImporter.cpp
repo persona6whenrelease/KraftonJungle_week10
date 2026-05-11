@@ -142,7 +142,7 @@ bool FFBXImporter::Import(const char* fileName, FStkeletalMesh& OutMesh)
 	converter.Triangulate(m_scene, true);
 
 	// 3. 메시 데이터 저장
-	FindMesh(m_scene->GetRootNode());
+	FindMesh(m_scene->GetRootNode(), fileName);
 
 	if (m_meshes.size() == 0)
 		return false;
@@ -185,7 +185,7 @@ bool FFBXImporter::Import(const char* fileName, FStkeletalMesh& OutMesh)
 	OutMesh.CacheBounds();
 	return true;
 }
-void FFBXImporter::FindMesh(FbxNode* InNode)
+void FFBXImporter::FindMesh(FbxNode* InNode, const char* fileName)
 {
 	// 찾은 노드가 메시타입이면 메시에 저장 후 반환합니다.
 	FbxNodeAttribute* attribute = InNode->GetNodeAttribute();
@@ -202,14 +202,14 @@ void FFBXImporter::FindMesh(FbxNode* InNode)
 	for (int i = 0; i < materialCount; ++i)
 	{
 		FbxSurfaceMaterial* material = InNode->GetMaterial(i);
-		ConvertSurfaceMatToMaterialJSON(material);
+		ConvertSurfaceMatToMaterialJSON(material, fileName);
 
 	}
 	// 노드의 자식의 수만큼 반복
 	int childCnt = InNode->GetChildCount();
 	for (int i = 0; i < childCnt; ++i)
 	{
-		FindMesh(InNode->GetChild(i));
+		FindMesh(InNode->GetChild(i), fileName);
 	}
 
 }
@@ -473,7 +473,7 @@ bool FFBXImporter::SaveVertexData(FbxMesh* InMesh, const TArray<TArray<VertexBle
 	return true;
 }
 
-FString FFBXImporter::ConvertSurfaceMatToMaterialJSON(FbxSurfaceMaterial* InMaterial)
+FString FFBXImporter::ConvertSurfaceMatToMaterialJSON(FbxSurfaceMaterial* InMaterial, const char* fileName)
 {
 
 	const FString materialName = InMaterial->GetName();
@@ -563,36 +563,80 @@ FString FFBXImporter::ConvertSurfaceMatToMaterialJSON(FbxSurfaceMaterial* InMate
 
 				if (fileTexture)
 				{
+					// 1. 현재 FBX 파일이 위치한 진짜 부모 폴더 경로 얻기
+					// 결과: "Assets/Sanhua"
+					std::filesystem::path fbxRealDirPath = std::filesystem::path(fileName).parent_path();
+
+
+					// 2. FBX SDK에서 쓰레기 경로 가져와서 '순수 파일명'만 추출하기
+					// (이전에 만든 FPaths::ToWide_Test 등으로 안전하게 WString을 가져왔다고 가정)
+					std::wstring GarbagePath = FPaths::ToWide(fileTexture->GetFileName());
+
+					// GetCleanFilename을 쓰면 경로를 다 날리고 "T_R2T1SanhuaMd10011Face_D.png"만 쏙 빼줍니다.
+					std::wstring cleanFileName = std::filesystem::path(GarbagePath).filename().wstring();
+
 					// 텍스처 파일 경로 추출!
-					const char* absolutePath = fileTexture->GetFileName();
-					const char* relativePath = fileTexture->GetRelativeFileName();
+					const std::wstring absolutePath = FPaths::ToWide(fileTexture->GetFileName());
+					//const std::wstring relativePath = FPaths::ToWide(fileTexture->GetRelativeFileName());
 
 					// 2. 경로에서 "파일명.확장자" (예: "albedo.png")만 쏙 빼내기
 					std::filesystem::path texturePath(absolutePath);
 					std::string fileNameOnly = texturePath.filename().string();
 
-					std::filesystem::path finalTexturePath;
-					bool isFound = false;
-					//for (const FString& folder : searchFolders)
-					//{
-					//	std::filesystem::path checkPath = fbxDir / folder / fileNameOnly;
+					// 우리가 최종적으로 얻고 싶은 텍스처의 진짜 상대 경로
+					std::wstring finalTextureRelativePath = L"";
+					bool bIsTextureFound = false;
+					// 4. 후보군을 돌면서 실제로 파일이 존재하는지 찔러보기(Heuristic Search)
+					for (const FString& FolderName : searchFolders)
+					{
+						// FPaths::Combine은 중간에 슬래시(/)가 겹치거나 빠지는 걸 완벽하게 조립해줍니다.
+						// 조합 예시 1: "Assets/Sanhua" + "" + "T_Face_D.png"
+						// 조합 예시 2: "Assets/Sanhua" + "tex" + "T_Face_D.png"
+						std::filesystem::path testPath = fbxRealDirPath / FolderName / cleanFileName;
+						// 핵심! 실제로 디스크(또는 가상 파일 시스템)에 해당 파일이 존재하는지 검사
+						if (std::filesystem::exists(testPath))
+						{
+							// 1. 엔진 루트를 기준으로 절대 경로를 상대 경로로 변환 (예: "Data\sanhua...\Eye_D.png")
+							std::filesystem::path relativePath = std::filesystem::relative(testPath);
 
-					//	if (std::filesystem::exists(checkPath))
-					//	{
-					//		finalTexturePath = checkPath;
-					//		isFound = true;
-					//		break; // 찾았으면 탐색 종료!
-					//	}
-					//}
+							// 2. wstring으로 변환
+							std::wstring finalPathStr = relativePath.wstring();
+
+							// 3. 윈도우 역슬래시(\)를 슬래시(/)로 일괄 변경 (JSON 저장용)
+							std::replace(finalPathStr.begin(), finalPathStr.end(), L'\\', L'/');
+
+							finalTextureRelativePath = finalPathStr; // 찾았다!
+							bIsTextureFound = true;
+							break; // 찾았으니 탐색 종료
+						}
+					}
 					std::filesystem::path fbxDirectory = "Data/";
-					if (isFound) {
+					if (bIsTextureFound) {
 						// TODO: 엔진의 Material 구조체에 이 파일 경로를 저장합니다.
-						JsonData["Textures"]["DiffuseTexture"] = "Data/" + FString(relativePath);
-						UE_LOG("Get TextureMap file path: %s", "Data/" + FString(relativePath));
+						std::string Utf8Path = FPaths::ToUtf8(finalTextureRelativePath);
+
+						if (strcmp(propName, FbxSurfaceMaterial::sDiffuse) == 0)
+						{
+							JsonData["Textures"]["DiffuseTexture"] = Utf8Path;
+						}
+						else if (strcmp(propName, FbxSurfaceMaterial::sNormalMap) == 0)
+						{
+							JsonData["Textures"]["NormalTexture"] = Utf8Path;
+						}
+						else if (strcmp(propName, FbxSurfaceMaterial::sSpecular) == 0)
+						{
+							JsonData["Textures"]["SpecularTexture"] = Utf8Path;
+						}
+						else if (strcmp(propName, FbxSurfaceMaterial::sEmissive) == 0)
+						{
+							JsonData["Textures"]["EmissiveTexture"] = Utf8Path;
+						}
+
+						UE_LOG("Get TextureMap file path: %s", Utf8Path.c_str());
 
 					}
 					else {
-						UE_LOG("Invalid TextureMap file path: %s", FPaths::ResolveAssetPath(absolutePath, relativePath));
+						UE_LOG("Invalid TextureMap file path: %s", finalTextureRelativePath);
 					}
 
 				}
