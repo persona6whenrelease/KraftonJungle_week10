@@ -67,7 +67,7 @@ private:
 	TArray<FMatrix> BoneSkinMatrices;
 
 	//매프레임마다 계산될 버텍스 정보(변경o)
-	TArray<FVertexPNCTT> SkinnedVertices;
+	TArray<FVertexPNCTT> SkinnedVertices;	//프록시에 넣을때 사용
 	TArray<FMatrix> CurrentBoneGlobals;
 
 	mutable FMeshTriangleBVH SkinnedMeshPickingBVH;
