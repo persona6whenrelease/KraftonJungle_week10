@@ -19,6 +19,7 @@ void USkinnedMeshComponent::RecalcComponentSpaceMatrices(const TArray<int32>& Pa
 		if (Parent < 0)
 			ComponentSpaceMatrices[i] = Local;
 		else
-			ComponentSpaceMatrices[i] = ComponentSpaceMatrices[Parent] * Local;
+			// Row-Major: V' = V * Local * Parent
+			ComponentSpaceMatrices[i] = Local * ComponentSpaceMatrices[Parent];
 	}
 }

@@ -830,6 +830,9 @@
     <ClCompile Include="Source\Engine\Render\Proxy\PrimitiveSceneProxy.cpp">
       <Filter>Source\Engine\Render\Proxy</Filter>
     </ClCompile>
+    <ClCompile Include="Source\Engine\Render\Proxy\SkeletalSceneProxy.cpp">
+      <Filter>Source\Engine\Render\Proxy</Filter>
+    </ClCompile>
     <ClCompile Include="Source\Engine\Render\Proxy\StaticMeshSceneProxy.cpp">
       <Filter>Source\Engine\Render\Proxy</Filter>
     </ClCompile>
@@ -1047,6 +1050,9 @@
       <Filter>Source\Engine\Serialization</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\SkeletalMesh\FBXImporter.cpp">
+      <Filter>Source\Engine\SkeletalMesh</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Engine\SkeletalMesh\FBXManager.cpp">
       <Filter>Source\Engine\SkeletalMesh</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\SkeletalMesh\SkeletalMesh.cpp">
@@ -1670,6 +1676,9 @@
     <ClInclude Include="Source\Engine\Render\Proxy\PrimitiveSceneProxy.h">
       <Filter>Source\Engine\Render\Proxy</Filter>
     </ClInclude>
+    <ClInclude Include="Source\Engine\Render\Proxy\SkeletalSceneProxy.h">
+      <Filter>Source\Engine\Render\Proxy</Filter>
+    </ClInclude>
     <ClInclude Include="Source\Engine\Render\Proxy\StaticMeshSceneProxy.h">
       <Filter>Source\Engine\Render\Proxy</Filter>
     </ClInclude>
@@ -1914,6 +1923,9 @@
       <Filter>Source\Engine\Serialization</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\SkeletalMesh\FBXImporter.h">
+      <Filter>Source\Engine\SkeletalMesh</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\SkeletalMesh\FBXManager.h">
       <Filter>Source\Engine\SkeletalMesh</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\SkeletalMesh\SkeletalMesh.h">

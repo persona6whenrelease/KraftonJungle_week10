@@ -213,8 +213,9 @@
       <AdditionalDependencies>libfbxsdk.lib;sfml-audio-d.lib;sfml-window-d.lib;sfml-system-d.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
-      <Command>xcopy /Y /D /I "$(ProjectDir)ThirdParty\SFML\bin\Debug\*.dll" "$(OutDir)"</Command>
-      <Message>Copying SFML Debug DLLs to $(OutDir)</Message>
+      <Command>xcopy /Y /D /I "$(ProjectDir)ThirdParty\SFML\bin\Debug\*.dll" "$(OutDir)"
+xcopy /Y /D /I "$(ProjectDir)ThirdParty\FBX\lib\debug\*.dll" "$(OutDir)"</Command>
+      <Message>Copying Runtime DLLs to $(OutDir)</Message>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -236,8 +237,9 @@
       <AdditionalDependencies>libfbxsdk.lib;sfml-audio.lib;sfml-window.lib;sfml-system.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
-      <Command>xcopy /Y /D /I "$(ProjectDir)ThirdParty\SFML\bin\Release\*.dll" "$(OutDir)"</Command>
-      <Message>Copying SFML Release DLLs to $(OutDir)</Message>
+      <Command>xcopy /Y /D /I "$(ProjectDir)ThirdParty\SFML\bin\Release\*.dll" "$(OutDir)"
+xcopy /Y /D /I "$(ProjectDir)ThirdParty\FBX\lib\release\*.dll" "$(OutDir)"</Command>
+      <Message>Copying Runtime DLLs to $(OutDir)</Message>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='ObjViewDebug|x64'">
@@ -259,8 +261,9 @@
       <AdditionalDependencies>libfbxsdk.lib;sfml-audio.lib;sfml-window.lib;sfml-system.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
-      <Command>xcopy /Y /D /I "$(ProjectDir)ThirdParty\SFML\bin\Release\*.dll" "$(OutDir)"</Command>
-      <Message>Copying SFML Release DLLs to $(OutDir)</Message>
+      <Command>xcopy /Y /D /I "$(ProjectDir)ThirdParty\SFML\bin\Release\*.dll" "$(OutDir)"
+xcopy /Y /D /I "$(ProjectDir)ThirdParty\FBX\lib\release\*.dll" "$(OutDir)"</Command>
+      <Message>Copying Runtime DLLs to $(OutDir)</Message>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Demo|x64'">
@@ -282,8 +285,9 @@
       <AdditionalDependencies>libfbxsdk.lib;sfml-audio.lib;sfml-window.lib;sfml-system.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
-      <Command>xcopy /Y /D /I "$(ProjectDir)ThirdParty\SFML\bin\Release\*.dll" "$(OutDir)"</Command>
-      <Message>Copying SFML Release DLLs to $(OutDir)</Message>
+      <Command>xcopy /Y /D /I "$(ProjectDir)ThirdParty\SFML\bin\Release\*.dll" "$(OutDir)"
+xcopy /Y /D /I "$(ProjectDir)ThirdParty\FBX\lib\release\*.dll" "$(OutDir)"</Command>
+      <Message>Copying Runtime DLLs to $(OutDir)</Message>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='GameClient|x64'">
@@ -305,8 +309,9 @@
       <AdditionalDependencies>libfbxsdk.lib;sfml-audio.lib;sfml-window.lib;sfml-system.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
-      <Command>xcopy /Y /D /I "$(ProjectDir)ThirdParty\SFML\bin\Release\*.dll" "$(OutDir)"</Command>
-      <Message>Copying SFML Release DLLs to $(OutDir)</Message>
+      <Command>xcopy /Y /D /I "$(ProjectDir)ThirdParty\SFML\bin\Release\*.dll" "$(OutDir)"
+xcopy /Y /D /I "$(ProjectDir)ThirdParty\FBX\lib\release\*.dll" "$(OutDir)"</Command>
+      <Message>Copying Runtime DLLs to $(OutDir)</Message>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -530,6 +535,7 @@
     <ClCompile Include="Source\Engine\Serialization\PrefabSaveManager.cpp" />
     <ClCompile Include="Source\Engine\Serialization\SceneSaveManager.cpp" />
     <ClCompile Include="Source\Engine\SkeletalMesh\FBXImporter.cpp" />
+    <ClCompile Include="Source\Engine\SkeletalMesh\FBXManager.cpp" />
     <ClCompile Include="Source\Engine\SkeletalMesh\SkeletalMesh.cpp" />
     <ClCompile Include="Source\Engine\Sound\SoundManager.cpp" />
     <ClCompile Include="Source\Engine\Texture\Texture2D.cpp" />
@@ -822,6 +828,7 @@
     <ClInclude Include="Source\Engine\Serialization\SceneSaveManager.h" />
     <ClInclude Include="Source\Engine\Serialization\WindowsArchive.h" />
     <ClInclude Include="Source\Engine\SkeletalMesh\FBXImporter.h" />
+    <ClInclude Include="Source\Engine\SkeletalMesh\FBXManager.h" />
     <ClInclude Include="Source\Engine\SkeletalMesh\SkeletalMesh.h" />
     <ClInclude Include="Source\Engine\SkeletalMesh\SkeletalMeshAsset.h" />
     <ClInclude Include="Source\Engine\Sound\SoundManager.h" />

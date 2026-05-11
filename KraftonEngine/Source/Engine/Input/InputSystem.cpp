@@ -1,4 +1,4 @@
-#include "Engine/Input/InputSystem.h"
+﻿#include "Engine/Input/InputSystem.h"
 #include <cmath>
 #include "Core/Log.h"
 
@@ -215,14 +215,14 @@ void InputSystem::UpdateCurrentSnapshot()
     const bool bRBtnNow = Snapshot.KeyDown[VK_RBUTTON];
     if (bRBtnNow != sLastRBtn)
     {
-        UE_LOG("[DIAG-IS] RBUTTON KeyDown=%d, GuiMouse=%d, Focused=%d, RawMouse=%d, OwnerHWnd=%p, FG=%p",
-            bRBtnNow ? 1 : 0,
-            Snapshot.bGuiUsingMouse ? 1 : 0,
-            Snapshot.bWindowFocused ? 1 : 0,
-            Snapshot.bUsingRawMouse ? 1 : 0,
-            OwnerHWnd,
-            GetForegroundWindow());
-        sLastRBtn = bRBtnNow;
+        //UE_LOG("[DIAG-IS] RBUTTON KeyDown=%d, GuiMouse=%d, Focused=%d, RawMouse=%d, OwnerHWnd=%p, FG=%p",
+        //    bRBtnNow ? 1 : 0,
+        //    Snapshot.bGuiUsingMouse ? 1 : 0,
+        //    Snapshot.bWindowFocused ? 1 : 0,
+        //    Snapshot.bUsingRawMouse ? 1 : 0,
+        //    OwnerHWnd,
+        //    GetForegroundWindow());
+        //sLastRBtn = bRBtnNow;
     }
 
     CurrentSnapshot = Snapshot;

@@ -1,52 +1,52 @@
-# Skeletal Mesh Implementation Report
+# Skeletal Mesh & Bone Configuration 상태 보고서
 
-본 문서는 KraftonEngine의 Skeletal Mesh 시스템 구현 내용(Asset, Mesh Data, Importer)을 정리한 보고서입니다.
+## 1. 현재 상황 요약
+현재 KraftonEngine의 Skeletal Mesh 시스템은 행렬 연산 체계(Row-Major)와 좌표계(Left-Handed, Z-Up)를 맞추는 작업을 진행했으나, **바인드 포즈와 엔진 런타임 포즈 간의 수학적 불일치**로 인해 메시가 정상적으로 출력되지 않는 상태입니다.
 
-## 1. 시스템 아키텍처 개요
-Skeletal Mesh 시스템은 기존 `StaticMesh`의 설계를 계승하면서도, 애니메이션과 스키닝을 위한 확장된 데이터 구조를 가집니다.
-
-- **FSkeletalMesh**: 기하 데이터 및 본 정보를 담는 실체.
-- **USkeletalMesh**: 엔진 내에서 에셋으로 관리되는 인터페이스.
-- **FFbxImporter**: 외부 FBX 파일을 엔진 전용 데이터로 변환하는 파이프라인.
-
----
-
-## 2. 데이터 구조 구현 (Mesh & Asset)
-
-### 2.1 FSkeletalMesh (SkeletalMeshAsset.h)
-메시의 정점, 인덱스, 본 정보를 소유하는 핵심 데이터 구조체입니다.
-- **FSkeletalMeshVertex**: 위치, 노멀, UV 외에 `boneIndices[4]`와 `boneWeights[4]`를 포함합니다.
-- **FBone**: `ParentIndex`와 함께 초기 `LocalTransform` 및 `InverseBindMatrix`를 가집니다.
-- **수동 직렬화(Manual Serialization)**: 
-    - `FMatrix`, `FVector` 등 Non-Trivial 타입을 위해 `Ar.Serialize()`를 직접 호출하여 `Archive.h`의 템플릿 제약을 우회하고 성능과 안정성을 확보했습니다.
-
-### 2.2 USkeletalMesh (SkeletalMesh.h / .cpp)
-`UObject`를 상속받아 엔진 시스템(에디터, 직렬화)과 소통하는 클래스입니다.
-- **머티리얼 관리**: `TArray<FStaticMaterial>`을 통해 섹션별 재질을 매핑합니다.
-- **본 이름 매핑**: `TMap<FName, int32>`를 유지하여 애니메이션 시 이름 기반으로 본을 빠르게 찾을 수 있도록 지원합니다.
+### 핵심 문제: Bind Pose Identity Test 실패
+- **로그 결과**: `Bone[0] Matrix Error - Row3 (Translation): 0.0000, -0.8444, 5.8700`
+- **원인 분석**:
+    1. **Pose Mismatch**: `EvaluateLocalTransform(0)`으로 가져온 초기 포즈와 FBX Cluster에 기록된 바인드 시점의 본 위치가 서로 다름.
+    2. **Origin Mismatch**: 메시 노드의 글로벌 변환과 본 계층 구조의 루트 변환이 동일한 기준점(World Origin)을 공유하지 않음.
+    3. **Hierarchy Gap**: Blender에서 FBX 추출 시 본이 아닌 일반 노드(Empty 등)가 계층 구조 사이에 섞여 있어, 엔진이 이를 건너뛸 때 변환 정보가 유실됨.
 
 ---
 
-## 3. FBX 임포트 파이프라인 (FFbxImporter)
+## 2. 주요 확인 및 수정 파일 (Relevant Files)
 
-FBX SDK를 활용하여 데이터를 추출하는 로직이 `FFbxImporter`에 구현되었습니다.
+### 1) SkeletalMesh 관련 핵심 로직
+- `KraftonEngine/Source/Engine/SkeletalMesh/FBXImporter.cpp`
+    - FBX 데이터 추출, 좌표계 변환(`ConvertScene`), IBP 계산 담당.
+- `KraftonEngine/Source/Engine/Component/SkeletalMeshComponent.cpp`
+    - `UpdateSkinning` 로직 및 최종 스키닝 행렬 계산(`IBP * CS`) 담당. 현재 Identity Test 로그가 위치함.
+- `KraftonEngine/Source/Engine/Component/SkinnedMeshComponent.cpp`
+    - 본 계층 구조 합성(`RecalcComponentSpaceMatrices`) 담당.
 
-### 3.1 추출 순서
-1. **Skeleton First**: 메시를 읽기 전 Scene 전체의 `eSkeleton` 노드를 먼저 순회하여 본 계층 구조와 이름을 확립합니다.
-2. **Mesh & Skinning**: `FbxSkin`과 `FbxCluster`를 분석하여 정점별로 영향을 주는 본 인덱스와 가중치를 추출하고 정규화합니다.
+### 2) 수학 및 정점 정의
+- `KraftonEngine/Source/Engine/Math/Matrix.h / .cpp`
+    - Row-Major 행렬 연산 및 `IsIdentity()` 등 검증 함수 포함.
+- `KraftonEngine/Source/Engine/Render/Types/VertexTypes.h`
+    - `FSkeletalMeshVertex` 및 `FBone` 구조체 정의.
 
-### 3.2 좌표계 및 데이터 변환
-- **UV Flip**: DirectX 표준에 맞춰 UV의 Y축을 반전(`1.0 - UV.y`) 처리합니다.
-- **Matrix Conversion**: `FbxAMatrix`를 엔진의 `FMatrix`로 변환하는 헬퍼 함수를 통해 수학적 일관성을 유지합니다.
+### 3) 에셋 구조
+- `KraftonEngine/Source/Engine/SkeletalMesh/SkeletalMesh.h / .cpp`
+    - USkeletalMesh 에셋 클래스 및 본 이름 매핑 관리.
+- `KraftonEngine/Source/Engine/SkeletalMesh/SkeletalMeshAsset.h`
+    - `FSkeletalMesh` 원본 데이터 구조체 정의.
 
 ---
 
-## 4. 기술적 해결 사항 및 특이 사항
-
-- **Serialization**: `static_assert` 이슈를 해결하기 위해 저수준 헤더의 의존성을 제거하고, 에셋 클래스 수준에서 메모리 블록 단위로 직접 읽고 쓰는 방식을 채택했습니다.
-- **Hashing Support**: `TMap<FName, ...>` 사용을 위해 `std::hash<FName>` 특수화를 추가하여 표준 라이브러리 호환성을 확보했습니다.
-- **Rendering Compatibility**: `SceneProxy` 구현 시 `FGPUGeometryView`를 통해 에셋의 정적 IB와 컴포넌트의 동적 VB를 조합할 수 있는 구조를 확립했습니다.
+## 3. 기수행된 수정 사항 (Applied Fixes)
+1. **Transpose 적용**: `FbxMatrixToFMatrix`에서 Column-Major -> Row-Major 변환을 위해 행렬 전치 수행.
+2. **연산 순서 교정**: 
+    - 계층 구조: `Local * Parent`
+    - 스키닝: `InverseBind * ComponentSpace`
+3. **데이터 초기화**: `FSkeletalMeshVertex` 초기화 누락 수정 (가중치 쓰레기 값 방지).
+4. **좌표계 변환**: `FbxAxisSystem`을 통해 **Z-Up, Left-Handed, X-Forward**로 씬 자동 변환 적용.
 
 ---
-*작성일: 2026-05-09*
-*상태: Core Implementation Completed*
+
+## 4. 향후 과제 (Next Actions)
+1. **바인드 포즈 역산**: `EvaluateLocalTransform` 대신 `TransformLinkMatrix`를 부모의 글로벌 행렬로 나누어 완벽한 바인드 시점의 `LocalTransform`을 강제 주입.
+2. **계층 구조 전수 조사**: `eSkeleton` 속성 외에 중간에 섞인 노드들의 트랜스폼을 누적해서 처리할 수 있도록 `GatherJoints` 및 `ProcessNode` 로직 개선.
+3. **Geometry Offset 재검토**: Identity Test가 성공한 이후에도 위치가 어긋난다면, `GetGeometricTranslation` 등의 메시 전용 오프셋을 다시 검토.

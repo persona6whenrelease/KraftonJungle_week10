@@ -4,6 +4,8 @@
 #include "Object/ObjectFactory.h"
 #include "Engine/Runtime/Engine.h"
 #include "Render/Proxy/SkeletalSceneProxy.h"
+#include "SkeletalMesh/FBXManager.h"
+#include "Core/Log.h"
 
 IMPLEMENT_CLASS(USkeletalMeshComponent, USkinnedMeshComponent)
 
@@ -53,8 +55,10 @@ void USkeletalMeshComponent::SetSkeletalMesh(USkeletalMesh* InMesh)
 	// CPU 스키닝 버퍼
 	SkinnedVertices = Asset->Vertices;
 	ID3D11Device* Device = GEngine->GetRenderer().GetFD3DDevice().GetDevice();
+	ID3D11DeviceContext* DeviceContext = GEngine->GetRenderer().GetFD3DDevice().GetDeviceContext();
 	DynamicVB.Create(Device, (uint32)Asset->Vertices.size(), sizeof(FSkeletalMeshVertex));
 
+	UpdateAnimation(0.0f);
 	CacheLocalBounds();
 	MarkRenderStateDirty();
 	MarkWorldBoundsDirty();
@@ -98,6 +102,16 @@ void USkeletalMeshComponent::UpdateAnimation(float DeltaTime)
 	UpdateSkinning();
 }
 
+void USkeletalMeshComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction& ThisTickFunction)
+{
+	UActorComponent::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+	if (IsActive())
+	{
+		UpdateAnimation(DeltaTime);
+	}
+}
+
 void USkeletalMeshComponent::UpdateLocalTransforms()
 {
 	FSkeletalMesh* Asset = SkeletalMesh->GetSkeletalMeshAsset();
@@ -120,8 +134,63 @@ void USkeletalMeshComponent::UpdateSkinning()
 	FSkeletalMesh* Asset = SkeletalMesh->GetSkeletalMeshAsset();
 	if (!Asset) return;
 
+	static bool bLoggedIdentityTest = false;
+	bool bAllIdentity = true;
+
+	struct FBoneDiff { int32 Index; float MaxAbs; };
+	TArray<FBoneDiff> Diffs;
+	if (!bLoggedIdentityTest) Diffs.reserve(SkinningMatrices.size());
+
 	for (int32 i = 0; i < (int32)SkinningMatrices.size(); ++i)
-		SkinningMatrices[i] = ComponentSpaceMatrices[i] * Asset->Bones[i].InverseBindMatrix;
+	{
+		// Row-Major: V' = V * InverseBind * ComponentSpace
+		SkinningMatrices[i] = Asset->Bones[i].InverseBindMatrix * ComponentSpaceMatrices[i];
+
+		if (!bLoggedIdentityTest)
+		{
+			const FMatrix& Sm = SkinningMatrices[i];
+			float MaxAbs = 0.0f;
+			for (int r = 0; r < 4; ++r)
+				for (int c = 0; c < 4; ++c)
+				{
+					float Expected = (r == c) ? 1.0f : 0.0f;
+					float Diff = std::fabs(Sm.M[r][c] - Expected);
+					if (Diff > MaxAbs) MaxAbs = Diff;
+				}
+			Diffs.push_back({ i, MaxAbs });
+			if (MaxAbs > 1e-4f) bAllIdentity = false;
+		}
+	}
+
+	if (!bLoggedIdentityTest && !SkinningMatrices.empty())
+	{
+		float MaxDiffOverall = 0.0f;
+		for (const auto& d : Diffs) if (d.MaxAbs > MaxDiffOverall) MaxDiffOverall = d.MaxAbs;
+
+		if (bAllIdentity)
+		{
+			UE_LOG("Bind Pose Identity Test: SUCCESS (maxAbsDiff over %d bones = %.6f)",
+				(int32)Diffs.size(), MaxDiffOverall);
+		}
+		else
+		{
+			UE_LOG("Bind Pose Identity Test: FAILED (maxAbsDiff over %d bones = %.6f)",
+				(int32)Diffs.size(), MaxDiffOverall);
+
+			// 전체 본을 잔차 큰 순으로 출력
+			std::sort(Diffs.begin(), Diffs.end(),
+				[](const FBoneDiff& A, const FBoneDiff& B) { return A.MaxAbs > B.MaxAbs; });
+			const int32 TopN = (int32)Diffs.size();
+			for (int32 k = 0; k < TopN; ++k)
+			{
+				const int32 idx = Diffs[k].Index;
+				const FMatrix& Sm = SkinningMatrices[idx];
+				UE_LOG("  Bone[%d] maxAbsDiff=%.6f Row3=(%.4f, %.4f, %.4f)",
+					idx, Diffs[k].MaxAbs, Sm.M[3][0], Sm.M[3][1], Sm.M[3][2]);
+			}
+		}
+		bLoggedIdentityTest = true;
+	}
 
 	if (SkinningMode == ESkinningMode::CPU)
 		UpdateSkinningCPU();
@@ -242,4 +311,79 @@ void USkeletalMeshComponent::CacheLocalBounds()
 	CachedLocalCenter = Asset->BoundsCenter;
 	CachedLocalExtent = Asset->BoundsExtent;
 	bHasValidBounds   = Asset->bBoundsValid;
+}
+
+void USkeletalMeshComponent::CalcDynamicLocalBounds()
+{
+	if (SkinnedVertices.empty()) return;
+
+	FBoundingBox LocalBox;
+
+	for (const auto& V : SkinnedVertices)
+	{
+		LocalBox.Expand(V.Position);
+	}
+
+	if (LocalBox.IsValid())
+	{
+		CachedLocalCenter = LocalBox.GetCenter();
+		CachedLocalExtent = LocalBox.GetExtent();
+		bHasValidBounds = true;
+	}
+}
+
+void USkeletalMeshComponent::GetEditableProperties(TArray<FPropertyDescriptor>& OutProps)
+{
+	USkinnedMeshComponent::GetEditableProperties(OutProps);
+
+	OutProps.push_back({ "Skeletal Mesh", EPropertyType::SkeletalMeshRef, &SkeletalMeshPath });
+
+	// Skinning Mode Enum (CPU/GPU)
+	static const char* SkinningModeNames[] = { "CPU", "GPU" };
+	OutProps.push_back({ "Skinning Mode", EPropertyType::Enum, &SkinningMode, 0.0f, 0.0f, 0.0f, SkinningModeNames, 2 });
+
+	// 머티리얼 슬롯
+	for (int32 i = 0; i < (int32)MaterialSlots.size(); ++i)
+	{
+		char Label[32];
+		snprintf(Label, sizeof(Label), "Element %d", i);
+		OutProps.push_back({ Label, EPropertyType::MaterialSlot, &MaterialSlots[i] });
+	}
+}
+
+void USkeletalMeshComponent::PostEditProperty(const char* PropertyName)
+{
+	USkinnedMeshComponent::PostEditProperty(PropertyName);
+
+	if (strcmp(PropertyName, "Skeletal Mesh") == 0)
+	{
+		if (SkeletalMeshPath == "None" || SkeletalMeshPath.empty())
+		{
+			SetSkeletalMesh(nullptr);
+		}
+		else
+		{
+			ID3D11Device* Device = GEngine->GetRenderer().GetFD3DDevice().GetDevice();
+			USkeletalMesh* NewMesh = FFBXManager::LoadSkeletalMesh(SkeletalMeshPath, Device);
+			if (NewMesh)
+			{
+				SetSkeletalMesh(NewMesh);
+			}
+		}
+		MarkRenderStateDirty();
+		MarkWorldBoundsDirty();
+	}
+	else if (strncmp(PropertyName, "Element ", 8) == 0)
+	{
+		int32 Index = atoi(&PropertyName[8]);
+		if (Index >= 0 && Index < (int32)MaterialSlots.size())
+		{
+			UMaterial* NewMat = FMaterialManager::Get().GetOrCreateMaterial(MaterialSlots[Index].Path);
+			SetMaterial(Index, NewMat);
+		}
+	}
+	else if (strcmp(PropertyName, "Skinning Mode") == 0)
+	{
+		MarkRenderStateDirty();
+	}
 }

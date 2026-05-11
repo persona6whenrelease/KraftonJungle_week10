@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Component/SkinnedMeshComponent.h"
 #include "SkeletalMesh/SkeletalMesh.h"
@@ -26,11 +26,17 @@ public:
 	// 매 틱 — 본 변환 갱신 + 스키닝 실행
 	void UpdateAnimation(float DeltaTime);
 
+	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction& ThisTickFunction) override;
+
 	// UPrimitiveComponent overrides
 	FPrimitiveSceneProxy* CreateSceneProxy() override;
 	FMeshBuffer* GetMeshBuffer() const override;
 	FMeshDataView GetMeshDataView() const override;
 	void UpdateWorldAABB() const override;
+
+	// Editor UI Integration
+	void GetEditableProperties(TArray<FPropertyDescriptor>& OutProps) override;
+	void PostEditProperty(const char* PropertyName) override;
 
 	// CPU 모드 시 Proxy가 접근
 	const FDynamicVertexBuffer& GetDynamicVB() const { return DynamicVB; }
@@ -43,7 +49,7 @@ private:
 	void UpdateSkinning();
 	void UpdateSkinningCPU();
 	void UpdateSkinningGPU();   // stub — Proxy 단계에서 완성
-
+	void CalcDynamicLocalBounds();
 	void CacheLocalBounds();
 
 	// 에셋

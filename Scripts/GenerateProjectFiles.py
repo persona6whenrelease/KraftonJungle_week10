@@ -351,6 +351,12 @@ def sfml_post_build_command(flavor: str) -> str:
     return f'xcopy /Y /D /I "{src}" "$(OutDir)"'
 
 
+def fbx_post_build_command(flavor: str) -> str:
+    # FBX uses lowercase folder names: debug, release
+    src = f"{FBX_LIB_BASE}\\{flavor.lower()}\\*.dll"
+    return f'xcopy /Y /D /I "{src}" "$(OutDir)"'
+
+
 def project_include_path(path: Path) -> str:
     rel = path.relative_to(ROOT)
     return normalize_rel(rel)
@@ -630,14 +636,18 @@ def generate_vcxproj(
             sfml_flavor = sfml_flavor_for(cfg, plat) if include_sfml else None
             if sfml_flavor is not None:
                 libs = []
+                commands = [sfml_post_build_command(sfml_flavor)]
+
                 if application_project and plat == "x64":
                     libs.extend(FBX_LIBS)
+                    commands.append(fbx_post_build_command(sfml_flavor))
+
                 libs.extend(sfml_lib_names(sfml_flavor))
                 ET.SubElement(link, "AdditionalDependencies").text = ";".join(libs) + ";%(AdditionalDependencies)"
 
                 pbe = ET.SubElement(idg, "PostBuildEvent")
-                ET.SubElement(pbe, "Command").text = sfml_post_build_command(sfml_flavor)
-                ET.SubElement(pbe, "Message").text = f"Copying SFML {sfml_flavor} DLLs to $(OutDir)"
+                ET.SubElement(pbe, "Command").text = "\n".join(commands)
+                ET.SubElement(pbe, "Message").text = f"Copying Runtime DLLs to $(OutDir)"
 
     # Items
     for item_name in ["ClCompile", "ClInclude", "FxCompile", "ResourceCompile", "Natvis", "None"]:
