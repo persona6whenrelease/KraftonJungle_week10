@@ -9,6 +9,10 @@
 
 #include <cstdint>
 
+#include "Runtime/Engine.h"
+#include "Viewport/Viewport.h"
+#include "Component/SkeletalMeshComponent.h"
+
 namespace
 {
 void RenderBoneTreeNode(const TArray<FBoneInfo>& Bones, int32 BoneIndex, int32& SelectedBoneIndex)
@@ -63,6 +67,80 @@ void RenderBoneTreeNode(const TArray<FBoneInfo>& Bones, int32 BoneIndex, int32& 
 }
 }
 
+FEditorSkeletalMeshViewerWidget::~FEditorSkeletalMeshViewerWidget()
+{
+	ReleasePreviewScene();
+}
+
+void FEditorSkeletalMeshViewerWidget::EnsurePreviewScene()
+{
+	if (PreviewWorld)
+	{
+		return;
+	}
+
+	PreviewWorld = UObjectManager::Get().CreateObject<UWorld>();
+	PreviewWorld->SetWorldType(EWorldType::Editor);
+	PreviewWorld->InitWorld();
+
+	PreviewActor = PreviewWorld->SpawnActor<AActor>();
+
+	PreviewMeshComponent = PreviewActor->AddComponent<USkeletalMeshComponent>();
+	PreviewActor->SetRootComponent(PreviewMeshComponent);
+
+	PreviewViewport = new FViewport();
+
+	ID3D11Device* Device = GEngine ? GEngine->GetRenderer().GetFD3DDevice().GetDevice() : nullptr;
+	if (Device)
+	{
+		PreviewViewport->Initialize(Device, 512, 512);
+	}
+}
+
+void FEditorSkeletalMeshViewerWidget::ReleasePreviewScene()
+{
+	if (PreviewViewport)
+	{
+		PreviewViewport->Release();
+		delete PreviewViewport;
+		PreviewViewport = nullptr;
+	}
+
+	PreviewMeshComponent = nullptr;
+	PreviewActor = nullptr;
+
+	if (PreviewWorld)
+	{
+		PreviewWorld->EndPlay();
+		UObjectManager::Get().DestroyObject(PreviewWorld);
+		PreviewWorld = nullptr;
+	}
+}
+
+void FEditorSkeletalMeshViewerWidget::SetPreviewMesh(USkeletalMesh* InMesh)
+{
+	EnsurePreviewScene();
+
+	if (!PreviewMeshComponent)
+	{
+		return;
+	}
+
+	PreviewMeshComponent->SetSkeletalMesh(InMesh);
+
+	FSkeletalMesh* MeshAsset = InMesh ? InMesh->GetSkeletalMeshAsset() : nullptr;
+	if (MeshAsset)
+	{
+		if (!MeshAsset->bBoundsValid)
+		{
+			MeshAsset->CacheBounds();
+		}
+
+		const FVector Center = MeshAsset->BoundsCenter;
+		PreviewMeshComponent->SetRelativeLocation(FVector(-Center.X, -Center.Y, -Center.Z));
+	}
+}
+
 bool FEditorSkeletalMeshViewerWidget::OpenFbxAsset(const FString& FbxPath)
 {
 	CurrentFbxPath = FbxPath;
@@ -84,6 +162,8 @@ bool FEditorSkeletalMeshViewerWidget::OpenFbxAsset(const FString& FbxPath)
 	}
 
 	SelectedResourceIndex = 0;
+	SetPreviewMesh(GetSelectedSkeletalMesh());
+	
 	StatusMessage = "FBX loaded";
 	return true;
 }
@@ -177,6 +257,7 @@ void FEditorSkeletalMeshViewerWidget::RenderResourcePanel()
 				{
 					SelectedResourceIndex = MeshIndex;
 					SelectedBoneIndex = -1;
+					SetPreviewMesh(GetSelectedSkeletalMesh());
 				}
 			}
 		}
