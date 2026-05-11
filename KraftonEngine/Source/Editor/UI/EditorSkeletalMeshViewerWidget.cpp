@@ -12,6 +12,7 @@
 #include "Runtime/Engine.h"
 #include "Viewport/Viewport.h"
 #include "Component/SkeletalMeshComponent.h"
+#include "Editor/Viewport/SkeletalMeshViewerViewportClient.h"
 
 namespace
 {
@@ -88,6 +89,9 @@ void FEditorSkeletalMeshViewerWidget::EnsurePreviewScene()
 	PreviewMeshComponent = PreviewActor->AddComponent<USkeletalMeshComponent>();
 	PreviewActor->SetRootComponent(PreviewMeshComponent);
 
+	PreviewViewportClient = new FSkeletalMeshViewerViewportClient();
+	PreviewViewportClient->Initialize();
+	
 	PreviewViewport = new FViewport();
 
 	ID3D11Device* Device = GEngine ? GEngine->GetRenderer().GetFD3DDevice().GetDevice() : nullptr;
@@ -104,6 +108,13 @@ void FEditorSkeletalMeshViewerWidget::ReleasePreviewScene()
 		PreviewViewport->Release();
 		delete PreviewViewport;
 		PreviewViewport = nullptr;
+	}
+
+	if (PreviewViewportClient)
+	{
+		PreviewViewportClient->Shutdown();
+		delete PreviewViewportClient;
+		PreviewViewportClient = nullptr;
 	}
 
 	PreviewMeshComponent = nullptr;
@@ -138,6 +149,11 @@ void FEditorSkeletalMeshViewerWidget::SetPreviewMesh(USkeletalMesh* InMesh)
 
 		const FVector Center = MeshAsset->BoundsCenter;
 		PreviewMeshComponent->SetRelativeLocation(FVector(-Center.X, -Center.Y, -Center.Z));
+	}
+
+	if (PreviewViewportClient)
+	{
+		PreviewViewportClient->FrameMesh(MeshAsset);
 	}
 }
 

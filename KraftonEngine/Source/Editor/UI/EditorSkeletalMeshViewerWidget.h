@@ -7,6 +7,7 @@ class UFBXSceneAsset;
 class USkeletalMesh;
 class USkeletalMeshComponent;
 class FViewport;
+class FSkeletalMeshViewerViewportClient;
 
 class FEditorSkeletalMeshViewerWidget : public FEditorWidget
 {
@@ -37,4 +38,5 @@ private:
 	AActor* PreviewActor = nullptr;
 	USkeletalMeshComponent* PreviewMeshComponent = nullptr;
 	FViewport* PreviewViewport = nullptr;
+	FSkeletalMeshViewerViewportClient* PreviewViewportClient = nullptr;
 };
