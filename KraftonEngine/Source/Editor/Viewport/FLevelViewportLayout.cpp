@@ -1089,6 +1089,9 @@ void FLevelViewportLayout::RenderViewportUI(float DeltaTime)
 
 							UStaticMeshComponent* StaticMeshComponent = NewActor->AddComponent<UStaticMeshComponent>();
 							StaticMeshComponent->AttachToComponent(RootComponent);
+							StaticMeshComponent->SetRelativeLocation(Desc.RelativeTransform.GetLocation());
+							StaticMeshComponent->SetRelativeRotation(Desc.RelativeTransform.ToQuat());
+							StaticMeshComponent->SetRelativeScale(Desc.RelativeTransform.GetScale());
 							StaticMeshComponent->SetStaticMesh(StaticMeshes[Desc.StaticMeshAssetIndex]);
 							++SpawnedMeshComponentCount;
 						}
@@ -1108,6 +1111,9 @@ void FLevelViewportLayout::RenderViewportUI(float DeltaTime)
 
 							USkeletalMeshComponent* SkeletalMeshComponent = NewActor->AddComponent<USkeletalMeshComponent>();
 							SkeletalMeshComponent->AttachToComponent(RootComponent);
+							SkeletalMeshComponent->SetRelativeLocation(Desc.RelativeTransform.GetLocation());
+							SkeletalMeshComponent->SetRelativeRotation(Desc.RelativeTransform.ToQuat());
+							SkeletalMeshComponent->SetRelativeScale(Desc.RelativeTransform.GetScale());
 							SkeletalMeshComponent->SetSkeletalMesh(SkeletalMeshes[Desc.SkeletalMeshAssetIndex]);
 							++SpawnedMeshComponentCount;
 						}

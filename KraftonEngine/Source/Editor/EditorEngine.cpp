@@ -71,8 +71,7 @@ void UEditorEngine::Init(FWindowsWindow* InWindow)
 	}
 
 	{
-		SCOPE_STARTUP_STAT("FBXManager::ScanSkeletalMeshAssets");
-		FFBXManager::ScanSkeletalMeshAssets();
+		SCOPE_STARTUP_STAT("FBXManager::ScanFbxSourceFiles");
 		FFBXManager::ScanFbxSourceFiles();
 	}
 

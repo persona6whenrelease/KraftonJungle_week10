@@ -1,9 +1,8 @@
-﻿#include "Mesh/FBX/FBXManager.h"
+#include "Mesh/FBX/FBXManager.h"
 
 #include "Core/Log.h"
 #include "Engine/Platform/Paths.h"
 #include "Engine/Runtime/Engine.h"
-#include "Materials/MaterialManager.h"
 #include "Mesh/FBX/FBXImporter.h"
 #include "Mesh/FBX/FBXSceneAsset.h"
 #include "Mesh/SkeletalMesh.h"
@@ -18,17 +17,15 @@
 #include <cwctype>
 #include <filesystem>
 
-TMap<FString, USkeletalMesh*> FFBXManager::SkeletalMeshCache;
 TMap<FString, UFBXSceneAsset*> FFBXManager::FbxSceneCache;
-TArray<FMeshAssetListItem> FFBXManager::AvailableSkeletalMeshFiles;
 TArray<FMeshAssetListItem> FFBXManager::AvailableFbxFiles;
 
 namespace
 {
-	constexpr uint32 FBXCacheMagic = 0x58424653u; // "SFBX"
-	constexpr uint32 FBXCacheVersion = 4u;
+	constexpr uint32 FbxSceneCacheMagic = 0x4E435346u; // "FSCN"
+	constexpr uint32 FbxSceneCacheVersion = 1u;
 
-	struct FFBXCacheHeader
+	struct FFBXSceneCacheHeader
 	{
 		uint32 Magic = 0;
 		uint32 Version = 0;
@@ -36,17 +33,41 @@ namespace
 		int64 SourceTimestamp = 0;
 	};
 
-	static void EnsureSkeletalMeshCacheDirExists()
+	enum class EFBXSceneCacheStatus
+	{
+		MemoryHit,
+		DiskHit,
+		CacheMiss,
+		CacheStale,
+		CacheInvalid,
+		RebuildFailed,
+	};
+
+	const char* ToLogString(EFBXSceneCacheStatus Status)
+	{
+		switch (Status)
+		{
+		case EFBXSceneCacheStatus::MemoryHit: return "memory hit";
+		case EFBXSceneCacheStatus::DiskHit: return "disk hit";
+		case EFBXSceneCacheStatus::CacheMiss: return "cache miss";
+		case EFBXSceneCacheStatus::CacheStale: return "cache rebuild";
+		case EFBXSceneCacheStatus::CacheInvalid: return "cache rebuild";
+		case EFBXSceneCacheStatus::RebuildFailed: return "cache rebuild failed";
+		default: return "unknown";
+		}
+	}
+
+	void EnsureFbxSceneCacheDirExists()
 	{
 		static bool bCreated = false;
 		if (!bCreated)
 		{
-			FPaths::CreateDir(FPaths::RootDir() + L"Asset\\SkeletalMeshCache\\");
+			FPaths::CreateDir(FPaths::RootDir() + L"Asset\\FBXSceneCache\\");
 			bCreated = true;
 		}
 	}
 
-	static std::wstring ResolveDiskPath(const FString& Path)
+	std::wstring ResolveDiskPath(const FString& Path)
 	{
 		std::wstring DiskPath;
 		FString ResolveError;
@@ -57,20 +78,20 @@ namespace
 		return DiskPath;
 	}
 
-	static FString NormalizePackagePath(const FString& Path)
+	FString NormalizePackagePath(const FString& Path)
 	{
 		std::filesystem::path Normalized(FPaths::ToWide(Path));
 		return FPaths::ToUtf8(Normalized.lexically_normal().generic_wstring());
 	}
 
-	static std::wstring ToLower(std::wstring Text)
+	std::wstring ToLower(std::wstring Text)
 	{
 		std::transform(Text.begin(), Text.end(), Text.begin(),
 			[](wchar_t Ch) { return static_cast<wchar_t>(std::towlower(Ch)); });
 		return Text;
 	}
 
-	static int64 GetFileTimestamp(const FString& Path)
+	int64 GetFileTimestamp(const FString& Path)
 	{
 		const std::filesystem::path DiskPath(ResolveDiskPath(Path));
 		if (!std::filesystem::exists(DiskPath))
@@ -81,19 +102,19 @@ namespace
 		return static_cast<int64>(std::filesystem::last_write_time(DiskPath).time_since_epoch().count());
 	}
 
-	static bool IsFbxPath(const FString& Path)
+	bool IsFbxPath(const FString& Path)
 	{
 		std::filesystem::path FsPath(FPaths::ToWide(Path));
 		return ToLower(FsPath.extension().wstring()) == L".fbx";
 	}
 
-	static bool IsBinPath(const FString& Path)
+	bool IsBinPath(const FString& Path)
 	{
 		std::filesystem::path FsPath(FPaths::ToWide(Path));
 		return ToLower(FsPath.extension().wstring()) == L".bin";
 	}
 
-	static bool ParseFbxSceneReference(
+	bool ParseFbxSceneSubAssetReference(
 		const FString& Path,
 		const char* Marker,
 		FString& OutSourcePath,
@@ -123,7 +144,7 @@ namespace
 		return true;
 	}
 
-	static void SerializeCacheHeader(FArchive& Ar, FFBXCacheHeader& Header)
+	void SerializeCacheHeader(FArchive& Ar, FFBXSceneCacheHeader& Header)
 	{
 		Ar << Header.Magic;
 		Ar << Header.Version;
@@ -131,46 +152,26 @@ namespace
 		Ar << Header.SourceTimestamp;
 	}
 
-	static bool ReadCacheHeader(const FString& BinPath, FFBXCacheHeader& OutHeader)
+	FString GetFbxSceneCacheFilePath(const FString& SourcePath)
 	{
-		FWindowsBinReader Reader(BinPath);
-		if (!Reader.IsValid())
-		{
-			return false;
-		}
+		EnsureFbxSceneCacheDirExists();
 
-		SerializeCacheHeader(Reader, OutHeader);
-		return OutHeader.Magic == FBXCacheMagic && OutHeader.Version == FBXCacheVersion;
+		std::wstring SourceDiskPath;
+		FString ResolveError;
+		const bool bResolvedSource = FPaths::TryResolvePackagePath(SourcePath, SourceDiskPath, &ResolveError);
+		const std::filesystem::path SrcPath(bResolvedSource ? SourceDiskPath : FPaths::ToWide(SourcePath));
+
+		std::filesystem::path RelPath = std::filesystem::path(L"Asset\\FBXSceneCache") / SrcPath.stem();
+		RelPath += L".fbxscene.bin";
+		return FPaths::ToUtf8(RelPath.generic_wstring());
 	}
 
-	static bool WriteCacheHeader(FWindowsBinWriter& Writer, const FString& SourcePath, int64 SourceTimestamp)
+	bool IsCacheHeaderUsable(const FString& RequestedPath, const FFBXSceneCacheHeader& Header)
 	{
-		if (!Writer.IsValid())
+		if (Header.Magic != FbxSceneCacheMagic || Header.Version != FbxSceneCacheVersion)
 		{
 			return false;
 		}
-
-		FFBXCacheHeader Header;
-		Header.Magic = FBXCacheMagic;
-		Header.Version = FBXCacheVersion;
-		Header.SourcePath = NormalizePackagePath(SourcePath);
-		Header.SourceTimestamp = SourceTimestamp;
-		SerializeCacheHeader(Writer, Header);
-		return true;
-	}
-
-	static bool IsCacheUsableForRequest(const FString& RequestedPath, const FFBXCacheHeader& Header)
-	{
-		if (IsBinPath(RequestedPath))
-		{
-			return true;
-		}
-
-		if (!IsFbxPath(RequestedPath))
-		{
-			return false;
-		}
-
 		if (NormalizePackagePath(Header.SourcePath) != NormalizePackagePath(RequestedPath))
 		{
 			return false;
@@ -180,39 +181,146 @@ namespace
 		return CurrentSourceTimestamp != 0 && Header.SourceTimestamp >= CurrentSourceTimestamp;
 	}
 
-	static TArray<FMeshMaterial> BuildMaterialsFromSections(const FSkeletalMesh& Mesh)
+	bool TryLoadSceneFromCache(const FString& SourcePath, FFBXScene& OutScene, EFBXSceneCacheStatus& OutStatus)
 	{
-		TArray<FMeshMaterial> Materials;
-		TSet<FString> AddedSlotNames;
-		UMaterial* FallbackMaterial = FMaterialManager::Get().GetOrCreateMaterial("None");
-
-		for (const FMeshSection& Section : Mesh.Sections)
+		const FString CachePath = GetFbxSceneCacheFilePath(SourcePath);
+		const std::filesystem::path CacheDiskPath(ResolveDiskPath(CachePath));
+		if (!std::filesystem::exists(CacheDiskPath))
 		{
-			FString SlotName = Section.MaterialSlotName.empty() ? "None" : Section.MaterialSlotName;
-			if (AddedSlotNames.find(SlotName) != AddedSlotNames.end())
-			{
-				continue;
-			}
-
-			FMeshMaterial Material;
-			Material.MaterialSlotName = SlotName;
-			Material.MaterialInterface = FallbackMaterial;
-			Materials.push_back(Material);
-			AddedSlotNames.insert(std::move(SlotName));
+			OutStatus = EFBXSceneCacheStatus::CacheMiss;
+			return false;
 		}
 
-		if (Materials.empty())
+		FWindowsBinReader Reader(CachePath);
+		if (!Reader.IsValid())
 		{
-			FMeshMaterial Material;
-			Material.MaterialSlotName = "None";
-			Material.MaterialInterface = FallbackMaterial;
-			Materials.push_back(Material);
+			OutStatus = EFBXSceneCacheStatus::CacheInvalid;
+			return false;
 		}
 
-		return Materials;
+		FFBXSceneCacheHeader Header;
+		SerializeCacheHeader(Reader, Header);
+		if (Header.Magic != FbxSceneCacheMagic || Header.Version != FbxSceneCacheVersion)
+		{
+			OutStatus = EFBXSceneCacheStatus::CacheInvalid;
+			return false;
+		}
+		if (!IsCacheHeaderUsable(SourcePath, Header))
+		{
+			OutStatus = EFBXSceneCacheStatus::CacheStale;
+			return false;
+		}
+
+		OutScene.Serialize(Reader);
+		OutScene.SourcePath = Header.SourcePath;
+		OutScene.SourceTimestamp = Header.SourceTimestamp;
+		OutStatus = EFBXSceneCacheStatus::DiskHit;
+		return true;
 	}
 
-	static void AddFilesWithExtension(
+	void SaveSceneToCache(FFBXScene& Scene)
+	{
+		const FString CachePath = GetFbxSceneCacheFilePath(Scene.SourcePath);
+		FWindowsBinWriter Writer(CachePath);
+		if (!Writer.IsValid())
+		{
+			UE_LOG("[FBXManager] Failed to open FBX scene cache for writing: %s", CachePath.c_str());
+			return;
+		}
+
+		FFBXSceneCacheHeader Header;
+		Header.Magic = FbxSceneCacheMagic;
+		Header.Version = FbxSceneCacheVersion;
+		Header.SourcePath = NormalizePackagePath(Scene.SourcePath);
+		Header.SourceTimestamp = Scene.SourceTimestamp;
+		SerializeCacheHeader(Writer, Header);
+		Scene.Serialize(Writer);
+	}
+
+	FFBXScene ConvertImportedAssetToScene(const FString& SourcePath, FFBXAsset&& ImportedAsset)
+	{
+		FFBXScene Scene;
+		Scene.SourcePath = NormalizePackagePath(SourcePath);
+		Scene.SourceTimestamp = GetFileTimestamp(SourcePath);
+		Scene.StaticMeshes = std::move(ImportedAsset.StaticMeshes);
+		Scene.SkeletalMeshes = std::move(ImportedAsset.SkeletalMeshes);
+		for (FStaticMesh& Mesh : Scene.StaticMeshes)
+		{
+			Mesh.RenderBuffer.reset();
+		}
+		Scene.StaticMeshMaterials = std::move(ImportedAsset.StaticMeshMaterials);
+		Scene.SkeletalMeshMaterials = std::move(ImportedAsset.SkeletalMeshMaterials);
+		Scene.SceneComponents = std::move(ImportedAsset.SceneComponents);
+		Scene.MeshIdToStaticMeshAssetIndex = std::move(ImportedAsset.MeshIdToStaticMeshAssetIndex);
+		Scene.SkeletonIdToSkeletalMeshAssetIndex = std::move(ImportedAsset.SkeletonIdToSkeletalMeshAssetIndex);
+		return Scene;
+	}
+
+	UFBXSceneAsset* CreateSceneAssetFromScene(FFBXScene&& Scene)
+	{
+		UFBXSceneAsset* SceneAsset = UObjectManager::Get().CreateObject<UFBXSceneAsset>();
+		SceneAsset->SetSourcePath(Scene.SourcePath);
+
+		ID3D11Device* Device = GEngine ? GEngine->GetRenderer().GetFD3DDevice().GetDevice() : nullptr;
+		for (int32 StaticMeshIndex = 0; StaticMeshIndex < static_cast<int32>(Scene.StaticMeshes.size()); ++StaticMeshIndex)
+		{
+			UStaticMesh* StaticMesh = UObjectManager::Get().CreateObject<UStaticMesh>(SceneAsset);
+			TArray<FStaticMaterial> Materials;
+			if (StaticMeshIndex < static_cast<int32>(Scene.StaticMeshMaterials.size()))
+			{
+				Materials = std::move(Scene.StaticMeshMaterials[StaticMeshIndex]);
+			}
+			StaticMesh->SetStaticMaterials(std::move(Materials));
+
+			FStaticMesh* MeshAsset = new FStaticMesh(std::move(Scene.StaticMeshes[StaticMeshIndex]));
+			if (!MeshAsset->bBoundsValid)
+			{
+				MeshAsset->CacheBounds();
+			}
+			StaticMesh->SetStaticMeshAsset(MeshAsset);
+			if (Device)
+			{
+				StaticMesh->InitResources(Device);
+			}
+			SceneAsset->AddStaticMesh(StaticMesh);
+		}
+
+		for (int32 SkeletalMeshIndex = 0; SkeletalMeshIndex < static_cast<int32>(Scene.SkeletalMeshes.size()); ++SkeletalMeshIndex)
+		{
+			USkeletalMesh* SkeletalMesh = UObjectManager::Get().CreateObject<USkeletalMesh>(SceneAsset);
+			TArray<FMeshMaterial> Materials;
+			if (SkeletalMeshIndex < static_cast<int32>(Scene.SkeletalMeshMaterials.size()))
+			{
+				Materials = std::move(Scene.SkeletalMeshMaterials[SkeletalMeshIndex]);
+			}
+			SkeletalMesh->SetMaterials(std::move(Materials));
+
+			FSkeletalMesh* MeshAsset = new FSkeletalMesh(std::move(Scene.SkeletalMeshes[SkeletalMeshIndex]));
+			if (!MeshAsset->bBoundsValid)
+			{
+				MeshAsset->CacheBounds();
+			}
+			SkeletalMesh->SetSkeletalMeshAsset(MeshAsset);
+			SceneAsset->AddSkeletalMesh(SkeletalMesh);
+		}
+
+		SceneAsset->SetMeshIdToStaticMeshAssetIndex(std::move(Scene.MeshIdToStaticMeshAssetIndex));
+		SceneAsset->SetSkeletonIdToSkeletalMeshAssetIndex(std::move(Scene.SkeletonIdToSkeletalMeshAssetIndex));
+		SceneAsset->SetSceneComponents(std::move(Scene.SceneComponents));
+		return SceneAsset;
+	}
+
+	void LogSceneLoad(const FString& SourcePath, const UFBXSceneAsset* SceneAsset, EFBXSceneCacheStatus Status)
+	{
+		UE_LOG("[FBXManager] Loaded FBX scene. Path=%s StaticMeshes=%u SkeletalMeshes=%u Components=%u Cache=%s",
+			SourcePath.c_str(),
+			SceneAsset ? static_cast<uint32>(SceneAsset->GetStaticMeshes().size()) : 0u,
+			SceneAsset ? static_cast<uint32>(SceneAsset->GetSkeletalMeshes().size()) : 0u,
+			SceneAsset ? static_cast<uint32>(SceneAsset->GetSceneComponents().size()) : 0u,
+			ToLogString(Status));
+	}
+
+	void AddFilesWithExtension(
 		const std::filesystem::path& Root,
 		const std::wstring& Extension,
 		TArray<FMeshAssetListItem>& OutFiles)
@@ -239,33 +347,10 @@ namespace
 
 			FMeshAssetListItem Item;
 			Item.DisplayName = FPaths::ToUtf8(Path.filename().wstring());
-			if (Extension == L".bin")
-			{
-				Item.DisplayName = FPaths::ToUtf8(Path.stem().wstring());
-			}
 			Item.FullPath = FPaths::ToUtf8(Path.lexically_relative(ProjectRoot).generic_wstring());
 			OutFiles.push_back(std::move(Item));
 		}
 	}
-}
-
-FString FFBXManager::GetBinaryFilePath(const FString& OriginalPath)
-{
-	if (IsBinPath(OriginalPath))
-	{
-		return OriginalPath;
-	}
-
-	EnsureSkeletalMeshCacheDirExists();
-
-	std::wstring OriginalDiskPath;
-	FString ResolveError;
-	const bool bResolvedOriginal = FPaths::TryResolvePackagePath(OriginalPath, OriginalDiskPath, &ResolveError);
-	std::filesystem::path SrcPath(bResolvedOriginal ? OriginalDiskPath : FPaths::ToWide(OriginalPath));
-
-	std::filesystem::path RelPath = std::filesystem::path(L"Asset\\SkeletalMeshCache") / SrcPath.stem();
-	RelPath += L".bin";
-	return FPaths::ToUtf8(RelPath.generic_wstring());
 }
 
 USkeletalMesh* FFBXManager::LoadSkeletalMesh(const FString& PathFileName)
@@ -275,101 +360,28 @@ USkeletalMesh* FFBXManager::LoadSkeletalMesh(const FString& PathFileName)
 		return nullptr;
 	}
 
-	const FString CacheKey = GetBinaryFilePath(PathFileName);
-	auto It = SkeletalMeshCache.find(CacheKey);
-	if (It != SkeletalMeshCache.end())
+	FString SourcePath;
+	int32 SourceSkeletonId = -1;
+	if (ParseFbxSceneSubAssetReference(PathFileName, "#Skeleton_", SourcePath, SourceSkeletonId))
 	{
-		return It->second;
+		return ResolveSkeletalMeshReference(PathFileName);
 	}
 
-	const FString BinPath = CacheKey;
-	const std::filesystem::path BinDiskPath(ResolveDiskPath(BinPath));
-	bool bNeedRebuild = true;
-
-	USkeletalMesh* SkeletalMesh = UObjectManager::Get().CreateObject<USkeletalMesh>();
-
-	if (std::filesystem::exists(BinDiskPath))
+	if (IsFbxPath(PathFileName))
 	{
-		FFBXCacheHeader Header;
-		if (ReadCacheHeader(BinPath, Header) && IsCacheUsableForRequest(PathFileName, Header))
-		{
-			FWindowsBinReader Reader(BinPath);
-			if (Reader.IsValid())
-			{
-				SerializeCacheHeader(Reader, Header);
-				SkeletalMesh->Serialize(Reader);
-				if (FSkeletalMesh* Asset = SkeletalMesh->GetSkeletalMeshAsset())
-				{
-					Asset->PathFileName = BinPath;
-					if (!Asset->bBoundsValid)
-					{
-						Asset->CacheBounds();
-					}
-					bNeedRebuild = false;
-				}
-			}
-		}
+		UE_LOG("[FBXManager] Plain FBX path cannot be loaded as a skeletal mesh. Use #Skeleton_ID reference: %s",
+			PathFileName.c_str());
+		return nullptr;
 	}
 
-	if (bNeedRebuild)
+	if (IsBinPath(PathFileName))
 	{
-		if (!IsFbxPath(PathFileName))
-		{
-			UE_LOG("[FBXManager] Cannot rebuild skeletal mesh cache without an FBX source: %s", PathFileName.c_str());
-			UObjectManager::Get().DestroyObject(SkeletalMesh);
-			return nullptr;
-		}
-
-		FFBXAsset ImportedAsset;
-		FBXImporter Importer;
-		if (!Importer.ImportFbxAsset(PathFileName, ImportedAsset) ||
-			ImportedAsset.SkeletalMeshes.empty())
-		{
-			UE_LOG("[FBXManager] New FBX import failed or produced no skeletal meshes: %s", PathFileName.c_str());
-			UObjectManager::Get().DestroyObject(SkeletalMesh);
-			return nullptr;
-		}
-
-		UE_LOG("[FBXManager] Imported FBX via new importer. Path=%s SkeletalMeshes=%u StaticMeshes=%u",
-			PathFileName.c_str(),
-			static_cast<uint32>(ImportedAsset.SkeletalMeshes.size()),
-			static_cast<uint32>(ImportedAsset.StaticMeshes.size()));
-
-		if (ImportedAsset.SkeletalMeshes.size() > 1)
-		{
-			UE_LOG("[FBXManager] FBX produced multiple skeletal meshes. Using first for drag-drop preview. Path=%s Count=%u",
-				PathFileName.c_str(),
-				static_cast<uint32>(ImportedAsset.SkeletalMeshes.size()));
-		}
-
-		FSkeletalMesh* ImportedMesh = new FSkeletalMesh(std::move(ImportedAsset.SkeletalMeshes[0]));
-		ImportedMesh->PathFileName = BinPath;
-		if (!ImportedMesh->bBoundsValid)
-		{
-			ImportedMesh->CacheBounds();
-		}
-
-		const bool bUseImportedSkeletalMaterials = !ImportedAsset.SkeletalMaterials.empty();
-		TArray<FMeshMaterial> Materials = bUseImportedSkeletalMaterials
-			? std::move(ImportedAsset.SkeletalMaterials)
-			: BuildMaterialsFromSections(*ImportedMesh);
-		UE_LOG("[FBXManager] Skeletal material source. Path=%s Source=%s Count=%u",
-			PathFileName.c_str(),
-			bUseImportedSkeletalMaterials ? "ImportedAsset.SkeletalMaterials" : "BuildMaterialsFromSections",
-			static_cast<uint32>(Materials.size()));
-		SkeletalMesh->SetMaterials(std::move(Materials));
-		SkeletalMesh->SetSkeletalMeshAsset(ImportedMesh);
-
-		FWindowsBinWriter Writer(BinPath);
-		if (WriteCacheHeader(Writer, PathFileName, GetFileTimestamp(PathFileName)))
-		{
-			SkeletalMesh->Serialize(Writer);
-		}
+		UE_LOG("[FBXManager] Legacy skeletal mesh bin cache is no longer supported: %s", PathFileName.c_str());
+		return nullptr;
 	}
 
-	SkeletalMeshCache[CacheKey] = SkeletalMesh;
-	ScanSkeletalMeshAssets();
-	return SkeletalMesh;
+	UE_LOG("[FBXManager] Unsupported skeletal mesh path: %s", PathFileName.c_str());
+	return nullptr;
 }
 
 UFBXSceneAsset* FFBXManager::LoadFbxScene(const FString& PathFileName)
@@ -383,74 +395,39 @@ UFBXSceneAsset* FFBXManager::LoadFbxScene(const FString& PathFileName)
 	auto It = FbxSceneCache.find(CacheKey);
 	if (It != FbxSceneCache.end())
 	{
+		LogSceneLoad(CacheKey, It->second, EFBXSceneCacheStatus::MemoryHit);
 		return It->second;
 	}
 
-	FFBXAsset ImportedAsset;
-	FBXImporter Importer;
-	if (!Importer.ImportFbxAsset(PathFileName, ImportedAsset) ||
-		ImportedAsset.SceneComponents.empty())
+	FFBXScene Scene;
+	EFBXSceneCacheStatus CacheStatus = EFBXSceneCacheStatus::CacheMiss;
+	if (!TryLoadSceneFromCache(PathFileName, Scene, CacheStatus))
 	{
-		UE_LOG("[FBXManager] FBX scene import failed or produced no scene components: %s",
-			PathFileName.c_str());
-		return nullptr;
+		FFBXAsset ImportedAsset;
+		FBXImporter Importer;
+		if (!Importer.ImportFbxAsset(PathFileName, ImportedAsset))
+		{
+			UE_LOG("[FBXManager] FBX scene import failed. Path=%s Cache=%s",
+				PathFileName.c_str(),
+				ToLogString(CacheStatus));
+			return nullptr;
+		}
+
+		Scene = ConvertImportedAssetToScene(PathFileName, std::move(ImportedAsset));
+		SaveSceneToCache(Scene);
 	}
 
-	UFBXSceneAsset* SceneAsset = UObjectManager::Get().CreateObject<UFBXSceneAsset>();
-	SceneAsset->SetSourcePath(PathFileName);
-
-	ID3D11Device* Device = GEngine ? GEngine->GetRenderer().GetFD3DDevice().GetDevice() : nullptr;
-	for (int32 StaticMeshIndex = 0; StaticMeshIndex < static_cast<int32>(ImportedAsset.StaticMeshes.size()); ++StaticMeshIndex)
-	{
-		UStaticMesh* StaticMesh = UObjectManager::Get().CreateObject<UStaticMesh>();
-		TArray<FStaticMaterial> Materials;
-		if (StaticMeshIndex < static_cast<int32>(ImportedAsset.StaticMeshMaterials.size()))
-		{
-			Materials = std::move(ImportedAsset.StaticMeshMaterials[StaticMeshIndex]);
-		}
-		StaticMesh->SetStaticMaterials(std::move(Materials));
-
-		FStaticMesh* MeshAsset = new FStaticMesh(std::move(ImportedAsset.StaticMeshes[StaticMeshIndex]));
-		StaticMesh->SetStaticMeshAsset(MeshAsset);
-		if (Device)
-		{
-			StaticMesh->InitResources(Device);
-		}
-		SceneAsset->AddStaticMesh(StaticMesh);
-	}
-
-	for (int32 SkeletalMeshIndex = 0; SkeletalMeshIndex < static_cast<int32>(ImportedAsset.SkeletalMeshes.size()); ++SkeletalMeshIndex)
-	{
-		USkeletalMesh* SkeletalMesh = UObjectManager::Get().CreateObject<USkeletalMesh>();
-		TArray<FMeshMaterial> Materials;
-		if (SkeletalMeshIndex < static_cast<int32>(ImportedAsset.SkeletalMeshMaterials.size()))
-		{
-			Materials = std::move(ImportedAsset.SkeletalMeshMaterials[SkeletalMeshIndex]);
-		}
-		SkeletalMesh->SetMaterials(std::move(Materials));
-		SkeletalMesh->SetSkeletalMeshAsset(new FSkeletalMesh(std::move(ImportedAsset.SkeletalMeshes[SkeletalMeshIndex])));
-		SceneAsset->AddSkeletalMesh(SkeletalMesh);
-	}
-
-	SceneAsset->SetMeshIdToStaticMeshAssetIndex(std::move(ImportedAsset.MeshIdToStaticMeshAssetIndex));
-	SceneAsset->SetSkeletonIdToSkeletalMeshAssetIndex(std::move(ImportedAsset.SkeletonIdToSkeletalMeshAssetIndex));
-	SceneAsset->SetSceneComponents(std::move(ImportedAsset.SceneComponents));
+	UFBXSceneAsset* SceneAsset = CreateSceneAssetFromScene(std::move(Scene));
 	FbxSceneCache[CacheKey] = SceneAsset;
-
-	UE_LOG("[FBXManager] Loaded FBX scene. Path=%s StaticMeshes=%u SkeletalMeshes=%u Components=%u",
-		PathFileName.c_str(),
-		static_cast<uint32>(SceneAsset->GetStaticMeshes().size()),
-		static_cast<uint32>(SceneAsset->GetSkeletalMeshes().size()),
-		static_cast<uint32>(SceneAsset->GetSceneComponents().size()));
-
+	LogSceneLoad(CacheKey, SceneAsset, CacheStatus);
 	return SceneAsset;
 }
 
-UStaticMesh* FFBXManager::LoadStaticMeshFromFbxSceneReference(const FString& PathFileName)
+UStaticMesh* FFBXManager::ResolveStaticMeshReference(const FString& PathFileName)
 {
 	FString SourcePath;
 	int32 SourceMeshId = -1;
-	if (!ParseFbxSceneReference(PathFileName, "#Mesh_", SourcePath, SourceMeshId))
+	if (!ParseFbxSceneSubAssetReference(PathFileName, "#Mesh_", SourcePath, SourceMeshId))
 	{
 		return nullptr;
 	}
@@ -472,11 +449,11 @@ UStaticMesh* FFBXManager::LoadStaticMeshFromFbxSceneReference(const FString& Pat
 	return StaticMesh;
 }
 
-USkeletalMesh* FFBXManager::LoadSkeletalMeshFromFbxSceneReference(const FString& PathFileName)
+USkeletalMesh* FFBXManager::ResolveSkeletalMeshReference(const FString& PathFileName)
 {
 	FString SourcePath;
 	int32 SourceSkeletonId = -1;
-	if (!ParseFbxSceneReference(PathFileName, "#Skeleton_", SourcePath, SourceSkeletonId))
+	if (!ParseFbxSceneSubAssetReference(PathFileName, "#Skeleton_", SourcePath, SourceSkeletonId))
 	{
 		return nullptr;
 	}
@@ -498,17 +475,31 @@ USkeletalMesh* FFBXManager::LoadSkeletalMeshFromFbxSceneReference(const FString&
 	return SkeletalMesh;
 }
 
-void FFBXManager::ScanSkeletalMeshAssets()
+UObject* FFBXManager::ResolveFbxSceneAssetReference(const FString& PathFileName)
 {
-	AddFilesWithExtension(
-		std::filesystem::path(FPaths::RootDir()) / L"Asset\\SkeletalMeshCache\\",
-		L".bin",
-		AvailableSkeletalMeshFiles);
+	if (IsFbxPath(PathFileName))
+	{
+		return LoadFbxScene(PathFileName);
+	}
+	if (PathFileName.find("#Mesh_") != FString::npos)
+	{
+		return ResolveStaticMeshReference(PathFileName);
+	}
+	if (PathFileName.find("#Skeleton_") != FString::npos)
+	{
+		return ResolveSkeletalMeshReference(PathFileName);
+	}
+	return nullptr;
 }
 
-const TArray<FMeshAssetListItem>& FFBXManager::GetAvailableSkeletalMeshFiles()
+UStaticMesh* FFBXManager::LoadStaticMeshFromFbxSceneReference(const FString& PathFileName)
 {
-	return AvailableSkeletalMeshFiles;
+	return ResolveStaticMeshReference(PathFileName);
+}
+
+USkeletalMesh* FFBXManager::LoadSkeletalMeshFromFbxSceneReference(const FString& PathFileName)
+{
+	return ResolveSkeletalMeshReference(PathFileName);
 }
 
 void FFBXManager::ScanFbxSourceFiles()
@@ -526,6 +517,6 @@ const TArray<FMeshAssetListItem>& FFBXManager::GetAvailableFbxSourceFiles()
 
 void FFBXManager::ReleaseAllGPU()
 {
-	SkeletalMeshCache.clear();
+	// UObjects are owned by UObjectManager. Clearing this map only releases the manager cache.
 	FbxSceneCache.clear();
 }

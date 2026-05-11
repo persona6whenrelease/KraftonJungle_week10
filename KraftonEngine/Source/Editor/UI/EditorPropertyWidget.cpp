@@ -1542,9 +1542,7 @@ bool FEditorPropertyWidget::RenderPropertyWidget(TArray<FPropertyDescriptor>& Pr
 		ImGui::Text("%s", Prop.Name.c_str());
 		ImGui::SameLine(120);
 
-		float ButtonWidth = ImGui::CalcTextSize("Import FBX").x + ImGui::GetStyle().FramePadding.x * 2.0f;
-		float Spacing = ImGui::GetStyle().ItemSpacing.x;
-		ImGui::SetNextItemWidth(-(ButtonWidth + Spacing));
+		ImGui::SetNextItemWidth(-1.0f);
 
 		if (ImGui::BeginCombo("##SkeletalMesh", Preview.c_str()))
 		{
@@ -1557,36 +1555,17 @@ bool FEditorPropertyWidget::RenderPropertyWidget(TArray<FPropertyDescriptor>& Pr
 			if (bSelectedNone)
 				ImGui::SetItemDefaultFocus();
 
-			const TArray<FMeshAssetListItem>& MeshFiles = FFBXManager::GetAvailableSkeletalMeshFiles();
-			for (const FMeshAssetListItem& Item : MeshFiles)
+			if (!Val->empty() && *Val != "None")
 			{
-				bool bSelected = (*Val == Item.FullPath);
-				if (ImGui::Selectable(Item.DisplayName.c_str(), bSelected))
+				const bool bSelectedCurrent = true;
+				if (ImGui::Selectable(Preview.c_str(), bSelectedCurrent))
 				{
-					*Val = Item.FullPath;
-					bChanged = true;
+					// Current value is kept until a dedicated FBX sub-asset picker is added.
 				}
-				if (bSelected)
+				if (bSelectedCurrent)
 					ImGui::SetItemDefaultFocus();
 			}
 			ImGui::EndCombo();
-		}
-
-		ImGui::SameLine();
-
-		ImGui::SetCursorPosX(ImGui::GetWindowContentRegionMax().x - ButtonWidth);
-		if (ImGui::Button("Import FBX"))
-		{
-			FString FbxPath = OpenFbxFileDialog();
-			if (!FbxPath.empty())
-			{
-				USkeletalMesh* Loaded = FFBXManager::LoadSkeletalMesh(FbxPath);
-				if (Loaded)
-				{
-					*Val = FFBXManager::GetBinaryFilePath(FbxPath);
-					bChanged = true;
-				}
-			}
 		}
 		break;
 	}

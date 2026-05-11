@@ -5,6 +5,7 @@
 #include "FBXImportTypes.h"
 #include "Mesh/SkeletalMeshAsset.h"
 #include "Mesh/StaticMeshAsset.h"
+#include "Serialization/Archive.h"
 
 enum class EFBXLightType
 {
@@ -37,6 +38,19 @@ struct FFBXSceneComponentDesc
 	int32 StaticMeshAssetIndex = -1;
 	int32 SkeletalMeshAssetIndex = -1;
 	FMatrix RelativeTransform = FMatrix::Identity;
+
+	friend FArchive& operator<<(FArchive& Ar, FFBXSceneComponentDesc& Desc)
+	{
+		Ar << Desc.Type;
+		Ar << Desc.Name;
+		Ar << Desc.SourceNodeId;
+		Ar << Desc.SourceMeshId;
+		Ar << Desc.SourceSkeletonId;
+		Ar << Desc.StaticMeshAssetIndex;
+		Ar << Desc.SkeletalMeshAssetIndex;
+		Ar.Serialize(&Desc.RelativeTransform, sizeof(FMatrix));
+		return Ar;
+	}
 };
 
 struct FFBXAsset

@@ -11,6 +11,7 @@
 #include "Resource/ResourceManager.h"
 #include "Render/Pipeline/DefaultRenderPipeline.h"
 #include "Render/Resource/MeshBufferManager.h"
+#include "Mesh/FBX/FBXManager.h"
 #include "Mesh/ObjManager.h"
 #include "Texture/Texture2D.h"
 #include "GameFramework/World.h"
@@ -98,6 +99,7 @@ void UEngine::Shutdown()
 	RenderPipeline.reset();
 	FResourceManager::Get().ReleaseGPUResources();
 	UTexture2D::ReleaseAllGPU();
+	FFBXManager::ReleaseAllGPU();
 	FObjManager::ReleaseAllGPU();
 	FMeshBufferManager::Get().Release();
 	Renderer.Release();
