@@ -12,6 +12,8 @@
 #include "Runtime/Engine.h"
 #include "Viewport/Viewport.h"
 #include "Component/SkeletalMeshComponent.h"
+#include "Engine/Input/InputFrame.h"
+#include "Engine/Input/InputSystem.h"
 #include "Editor/Viewport/SkeletalMeshViewerViewportClient.h"
 #include "Editor/EditorEngine.h"
 
@@ -160,6 +162,51 @@ void FEditorSkeletalMeshViewerWidget::SetPreviewMesh(USkeletalMesh* InMesh, bool
 	}
 }
 
+void FEditorSkeletalMeshViewerWidget::UpdateInput(float DeltaTime)
+{
+	if (!bHasPreviewViewportRect || !PreviewViewportClient)
+	{
+		bPreviewViewportWantsMouseCapture = false;
+		bPreviewViewportWantsKeyboardCapture = false;
+		return;
+	}
+
+	FInputFrame InputFrame(InputSystem::Get().MakeSnapshot());
+	const POINT MousePos = InputFrame.GetMousePosition();
+	const float MouseX = static_cast<float>(MousePos.x);
+	const float MouseY = static_cast<float>(MousePos.y);
+	const bool bMouseInPreviewViewport =
+		MouseX >= PreviewViewportMin.x && MouseX <= PreviewViewportMax.x &&
+		MouseY >= PreviewViewportMin.y && MouseY <= PreviewViewportMax.y;
+
+	const bool bRightMouseDown = InputFrame.GetRawSnapshotForDebug().bRightMouseDown;
+	const bool bMiddleMouseDown = InputFrame.GetRawSnapshotForDebug().bMiddleMouseDown;
+	const bool bAnyCaptureButtonDown = bRightMouseDown || bMiddleMouseDown;
+
+	if (!bPreviewViewportWantsMouseCapture)
+	{
+		if (bMouseInPreviewViewport &&
+			(InputFrame.GetRawSnapshotForDebug().bRightMousePressed ||
+				InputFrame.GetRawSnapshotForDebug().bMiddleMousePressed))
+		{
+			bPreviewViewportWantsMouseCapture = true;
+		}
+	}
+	else if (!bAnyCaptureButtonDown)
+	{
+		bPreviewViewportWantsMouseCapture = false;
+	}
+
+	bPreviewViewportWantsKeyboardCapture = bPreviewViewportWantsMouseCapture && bRightMouseDown;
+
+	const bool bViewportUsesInput = bMouseInPreviewViewport || bPreviewViewportWantsMouseCapture;
+	PreviewViewportClient->Tick(
+		DeltaTime,
+		bViewportUsesInput,
+		bPreviewViewportWantsMouseCapture,
+		InputFrame);
+}
+
 bool FEditorSkeletalMeshViewerWidget::OpenFbxAsset(const FString& FbxPath)
 {
 	CurrentFbxPath = FbxPath;
@@ -199,6 +246,9 @@ void FEditorSkeletalMeshViewerWidget::Render(float DeltaTime)
 	ImGui::SetNextWindowSize(ImVec2(1100.0f, 700.0f), ImGuiCond_FirstUseEver);
 	if (!ImGui::Begin("SkeletalMesh Viewer", &Settings.UI.bSkeletalMeshViewer, ImGuiWindowFlags_MenuBar))
 	{
+		bHasPreviewViewportRect = false;
+		bPreviewViewportWantsMouseCapture = false;
+		bPreviewViewportWantsKeyboardCapture = false;
 		ImGui::End();
 		return;
 	}
@@ -286,6 +336,8 @@ void FEditorSkeletalMeshViewerWidget::RenderResourcePanel()
 
 void FEditorSkeletalMeshViewerWidget::RenderViewportPanel(float DeltaTime)
 {
+	(void)DeltaTime;
+
 	ImVec2 AvailableSize = ImGui::GetContentRegionAvail();
 	if (AvailableSize.x < 1.0f)
 	{
@@ -298,6 +350,7 @@ void FEditorSkeletalMeshViewerWidget::RenderViewportPanel(float DeltaTime)
 
 	ImGui::BeginChild("##SkeletalMeshViewport", AvailableSize, true, ImGuiWindowFlags_NoScrollbar);
 
+	ImVec2 ViewportMin = ImGui::GetCursorScreenPos();
 	ImVec2 ViewportSize = ImGui::GetContentRegionAvail();
 	if (ViewportSize.x < 1.0f)
 	{
@@ -307,6 +360,9 @@ void FEditorSkeletalMeshViewerWidget::RenderViewportPanel(float DeltaTime)
 	{
 		ViewportSize.y = 1.0f;
 	}
+	PreviewViewportMin = ViewportMin;
+	PreviewViewportMax = ImVec2(ViewportMin.x + ViewportSize.x, ViewportMin.y + ViewportSize.y);
+	bHasPreviewViewportRect = true;
 
 	USkeletalMesh* SelectedMesh = GetSelectedSkeletalMesh();
 	if (!SelectedMesh && PreviewSkeletalMesh)
@@ -315,6 +371,8 @@ void FEditorSkeletalMeshViewerWidget::RenderViewportPanel(float DeltaTime)
 	}
 	if (!SelectedMesh)
 	{
+		bPreviewViewportWantsMouseCapture = false;
+		bPreviewViewportWantsKeyboardCapture = false;
 		ImGui::TextDisabled("No SkeletalMesh loaded");
 		ImGui::EndChild();
 		return;
@@ -347,33 +405,6 @@ void FEditorSkeletalMeshViewerWidget::RenderViewportPanel(float DeltaTime)
 
 	if (PreviewViewport && PreviewViewportClient && EditorEngine)
 	{
-		const bool bViewportHovered = ImGui::IsWindowHovered();
-		const bool bRightMouseDown = ImGui::IsMouseDown(ImGuiMouseButton_Right);
-		const bool bMiddleMouseDown = ImGui::IsMouseDown(ImGuiMouseButton_Middle);
-		const bool bAnyCaptureButtonDown = bRightMouseDown || bMiddleMouseDown;
-
-		// preview 위에서 right/middle 마우스를 실제로 누른 순간에만 capture를 시작한다.
-		// hover만으로 capture를 켜면 에디터 뷰포트의 우클릭(액터 spawn 컨텍스트 메뉴 등)이
-		// preview 카메라로 새어 들어와 카메라가 점프하는 문제가 있다.
-		if (!bPreviewViewportWantsMouseCapture)
-		{
-			if (bViewportHovered &&
-				(ImGui::IsMouseClicked(ImGuiMouseButton_Right) ||
-					ImGui::IsMouseClicked(ImGuiMouseButton_Middle)))
-			{
-				bPreviewViewportWantsMouseCapture = true;
-			}
-		}
-		else if (!bAnyCaptureButtonDown)
-		{
-			bPreviewViewportWantsMouseCapture = false;
-		}
-		
-		bPreviewViewportWantsKeyboardCapture =
-			bPreviewViewportWantsMouseCapture && bRightMouseDown;
-
-		PreviewViewportClient->Tick(DeltaTime, bViewportHovered, bPreviewViewportWantsMouseCapture);
-
 		PreviewViewport->RequestResize(
 			static_cast<uint32>(ViewportSize.x),
 			static_cast<uint32>(ViewportSize.y));

@@ -2,6 +2,7 @@
 
 #include "Editor/UI/EditorWidget.h"
 #include "GameFramework/World.h"
+#include "ImGui/imgui.h"
 
 class UFBXSceneAsset;
 class USkeletalMesh;
@@ -14,6 +15,7 @@ class FEditorSkeletalMeshViewerWidget : public FEditorWidget
 public:
 	~FEditorSkeletalMeshViewerWidget() override;
 	
+	void UpdateInput(float DeltaTime);
 	void Render(float DeltaTime) override;
 	bool OpenFbxAsset(const FString& FbxPath);
 	bool WantsMouseCapture() const { return bPreviewViewportWantsMouseCapture; }
@@ -42,6 +44,9 @@ private:
 	USkeletalMeshComponent* PreviewMeshComponent = nullptr;
 	FViewport* PreviewViewport = nullptr;
 	FSkeletalMeshViewerViewportClient* PreviewViewportClient = nullptr;
+	ImVec2 PreviewViewportMin = ImVec2(0.0f, 0.0f);
+	ImVec2 PreviewViewportMax = ImVec2(0.0f, 0.0f);
+	bool bHasPreviewViewportRect = false;
 	bool bPreviewViewportWantsMouseCapture = false;
 	bool bPreviewViewportWantsKeyboardCapture = false;
 };

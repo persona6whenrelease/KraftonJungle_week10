@@ -168,7 +168,7 @@ void UEditorEngine::Tick(float DeltaTime)
 	InputSystem::Get().Tick();
 	// 추후 게임 전용 Task 분리 시 WorldDeltaTime 적용 여부 검토
 	TaskScheduler.Tick(RawDeltaTime);
-	MainPanel.Update();
+	MainPanel.Update(RawDeltaTime);
 	InputSystem::Get().RefreshSnapshot();
 
 

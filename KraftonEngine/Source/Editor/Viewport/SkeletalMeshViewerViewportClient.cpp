@@ -2,8 +2,8 @@
 
 #include "Object/Object.h"
 #include "Component/CameraComponent.h"
+#include "Engine/Input/InputFrame.h"
 #include "Mesh/SkeletalMeshAsset.h"
-#include "ImGui/imgui.h"
 
 void FSkeletalMeshViewerViewportClient::Initialize()
 {
@@ -64,29 +64,29 @@ void FSkeletalMeshViewerViewportClient::FrameMesh(const FSkeletalMesh* MeshAsset
 	Camera->LookAt(FVector::ZeroVector);
 }
 
-void FSkeletalMeshViewerViewportClient::Tick(float DeltaTime, bool bViewportHovered, bool bIsCapturing)
+void FSkeletalMeshViewerViewportClient::Tick(
+	float DeltaTime,
+	bool bViewportHovered,
+	bool bIsCapturing,
+	FInputFrame& InputFrame)
 {
 	if (!Camera)
 	{
 		return;
 	}
 
-	ImGuiIO& IO = ImGui::GetIO();
-
-	// const bool bRightMouseDown = ImGui::IsMouseDown(ImGuiMouseButton_Right);
-	// const bool bMiddleMouseDown = ImGui::IsMouseDown(ImGuiMouseButton_Middle);
-
-	const float MoveSpeed = ImGui::IsKeyDown(ImGuiKey_LeftShift) ? 35.0f : 10.0f;
+	const float MoveSpeed = InputFrame.IsDown(VK_SHIFT) ? 35.0f : 10.0f;
 	const float RotateSpeed = 0.15f;
 	const float PanSpeed = 0.015f;
 	const float ZoomSpeed = 0.35f;
 
 	// Wheel zoom은 hover만으로 허용 — 직관적인 UX.
-	if (bViewportHovered && IO.MouseWheel != 0.0f)
+	const float ScrollNotches = InputFrame.GetScrollNotches();
+	if (bViewportHovered && ScrollNotches != 0.0f)
 	{
 		Camera->SetWorldLocation(
-			Camera->GetWorldLocation() +
-			Camera->GetForwardVector() * IO.MouseWheel * ZoomSpeed);
+			Camera->GetWorldLocation() + Camera->GetForwardVector() * ScrollNotches * ZoomSpeed);
+		InputFrame.ConsumeScroll("SkeletalMeshViewer", "Preview zoom");
 	}
 
 	// Drag/rotate/pan/WASD는 preview에서 명시적으로 클릭한 capture 상태에서만 동작.
@@ -95,42 +95,44 @@ void FSkeletalMeshViewerViewportClient::Tick(float DeltaTime, bool bViewportHove
 		return;
 	}
 
-	const bool bRightMouseDown = ImGui::IsMouseDown(ImGuiMouseButton_Right);
-	const bool bMiddleMouseDown = ImGui::IsMouseDown(ImGuiMouseButton_Middle);
+	const bool bRightMouseDown = InputFrame.IsDown(VK_RBUTTON);
+	const bool bMiddleMouseDown = InputFrame.IsDown(VK_MBUTTON);
 
 	if (bRightMouseDown)
 	{
-		const float DeltaX = IO.MouseDelta.x;
-		const float DeltaY = IO.MouseDelta.y;
+		const float DeltaX = static_cast<float>(InputFrame.GetMouseDeltaX());
+		const float DeltaY = static_cast<float>(InputFrame.GetMouseDeltaY());
 
 		if (DeltaX != 0.0f || DeltaY != 0.0f)
 		{
 			Camera->Rotate(DeltaX * RotateSpeed, DeltaY * RotateSpeed);
+			InputFrame.ConsumeLook("SkeletalMeshViewer", "Preview camera rotate");
 		}
+		InputFrame.ConsumeKey(VK_RBUTTON, "SkeletalMeshViewer", "Preview camera rotate");
 
 		FVector MoveDelta = FVector::ZeroVector;
 
-		if (ImGui::IsKeyDown(ImGuiKey_W))
+		if (InputFrame.IsDown('W'))
 		{
 			MoveDelta += Camera->GetForwardVector();
 		}
-		if (ImGui::IsKeyDown(ImGuiKey_S))
+		if (InputFrame.IsDown('S'))
 		{
 			MoveDelta -= Camera->GetForwardVector();
 		}
-		if (ImGui::IsKeyDown(ImGuiKey_D))
+		if (InputFrame.IsDown('D'))
 		{
 			MoveDelta += Camera->GetRightVector();
 		}
-		if (ImGui::IsKeyDown(ImGuiKey_A))
+		if (InputFrame.IsDown('A'))
 		{
 			MoveDelta -= Camera->GetRightVector();
 		}
-		if (ImGui::IsKeyDown(ImGuiKey_E))
+		if (InputFrame.IsDown('E'))
 		{
 			MoveDelta += FVector::UpVector;
 		}
-		if (ImGui::IsKeyDown(ImGuiKey_Q))
+		if (InputFrame.IsDown('Q'))
 		{
 			MoveDelta -= FVector::UpVector;
 		}
@@ -140,13 +142,14 @@ void FSkeletalMeshViewerViewportClient::Tick(float DeltaTime, bool bViewportHove
 			MoveDelta.Normalize();
 			Camera->SetWorldLocation(
 				Camera->GetWorldLocation() + MoveDelta * MoveSpeed * DeltaTime);
+			InputFrame.ConsumeMovement("SkeletalMeshViewer", "Preview camera movement");
 		}
 	}
 
 	if (bMiddleMouseDown)
 	{
-		const float DeltaX = IO.MouseDelta.x;
-		const float DeltaY = IO.MouseDelta.y;
+		const float DeltaX = static_cast<float>(InputFrame.GetMouseDeltaX());
+		const float DeltaY = static_cast<float>(InputFrame.GetMouseDeltaY());
 
 		if (DeltaX != 0.0f || DeltaY != 0.0f)
 		{
@@ -155,13 +158,8 @@ void FSkeletalMeshViewerViewportClient::Tick(float DeltaTime, bool bViewportHove
 				Camera->GetUpVector() * (DeltaY * PanSpeed);
 
 			Camera->SetWorldLocation(Camera->GetWorldLocation() + PanDelta);
+			InputFrame.ConsumeMouseDelta("SkeletalMeshViewer", "Preview camera pan");
 		}
+		InputFrame.ConsumeKey(VK_MBUTTON, "SkeletalMeshViewer", "Preview camera pan");
 	}
-
-	// if (IO.MouseWheel != 0.0f)
-	// {
-	// 	Camera->SetWorldLocation(
-	// 		Camera->GetWorldLocation() +
-	// 		Camera->GetForwardVector() * IO.MouseWheel * ZoomSpeed);
-	// }
 }

@@ -28,7 +28,7 @@ public:
 	void Create(FWindowsWindow* InWindow, FRenderer& InRenderer, UEditorEngine* InEditorEngine);
 	void Release();
 	void Render(float DeltaTime);
-	void Update();
+	void Update(float DeltaTime);
 	void SaveToSettings() const;
 	void HideEditorWindows();
 	void ShowEditorWindows();
