@@ -152,6 +152,9 @@ bool FFBXImporter::Import(const char* fileName, FStkeletalMesh& OutMesh)
 	BuildReferenceSkeleton(m_scene->GetRootNode(), ExtractedBones, -1);
 	OutMesh.MeshAsset.Bones = ExtractedBones;
 
+	// [추가] 마테리얼 이름별로 인덱스를 모을 맵 생성
+	TMap<FString, TArray<uint32>> SectionIndicesMap;
+
 	// 4. control point별 VertexBlendingInfo 채우기
 	// -> 이제 ExtractedBones 뼈대들의 이름을 기반으로 Cluster(가중치) 데이터를 찾아 매칭할 수 있습니다!
 	for (int i = 0; i < m_meshes.size(); i++) {
@@ -159,8 +162,7 @@ bool FFBXImporter::Import(const char* fileName, FStkeletalMesh& OutMesh)
 		BuildSkinningWeight(m_meshes[i], ControlPointWeights, ExtractedBones);
 
 		// 5. 메시의 정점 데이터(위치, 인덱스) 저장
-		SaveVertexData(m_meshes[i], ControlPointWeights, ExtractedBones);
-
+		SaveVertexData(m_meshes[i], ControlPointWeights, ExtractedBones, SectionIndicesMap);
 
 	}
 
@@ -170,15 +172,38 @@ bool FFBXImporter::Import(const char* fileName, FStkeletalMesh& OutMesh)
 	OutAsset.SourceVertices = m_Vertices;
 	OutAsset.Indices = m_Indices;
 
-	// 섹션 추가 로직
+	// [수정] 섹션 분리 로직 (가장 중요한 부분)
+	m_Indices.clear(); // 기존 데이터를 비우고 다시 조립합니다.
 	TArray<FSkeletalMeshSection> BuiltSections;
-	FSkeletalMeshSection SingleSection;
-	SingleSection.MaterialIndex = 0;
-	SingleSection.MaterialSlotName = "DefaultSlot";
-	SingleSection.FirstIndex = 0;
-	SingleSection.NumTriangles = m_Indices.size() / 3;
 
-	BuiltSections.push_back(SingleSection);
+	int32 CurrentStartIndex = 0;     // 현재 섹션이 시작하는 글로벌 인덱스 위치
+	int32 CurrentMaterialIndex = 0;  // 엔진에 등록될 마테리얼 배열 인덱스
+
+	for (const auto& Pair : SectionIndicesMap)
+	{
+		const FString& MatName = Pair.first;          // 마테리얼 이름
+		const TArray<uint32>& SectionIndices = Pair.second; // 해당 마테리얼을 쓰는 삼각형 인덱스들
+
+		// 1. 글로벌 인덱스 버퍼(m_Indices)에 이 섹션의 인덱스들을 쭉 이어 붙입니다.
+		for (uint32 Idx : SectionIndices)
+		{
+			m_Indices.push_back(Idx);
+		}
+
+		// 2. 이 구간에 대한 섹션 정보를 만듭니다.
+		FSkeletalMeshSection NewSection;
+		NewSection.MaterialIndex = CurrentMaterialIndex++;
+		NewSection.MaterialSlotName = MatName; // 나중에 .mat 파일 로드할 때 이 이름으로 매핑!
+		NewSection.FirstIndex = CurrentStartIndex;
+		NewSection.NumTriangles = SectionIndices.size() / 3;
+
+		BuiltSections.push_back(NewSection);
+
+		// 다음 섹션의 시작 위치를 갱신합니다.
+		CurrentStartIndex += SectionIndices.size();
+	}
+
+	OutAsset.Indices = m_Indices;
 	OutAsset.Sections = BuiltSections;
 
 	OutMesh.PathFileName = fileName;
@@ -297,7 +322,7 @@ bool FFBXImporter::BuildSkinningWeight(FbxMesh* InMesh, TArray<TArray<VertexBlen
 	return true;
 }
 
-bool FFBXImporter::SaveVertexData(FbxMesh* InMesh, const TArray<TArray<VertexBlendingInfo>>& InWeights, const TArray<FBoneInfo>& InBones)
+bool FFBXImporter::SaveVertexData(FbxMesh* InMesh, const TArray<TArray<VertexBlendingInfo>>& InWeights, const TArray<FBoneInfo>& InBones, TMap<FString, TArray<uint32>>& OutSectionIndices)
 {
 	// 1. 삼각형(폴리곤)의 총 개수를 가져옵니다.
 	int polygonCount = InMesh->GetPolygonCount();
@@ -338,10 +363,32 @@ bool FFBXImporter::SaveVertexData(FbxMesh* InMesh, const TArray<TArray<VertexBle
 	const bool bRigidBoundMesh = RigidBindBoneIndex >= 0;
 	const bool bReverseWinding = GetBasisDeterminant(MeshBindGlobal) < 0.0f;
 
+	// [추가] 메시에 연결된 마테리얼 매핑 정보 가져오기
+	FbxGeometryElementMaterial* MaterialElement = InMesh->GetElementMaterial(0);
+
 	// 2. 모든 삼각형을 순회합니다.
 	for (int i = 0; i < polygonCount; ++i)
 	{
 		uint32 TriangleIndices[3] = {};
+
+		// [추가] 현재 폴리곤의 마테리얼 인덱스 알아내기
+		int matIndex = 0;
+		if (MaterialElement)
+		{
+			if (MaterialElement->GetMappingMode() == FbxGeometryElement::eByPolygon) {
+				matIndex = MaterialElement->GetIndexArray().GetAt(i);
+			}
+			else if (MaterialElement->GetMappingMode() == FbxGeometryElement::eAllSame) {
+				matIndex = MaterialElement->GetIndexArray().GetAt(0);
+			}
+		}
+
+		// [추가] 해당 마테리얼의 이름 가져오기 (이 이름으로 섹션을 묶습니다)
+		FString MatName = "DefaultSlot";
+		FbxSurfaceMaterial* FbxMat = meshNode->GetMaterial(matIndex);
+		if (FbxMat) {
+			MatName = FbxMat->GetName();
+		}
 
 		// 3. 하나의 삼각형은 3개의 꼭짓점(Vertex)으로 이루어져 있습니다.
 		for (int j = 0; j <3; ++j)
@@ -458,15 +505,15 @@ bool FFBXImporter::SaveVertexData(FbxMesh* InMesh, const TArray<TArray<VertexBle
 
 		if (bReverseWinding)
 		{
-			m_Indices.push_back(TriangleIndices[0]);
-			m_Indices.push_back(TriangleIndices[2]);
-			m_Indices.push_back(TriangleIndices[1]);
+			OutSectionIndices[MatName].push_back(TriangleIndices[0]);
+			OutSectionIndices[MatName].push_back(TriangleIndices[2]);
+			OutSectionIndices[MatName].push_back(TriangleIndices[1]);
 		}
 		else
 		{
-			m_Indices.push_back(TriangleIndices[0]);
-			m_Indices.push_back(TriangleIndices[1]);
-			m_Indices.push_back(TriangleIndices[2]);
+			OutSectionIndices[MatName].push_back(TriangleIndices[0]);
+			OutSectionIndices[MatName].push_back(TriangleIndices[1]);
+			OutSectionIndices[MatName].push_back(TriangleIndices[2]);
 		}
 	}
 
@@ -580,8 +627,8 @@ FString FFBXImporter::ConvertSurfaceMatToMaterialJSON(FbxSurfaceMaterial* InMate
 					//const std::wstring relativePath = FPaths::ToWide(fileTexture->GetRelativeFileName());
 
 					// 2. 경로에서 "파일명.확장자" (예: "albedo.png")만 쏙 빼내기
-					std::filesystem::path texturePath(absolutePath);
-					std::string fileNameOnly = texturePath.filename().string();
+					//std::filesystem::path texturePath(absolutePath);
+					//std::string fileNameOnly = texturePath.filename().string();
 
 					// 우리가 최종적으로 얻고 싶은 텍스처의 진짜 상대 경로
 					std::wstring finalTextureRelativePath = L"";

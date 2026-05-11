@@ -35,6 +35,7 @@ struct FStaticMeshSection
 	}
 };
 
+//추후에 FMeshMaterialSlot 같은 공용 이름으로 바꾸는 게 더 나음.
 struct FStaticMaterial
 {
 	// std::shared_ptr<class UMaterialInterface> MaterialInterface;

@@ -42,7 +42,7 @@ private:
 	void FindMesh(FbxNode* InNod, const char* fileName);
 	bool BuildReferenceSkeleton(FbxNode* InNode, TArray<FBoneInfo>& OutBoneInfo, int32 ParentIndex);
 	bool BuildSkinningWeight(FbxMesh* InMesh, TArray<TArray<VertexBlendingInfo>>& OutWeights, TArray<FBoneInfo>& InBones);
-	bool SaveVertexData(FbxMesh* InMesh, const TArray<TArray<VertexBlendingInfo>>& InWeights, const TArray<FBoneInfo>& InBones);
+	bool SaveVertexData(FbxMesh* InMesh, const TArray<TArray<VertexBlendingInfo>>& InWeights, const TArray<FBoneInfo>& InBones, TMap<FString, TArray<uint32>>& OutSectionIndices);
 	FString ConvertSurfaceMatToMaterialJSON(FbxSurfaceMaterial* InMaterial, const char* fileName);
 	
 	void Shutdown();
