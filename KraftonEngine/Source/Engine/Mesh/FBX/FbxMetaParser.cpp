@@ -2,6 +2,7 @@
 #include <fbxsdk.h>
 
 #include "Core/Log.h"
+#include "Engine/Platform/Paths.h"
 #include <functional>
 
 
@@ -70,6 +71,90 @@ namespace
 		}
 		return false;
 	}
+
+	FString GetFbxMaterialName(FbxSurfaceMaterial* SurfaceMaterial)
+	{
+		if (!SurfaceMaterial || !SurfaceMaterial->GetName())
+		{
+			return "None";
+		}
+
+		FString Name = SurfaceMaterial->GetName();
+		return Name.empty() ? "None" : Name;
+	}
+
+	FVector ReadDiffuseColor(FbxSurfaceMaterial* SurfaceMaterial)
+	{
+		if (!SurfaceMaterial)
+		{
+			return FVector(1.0f, 0.0f, 1.0f);
+		}
+
+		FbxProperty DiffuseProperty = SurfaceMaterial->FindProperty("Diffuse");
+		if (!DiffuseProperty.IsValid())
+		{
+			return FVector(1.0f, 0.0f, 1.0f);
+		}
+
+		const FbxDouble3 Diffuse = DiffuseProperty.Get<FbxDouble3>();
+		return FVector(
+			static_cast<float>(Diffuse[0]),
+			static_cast<float>(Diffuse[1]),
+			static_cast<float>(Diffuse[2]));
+	}
+
+	FbxFileTexture* FindDiffuseFileTexture(FbxSurfaceMaterial* SurfaceMaterial)
+	{
+		if (!SurfaceMaterial)
+		{
+			return nullptr;
+		}
+
+		FbxProperty DiffuseProperty = SurfaceMaterial->FindProperty("Diffuse");
+		if (!DiffuseProperty.IsValid() || DiffuseProperty.GetSrcObjectCount() <= 0)
+		{
+			return nullptr;
+		}
+
+		for (int32 TextureIndex = 0; TextureIndex < DiffuseProperty.GetSrcObjectCount(); ++TextureIndex)
+		{
+			if (FbxFileTexture* Texture = dynamic_cast<FbxFileTexture*>(DiffuseProperty.GetSrcObject(TextureIndex)))
+			{
+				return Texture;
+			}
+		}
+
+		return nullptr;
+	}
+
+	FString ReadDiffuseTexturePath(FbxSurfaceMaterial* SurfaceMaterial, const FString& SourceFilePath)
+	{
+		FbxFileTexture* Texture = FindDiffuseFileTexture(SurfaceMaterial);
+		if (!Texture)
+		{
+			return "";
+		}
+
+		FString TexturePath = Texture->GetFileName() ? Texture->GetFileName() : "";
+		if (TexturePath.empty())
+		{
+			TexturePath = Texture->GetRelativeFileName() ? Texture->GetRelativeFileName() : "";
+		}
+
+		return TexturePath.empty() ? "" : FPaths::ResolveAssetPath(SourceFilePath, TexturePath);
+	}
+
+	FString ReadDiffuseUVSetName(FbxSurfaceMaterial* SurfaceMaterial)
+	{
+		FbxFileTexture* Texture = FindDiffuseFileTexture(SurfaceMaterial);
+		if (!Texture)
+		{
+			return "";
+		}
+
+		const char* UVSetName = Texture->UVSet.Get();
+		return (UVSetName && UVSetName[0] != '\0') ? FString(UVSetName) : FString();
+	}
 }
 
 // 메타 빌드의 전체 실행 순서를 보여주는 진입점입니다.
@@ -77,7 +162,9 @@ namespace
 
 bool FFbxMetaParser::BuildFbxMeta(FbxScene* Scene)
 {
+	const FString SourceFilePath = ImportMeta.SourceFilePath;
 	ImportMeta.Clear();
+	ImportMeta.SourceFilePath = SourceFilePath;
 
 	if (!Scene || !Scene->GetRootNode())
 	{
@@ -214,6 +301,27 @@ void FFbxMetaParser::RegisterMeshFromNode(FbxNode* Node, int32 NodeId)
 	for (int32 MaterialIndex = 0; MaterialIndex < MaterialCount; ++MaterialIndex)
 	{
 		MeshMeta.MaterialSlotIds.push_back(MaterialIndex);
+		FbxSurfaceMaterial* SurfaceMaterial = Node->GetMaterial(MaterialIndex);
+		const int32 MaterialId = RegisterMaterial(SurfaceMaterial);
+		MeshMeta.MaterialIds.push_back(MaterialId);
+
+		FString SlotName = "None";
+		FString UVSetName;
+		if (IsValidIndex(ImportMeta.Materials, MaterialId))
+		{
+			SlotName = ImportMeta.Materials[MaterialId].MaterialSlotName;
+			UVSetName = ImportMeta.Materials[MaterialId].DiffuseUVSetName;
+		}
+		MeshMeta.MaterialSlotNames.push_back(std::move(SlotName));
+		MeshMeta.MaterialUVSetNames.push_back(std::move(UVSetName));
+	}
+
+	if (MeshMeta.MaterialSlotNames.empty())
+	{
+		MeshMeta.MaterialSlotIds.push_back(0);
+		MeshMeta.MaterialIds.push_back(-1);
+		MeshMeta.MaterialSlotNames.push_back("None");
+		MeshMeta.MaterialUVSetNames.push_back("");
 	}
 
 	auto FirstMeshIt = ImportMeta.MeshToMeshId.find(Mesh);
@@ -231,6 +339,42 @@ void FFbxMetaParser::RegisterMeshFromNode(FbxNode* Node, int32 NodeId)
 
 	ImportMeta.FbxMeshToMeshIds[Mesh].push_back(MeshId);
 	ImportMeta.Meshes.push_back(MeshMeta);
+}
+
+int32 FFbxMetaParser::RegisterMaterial(FbxSurfaceMaterial* SurfaceMaterial)
+{
+	if (!SurfaceMaterial)
+	{
+		return -1;
+	}
+
+	auto PtrIt = ImportMeta.MaterialToMaterialId.find(SurfaceMaterial);
+	if (PtrIt != ImportMeta.MaterialToMaterialId.end())
+	{
+		return PtrIt->second;
+	}
+
+	const FString SlotName = GetFbxMaterialName(SurfaceMaterial);
+	auto NameIt = ImportMeta.MaterialNameToMaterialId.find(SlotName);
+	if (NameIt != ImportMeta.MaterialNameToMaterialId.end())
+	{
+		// Same-name FBX material collisions are currently shared. Suffix disambiguation is deferred.
+		ImportMeta.MaterialToMaterialId[SurfaceMaterial] = NameIt->second;
+		return NameIt->second;
+	}
+
+	const int32 MaterialId = static_cast<int32>(ImportMeta.Materials.size());
+	FFbxMaterialInfo MaterialInfo;
+	MaterialInfo.MaterialId = MaterialId;
+	MaterialInfo.MaterialSlotName = SlotName;
+	MaterialInfo.DiffuseColor = ReadDiffuseColor(SurfaceMaterial);
+	MaterialInfo.DiffuseTexturePath = ReadDiffuseTexturePath(SurfaceMaterial, ImportMeta.SourceFilePath);
+	MaterialInfo.DiffuseUVSetName = ReadDiffuseUVSetName(SurfaceMaterial);
+
+	ImportMeta.Materials.push_back(std::move(MaterialInfo));
+	ImportMeta.MaterialToMaterialId[SurfaceMaterial] = MaterialId;
+	ImportMeta.MaterialNameToMaterialId[SlotName] = MaterialId;
+	return MaterialId;
 }
 
 #pragma endregion

@@ -8,6 +8,13 @@
 #include "FbxMetaParser.h"
 
 #include "Core/Log.h"
+#include "Engine/Platform/Paths.h"
+#include "Materials/Material.h"
+#include "Materials/MaterialManager.h"
+#include "SimpleJSON/json.hpp"
+
+#include <filesystem>
+#include <fstream>
 
 namespace
 {
@@ -21,6 +28,103 @@ namespace
 	bool IsValidIndex(const TArray<T>& Items, int32 Index)
 	{
 		return Index >= 0 && static_cast<size_t>(Index) < Items.size();
+	}
+
+	FString NormalizeMaterialSlotName(const FString& SlotName)
+	{
+		return SlotName.empty() ? "None" : SlotName;
+	}
+
+	bool IsZeroUV(const FVector2& UV)
+	{
+		constexpr float UVZeroTolerance = 1.e-6f;
+		return std::fabs(UV.X) <= UVZeroTolerance && std::fabs(UV.Y) <= UVZeroTolerance;
+	}
+
+	FString SanitizeMaterialFileName(const FString& SlotName)
+	{
+		FString Result = NormalizeMaterialSlotName(SlotName);
+		for (char& Ch : Result)
+		{
+			const unsigned char UCh = static_cast<unsigned char>(Ch);
+			if (UCh < 32 ||
+				Ch == '<' ||
+				Ch == '>' ||
+				Ch == ':' ||
+				Ch == '"' ||
+				Ch == '/' ||
+				Ch == '\\' ||
+				Ch == '|' ||
+				Ch == '?' ||
+				Ch == '*')
+			{
+				Ch = '_';
+			}
+		}
+		return Result.empty() ? "None" : Result;
+	}
+
+	int32 FindMaterialInfoBySlotName(const FFbxImportMeta& ImportMeta, const FString& SlotName)
+	{
+		auto It = ImportMeta.MaterialNameToMaterialId.find(NormalizeMaterialSlotName(SlotName));
+		return It != ImportMeta.MaterialNameToMaterialId.end() ? It->second : -1;
+	}
+
+	FString ConvertFbxMaterialInfoToMat(FFbxMaterialInfo& MaterialInfo)
+	{
+		const FString SlotName = NormalizeMaterialSlotName(MaterialInfo.MaterialSlotName);
+		if (SlotName == "None")
+		{
+			MaterialInfo.MaterialAssetPath = "None";
+			return MaterialInfo.MaterialAssetPath;
+		}
+
+		const FString MatPath = "Asset/Materials/Auto/" + SanitizeMaterialFileName(SlotName) + ".mat";
+		MaterialInfo.MaterialAssetPath = MatPath;
+
+		std::wstring MatDiskPath;
+		FString Error;
+		if (!FPaths::TryResolvePackagePath(MatPath, MatDiskPath, &Error))
+		{
+			return "";
+		}
+
+		const std::filesystem::path DiskPath(MatDiskPath);
+		if (std::filesystem::exists(DiskPath))
+		{
+			return MatPath;
+		}
+
+		std::filesystem::create_directories(DiskPath.parent_path());
+
+		json::JSON JsonData;
+		JsonData["PathFileName"] = MatPath;
+		JsonData["Origin"] = "FbxImport";
+		JsonData["ShaderPath"] = "Shaders/Geometry/UberLit.hlsl";
+		JsonData["RenderPass"] = "Opaque";
+
+		if (!MaterialInfo.DiffuseTexturePath.empty())
+		{
+			JsonData["Textures"]["DiffuseTexture"] = MaterialInfo.DiffuseTexturePath;
+			JsonData["Parameters"]["SectionColor"][0] = 1.0f;
+			JsonData["Parameters"]["SectionColor"][1] = 1.0f;
+			JsonData["Parameters"]["SectionColor"][2] = 1.0f;
+			JsonData["Parameters"]["SectionColor"][3] = 1.0f;
+		}
+		else
+		{
+			JsonData["Parameters"]["SectionColor"][0] = MaterialInfo.DiffuseColor.X;
+			JsonData["Parameters"]["SectionColor"][1] = MaterialInfo.DiffuseColor.Y;
+			JsonData["Parameters"]["SectionColor"][2] = MaterialInfo.DiffuseColor.Z;
+			JsonData["Parameters"]["SectionColor"][3] = 1.0f;
+		}
+
+#if !IS_GAME_CLIENT
+		std::ofstream File(DiskPath, std::ios::binary);
+		File << JsonData.dump();
+#endif
+
+		return MatPath;
 	}
 
 	FVector NormalizeSafe(const FVector& Vector, const FVector& Fallback)
@@ -314,6 +418,61 @@ namespace
 		FbxStringList UVSetNames;
 		Mesh->GetUVSetNames(UVSetNames);
 		const char* UVSetName = (UVSetNames.GetCount() > 0) ? UVSetNames[0] : nullptr;
+		FString UVSetNameList;
+		for (int32 UVSetIndex = 0; UVSetIndex < UVSetNames.GetCount(); ++UVSetIndex)
+		{
+			if (!UVSetNameList.empty())
+			{
+				UVSetNameList += ", ";
+			}
+			const char* CurrentUVSetName = UVSetNames[UVSetIndex].Buffer();
+			UVSetNameList += CurrentUVSetName ? CurrentUVSetName : "<null>";
+		}
+		if (UVSetNameList.empty())
+		{
+			UVSetNameList = "None";
+		}
+
+		FString PreferredUVSetNameList;
+		for (const FString& MaterialUVSetName : MeshMeta.MaterialUVSetNames)
+		{
+			if (MaterialUVSetName.empty())
+			{
+				continue;
+			}
+
+			if (PreferredUVSetNameList.find(MaterialUVSetName) != FString::npos)
+			{
+				continue;
+			}
+
+			if (!PreferredUVSetNameList.empty())
+			{
+				PreferredUVSetNameList += ", ";
+			}
+			PreferredUVSetNameList += MaterialUVSetName;
+		}
+		if (PreferredUVSetNameList.empty())
+		{
+			PreferredUVSetNameList = "None";
+		}
+
+		UE_LOG("[FBXImporter] Mesh UV sets. MeshId=%d Node=%s Count=%d First=%s Names=%s PreferredMaterialUVSets=%s",
+			MeshMeta.MeshId,
+			MeshMeta.SourceNodePath.c_str(),
+			UVSetNames.GetCount(),
+			UVSetName ? UVSetName : "<null>",
+			UVSetNameList.c_str(),
+			PreferredUVSetNameList.c_str());
+
+		FFbxUVReadStats UVReadStats;
+		int32 UVZeroCount = 0;
+		int32 UVNonZeroCount = 0;
+		bool bHasUVSample = false;
+		bool bHasFirstNonZeroUV = false;
+		FVector2 UVMin(0.0f, 0.0f);
+		FVector2 UVMax(0.0f, 0.0f);
+		FVector2 FirstNonZeroUV(0.0f, 0.0f);
 
 		TMap<int32, TArray<uint32>> IndicesByMaterial;
 		int32 PolygonVertexCounter = 0;
@@ -337,6 +496,12 @@ namespace
 				bLoggedFanTriangulation = true;
 			}
 
+			const int32 MaterialSlotIndex = FBXUtil::ReadMaterialIndex(Mesh, PolyIndex);
+			const char* PreferredUVSetName = IsValidIndex(MeshMeta.MaterialUVSetNames, MaterialSlotIndex) &&
+				!MeshMeta.MaterialUVSetNames[MaterialSlotIndex].empty()
+				? MeshMeta.MaterialUVSetNames[MaterialSlotIndex].c_str()
+				: nullptr;
+
 			TArray<uint32> PolygonVertexIndices;
 			PolygonVertexIndices.reserve(PolySize);
 
@@ -352,8 +517,44 @@ namespace
 				FSkeletalVertex Vertex = {};
 				Vertex.pos = FBXUtil::ReadPosition(Mesh, ControlPointIndex);
 				Vertex.normal = FBXUtil::ReadNormal(Mesh, PolyIndex, CornerIndex);
-				Vertex.tex = FBXUtil::ReadUV(Mesh, PolyIndex, CornerIndex, UVSetName);
+				Vertex.tex = FBXUtil::ReadUV(
+					Mesh,
+					PolyIndex,
+					CornerIndex,
+					ControlPointIndex,
+					PolygonVertexCounter,
+					PreferredUVSetName,
+					&UVReadStats);
+				Vertex.tex.V = 1.0f - Vertex.tex.V;
 				Vertex.tangent = FBXUtil::ReadTangent(Mesh, ControlPointIndex, PolygonVertexCounter);
+
+				if (!bHasUVSample)
+				{
+					UVMin = Vertex.tex;
+					UVMax = Vertex.tex;
+					bHasUVSample = true;
+				}
+				else
+				{
+					UVMin.X = std::min(UVMin.X, Vertex.tex.X);
+					UVMin.Y = std::min(UVMin.Y, Vertex.tex.Y);
+					UVMax.X = std::max(UVMax.X, Vertex.tex.X);
+					UVMax.Y = std::max(UVMax.Y, Vertex.tex.Y);
+				}
+
+				if (IsZeroUV(Vertex.tex))
+				{
+					++UVZeroCount;
+				}
+				else
+				{
+					++UVNonZeroCount;
+					if (!bHasFirstNonZeroUV)
+					{
+						FirstNonZeroUV = Vertex.tex;
+						bHasFirstNonZeroUV = true;
+					}
+				}
 
 				TransformVertexToSkeletonSpace(Vertex, MeshToSkeletonBindMatrix);
 				AssignWeights(ControlPointIndex, Vertex);
@@ -368,8 +569,7 @@ namespace
 				continue;
 			}
 
-			const int32 MaterialIndex = FBXUtil::ReadMaterialIndex(Mesh, PolyIndex);
-			TArray<uint32>& SectionIndices = IndicesByMaterial[MaterialIndex];
+			TArray<uint32>& SectionIndices = IndicesByMaterial[MaterialSlotIndex];
 			for (int32 i = 1; i + 1 < static_cast<int32>(PolygonVertexIndices.size()); ++i)
 			{
 				SectionIndices.push_back(PolygonVertexIndices[0]);
@@ -397,12 +597,39 @@ namespace
 			FFbxMeshPartSection Section;
 			Section.SourceMeshId = MeshMeta.MeshId;
 			Section.MaterialSlotIndex = MaterialIndex;
+			Section.SourceMaterialId = IsValidIndex(MeshMeta.MaterialIds, MaterialIndex)
+				? MeshMeta.MaterialIds[MaterialIndex]
+				: -1;
+			Section.MaterialSlotName = IsValidIndex(MeshMeta.MaterialSlotNames, MaterialIndex)
+				? NormalizeMaterialSlotName(MeshMeta.MaterialSlotNames[MaterialIndex])
+				: "None";
 			Section.FirstIndex = static_cast<int32>(OutPart.Indices.size());
 			Section.IndexCount = static_cast<int32>(SectionIndices.size());
 
 			OutPart.Indices.insert(OutPart.Indices.end(), SectionIndices.begin(), SectionIndices.end());
 			OutPart.Sections.push_back(Section);
 		}
+
+		UE_LOG("[FBXImporter] UV summary. MeshId=%d Node=%s UVSets=%d Preferred=%s Vertices=%u PreferredOK=%d SetFallbackOK=%d ManualOK=%d Default=%d GetPolygonVertexUVFailed=%d Unmapped=%d UVZero=%d UVNonZero=%d UVMin=(%.6f, %.6f) UVMax=(%.6f, %.6f) FirstNonZero=(%.6f, %.6f)",
+			MeshMeta.MeshId,
+			MeshMeta.SourceNodePath.c_str(),
+			UVSetNames.GetCount(),
+			PreferredUVSetNameList.c_str(),
+			static_cast<uint32>(OutPart.Vertices.size()),
+			UVReadStats.PreferredSuccessCount,
+			UVReadStats.UVSetFallbackSuccessCount,
+			UVReadStats.ManualElementFallbackSuccessCount,
+			UVReadStats.DefaultUVCount,
+			UVReadStats.GetPolygonVertexUVFailedCount,
+			UVReadStats.UnmappedCount,
+			UVZeroCount,
+			UVNonZeroCount,
+			UVMin.X,
+			UVMin.Y,
+			UVMax.X,
+			UVMax.Y,
+			FirstNonZeroUV.X,
+			FirstNonZeroUV.Y);
 
 		return !OutPart.Vertices.empty() && !OutPart.Indices.empty();
 	}
@@ -421,6 +648,8 @@ bool FBXImporter::ImportFbxAsset(const FString& InFilePath, FFBXAsset& OutFBXAss
 		return false;
 	}
 
+	ImportMeta.SourceFilePath = InFilePath;
+
 	FFbxMetaParser MetaParser(ImportMeta);
 	if (!MetaParser.BuildFbxMeta(Scene))
 	{
@@ -428,7 +657,6 @@ bool FBXImporter::ImportFbxAsset(const FString& InFilePath, FFBXAsset& OutFBXAss
 		return false;
 	}
 
-	ImportMeta.SourceFilePath = InFilePath;
 	OutFBXAsset.PathFileName = InFilePath;
 
 	if (!ParseStaticMeshes(OutFBXAsset.StaticMeshes))
@@ -448,6 +676,11 @@ bool FBXImporter::ImportFbxAsset(const FString& InFilePath, FFBXAsset& OutFBXAss
 	{
 		ShutdownSdk();
 		return false;
+	}
+
+	if (!OutFBXAsset.SkeletalMeshes.empty())
+	{
+		BuildSkeletalMaterials(OutFBXAsset.SkeletalMeshes[0], OutFBXAsset.SkeletalMaterials);
 	}
 
 	FinalizeAsset();
@@ -949,6 +1182,8 @@ bool FBXImporter::BuildSkeletalMeshFromParts(
 		}
 	}
 
+	TMap<FString, int32> SlotNameToMaterialIndex;
+
 	for (const FFbxSkinnedMeshPart* Part : Parts)
 	{
 		if (!Part || !ValidateSkinnedMeshPartForAttach(SkeletonMeta, *Part))
@@ -968,21 +1203,91 @@ bool FBXImporter::BuildSkeletalMeshFromParts(
 
 		for (const FFbxMeshPartSection& PartSection : Part->Sections)
 		{
+			const FString SlotName = NormalizeMaterialSlotName(PartSection.MaterialSlotName);
+			int32 MaterialIndex = -1;
+			auto MaterialIt = SlotNameToMaterialIndex.find(SlotName);
+			if (MaterialIt != SlotNameToMaterialIndex.end())
+			{
+				MaterialIndex = MaterialIt->second;
+			}
+			else
+			{
+				MaterialIndex = static_cast<int32>(SlotNameToMaterialIndex.size());
+				SlotNameToMaterialIndex[SlotName] = MaterialIndex;
+			}
+
 			FMeshSection Section;
-			// TODO: Replace this section-local placeholder with a real (SourceMeshId, MaterialSlotIndex) material remap.
-			const int32 GlobalMaterialIndex = static_cast<int32>(OutMesh.Sections.size());
-			Section.MaterialIndex = GlobalMaterialIndex;
-			Section.MaterialSlotName =
-				"Mesh_" + std::to_string(PartSection.SourceMeshId) +
-				"_Mat" + std::to_string(PartSection.MaterialSlotIndex);
+			Section.MaterialIndex = MaterialIndex;
+			Section.MaterialSlotName = SlotName;
 			Section.FirstIndex = IndexBase + static_cast<uint32>(PartSection.FirstIndex);
 			Section.NumTriangles = static_cast<uint32>(PartSection.IndexCount / 3);
 			OutMesh.Sections.push_back(Section);
+
+			UE_LOG("[FBXImporter] Skeletal section material. SourceMeshId=%d SourceSlot=%d SlotName=%s MaterialIndex=%d",
+				PartSection.SourceMeshId,
+				PartSection.MaterialSlotIndex,
+				SlotName.c_str(),
+				MaterialIndex);
 		}
 	}
 
 	OutMesh.CacheBounds();
 	return !OutMesh.Vertices.empty() && !OutMesh.Indices.empty() && !OutMesh.Bones.empty();
+}
+
+void FBXImporter::BuildSkeletalMaterials(const FSkeletalMesh& Mesh, TArray<FMeshMaterial>& OutMaterials)
+{
+	OutMaterials.clear();
+	TSet<FString> AddedSlotNames;
+	UMaterial* FallbackMaterial = FMaterialManager::Get().GetOrCreateMaterial("None");
+
+	for (const FMeshSection& Section : Mesh.Sections)
+	{
+		const FString SlotName = NormalizeMaterialSlotName(Section.MaterialSlotName);
+		if (AddedSlotNames.find(SlotName) != AddedSlotNames.end())
+		{
+			continue;
+		}
+
+		FMeshMaterial Material;
+		Material.MaterialSlotName = SlotName;
+		Material.MaterialInterface = FallbackMaterial;
+		FString MaterialPath = "None";
+
+		const int32 MaterialInfoId = FindMaterialInfoBySlotName(ImportMeta, SlotName);
+		if (IsValidIndex(ImportMeta.Materials, MaterialInfoId))
+		{
+			MaterialPath = ConvertFbxMaterialInfoToMat(ImportMeta.Materials[MaterialInfoId]);
+			if (!MaterialPath.empty())
+			{
+				Material.MaterialInterface = FMaterialManager::Get().GetOrCreateMaterial(MaterialPath);
+			}
+		}
+
+		OutMaterials.push_back(std::move(Material));
+		AddedSlotNames.insert(SlotName);
+
+		const FMeshMaterial& AddedMaterial = OutMaterials.back();
+		const FString ResolvedMaterialPath = AddedMaterial.MaterialInterface
+			? AddedMaterial.MaterialInterface->GetAssetPathFileName()
+			: FString("<null>");
+		UE_LOG("[FBXImporter] Skeletal material. Index=%d SlotName=%s MaterialPath=%s ResolvedMaterial=%s",
+			static_cast<int32>(OutMaterials.size() - 1),
+			SlotName.c_str(),
+			MaterialPath.c_str(),
+			ResolvedMaterialPath.c_str());
+	}
+
+	if (OutMaterials.empty())
+	{
+		FMeshMaterial Material;
+		Material.MaterialSlotName = "None";
+		Material.MaterialInterface = FallbackMaterial;
+		OutMaterials.push_back(std::move(Material));
+
+		UE_LOG("[FBXImporter] Skeletal material. Index=0 SlotName=None MaterialPath=None ResolvedMaterial=%s",
+			FallbackMaterial ? FallbackMaterial->GetAssetPathFileName().c_str() : "<null>");
+	}
 }
 
 bool FBXImporter::ValidateSkinnedMeshPartForAttach(

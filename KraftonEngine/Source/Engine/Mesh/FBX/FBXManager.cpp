@@ -19,7 +19,7 @@ TArray<FMeshAssetListItem> FFBXManager::AvailableFbxFiles;
 namespace
 {
 	constexpr uint32 FBXCacheMagic = 0x58424653u; // "SFBX"
-	constexpr uint32 FBXCacheVersion = 3u;
+	constexpr uint32 FBXCacheVersion = 4u;
 
 	struct FFBXCacheHeader
 	{
@@ -312,7 +312,14 @@ USkeletalMesh* FFBXManager::LoadSkeletalMesh(const FString& PathFileName)
 			ImportedMesh->CacheBounds();
 		}
 
-		TArray<FMeshMaterial> Materials = BuildMaterialsFromSections(*ImportedMesh);
+		const bool bUseImportedSkeletalMaterials = !ImportedAsset.SkeletalMaterials.empty();
+		TArray<FMeshMaterial> Materials = bUseImportedSkeletalMaterials
+			? std::move(ImportedAsset.SkeletalMaterials)
+			: BuildMaterialsFromSections(*ImportedMesh);
+		UE_LOG("[FBXManager] Skeletal material source. Path=%s Source=%s Count=%u",
+			PathFileName.c_str(),
+			bUseImportedSkeletalMaterials ? "ImportedAsset.SkeletalMaterials" : "BuildMaterialsFromSections",
+			static_cast<uint32>(Materials.size()));
 		SkeletalMesh->SetMaterials(std::move(Materials));
 		SkeletalMesh->SetSkeletalMeshAsset(ImportedMesh);
 

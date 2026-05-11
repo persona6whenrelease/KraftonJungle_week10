@@ -12,6 +12,7 @@ namespace fbxsdk
 	class FbxNode;
 	class FbxScene;
 	class FbxSkin;
+	class FbxSurfaceMaterial;
 	class FbxVector2;
 	class FbxVector4;
 }
@@ -23,8 +24,19 @@ using FbxMesh = fbxsdk::FbxMesh;
 using FbxNode = fbxsdk::FbxNode;
 using FbxScene = fbxsdk::FbxScene;
 using FbxSkin = fbxsdk::FbxSkin;
+using FbxSurfaceMaterial = fbxsdk::FbxSurfaceMaterial;
 using FbxVector2 = fbxsdk::FbxVector2;
 using FbxVector4 = fbxsdk::FbxVector4;
+
+struct FFbxUVReadStats
+{
+	int32 PreferredSuccessCount = 0;
+	int32 UVSetFallbackSuccessCount = 0;
+	int32 ManualElementFallbackSuccessCount = 0;
+	int32 GetPolygonVertexUVFailedCount = 0;
+	int32 UnmappedCount = 0;
+	int32 DefaultUVCount = 0;
+};
 
 class FBXUtil
 {
@@ -36,7 +48,14 @@ public:
 	static int32 ReadMaterialIndex(FbxMesh* Mesh, int32 PolyIndex);
 	static FVector ReadPosition(FbxMesh* Mesh, int32 ControlPointIndex);
 	static FVector ReadNormal(FbxMesh* Mesh, int32 PolyIndex, int32 CornerIndex);
-	static FVector2 ReadUV(FbxMesh* Mesh, int32 PolyIndex, int32 CornerIndex, const char* UVSetName);
+	static FVector2 ReadUV(
+		FbxMesh* Mesh,
+		int32 PolyIndex,
+		int32 CornerIndex,
+		int32 ControlPointIndex,
+		int32 PolygonVertexCounter,
+		const char* PreferredUVSetName,
+		FFbxUVReadStats* Stats = nullptr);
 	static FVector4 ReadTangent(FbxMesh* Mesh, int32 ControlPointIndex, int32 PolygonVertexIndex);
 	static int32 QuantizeFloat(float Value);
 	static 	FString GetNodeName(FbxNode* Node);

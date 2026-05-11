@@ -31,6 +31,9 @@ struct FFbxMeshMeta
 	FString Name;
 	FString SourceNodePath;
 	TArray<int32> MaterialSlotIds;
+	TArray<FString> MaterialSlotNames;
+	TArray<FString> MaterialUVSetNames;
+	TArray<int32> MaterialIds;
 	TArray<int32> SkinIds;
 	int32 PrimarySkinId = -1;
 	int32 SkeletonId = -1;
@@ -114,6 +117,16 @@ struct FFbxSkeletonMeta
 	bool bHasSingleRoot = true;
 };
 
+struct FFbxMaterialInfo
+{
+	int32 MaterialId = -1;
+	FString MaterialSlotName = "None";
+	FString MaterialAssetPath;
+	FVector DiffuseColor = FVector(1.0f, 0.0f, 1.0f);
+	FString DiffuseTexturePath;
+	FString DiffuseUVSetName;
+};
+
 struct FFbxImportMeta
 {
 	FString SourceFilePath;
@@ -123,6 +136,7 @@ struct FFbxImportMeta
 	TArray<FFbxClusterMeta> Clusters;
 	TArray<FFbxBoneMeta> Bones;
 	TArray<FFbxSkeletonMeta> Skeletons;
+	TArray<FFbxMaterialInfo> Materials;
 	TArray<int32> StaticMeshIds;
 	TArray<int32> SkeletalMeshIds;
 	TArray<int32> RigidAttachedMeshIds;
@@ -135,6 +149,8 @@ struct FFbxImportMeta
 	TMap<FbxSkin*, int32> SkinToSkinId;
 	TMap<FbxCluster*, int32> ClusterToClusterId;
 	TMap<FbxNode*, int32> BoneNodeToBoneId;
+	TMap<FbxSurfaceMaterial*, int32> MaterialToMaterialId;
+	TMap<FString, int32> MaterialNameToMaterialId;
 
 	void Clear()
 	{
@@ -145,6 +161,7 @@ struct FFbxImportMeta
 		Clusters.clear();
 		Bones.clear();
 		Skeletons.clear();
+		Materials.clear();
 		StaticMeshIds.clear();
 		SkeletalMeshIds.clear();
 		RigidAttachedMeshIds.clear();
@@ -157,6 +174,8 @@ struct FFbxImportMeta
 		SkinToSkinId.clear();
 		ClusterToClusterId.clear();
 		BoneNodeToBoneId.clear();
+		MaterialToMaterialId.clear();
+		MaterialNameToMaterialId.clear();
 	}
 
 	bool IsAncestorOf(int32 AncestorId, int32 BoneId)

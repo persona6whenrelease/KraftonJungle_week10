@@ -24,6 +24,7 @@ struct FFBXAsset
 {
 	FString PathFileName;
 	TArray<FSkeletalMesh> SkeletalMeshes;
+	TArray<FMeshMaterial> SkeletalMaterials;
 	TArray<FStaticMesh> StaticMeshes;
 	TArray<FLightAsset> LightAssets;
 	TArray<FCameraAsset> CameraAssets;
@@ -33,6 +34,8 @@ struct FFbxMeshPartSection
 {
 	int32 SourceMeshId = -1;
 	int32 MaterialSlotIndex = 0;
+	int32 SourceMaterialId = -1;
+	FString MaterialSlotName = "None";
 	int32 FirstIndex = 0;
 	int32 IndexCount = 0;
 };
@@ -72,6 +75,7 @@ private:
 	bool ValidateSkinnedMeshPartForAttach(
 		const FFbxSkeletonMeta& SkeletonMeta,
 		const FFbxSkinnedMeshPart& Part) const;
+	void BuildSkeletalMaterials(const FSkeletalMesh& Mesh, TArray<FMeshMaterial>& OutMaterials);
 	bool FinalizeAsset();
 	void ShutdownSdk();
 

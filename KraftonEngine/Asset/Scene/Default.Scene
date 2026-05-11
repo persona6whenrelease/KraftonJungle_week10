@@ -9,21 +9,163 @@
         "Properties" : {
           "Blocks Movement" : true,
           "Cast Shadow" : true,
-          "Element 0" : {
-            "Path" : "None"
-          },
-          "Element 1" : {
-            "Path" : "None"
-          },
-          "Element 2" : {
-            "Path" : "None"
-          },
           "Generate Overlap Events" : true,
           "Location" : [1.168377, 1.156161, 0.236591],
+          "Rotation" : [0.000000, 0.000000, 0.000000],
+          "Scale" : [1.000000, 1.000000, 1.000000],
+          "Skeletal Mesh" : "None",
+          "Two Sided Shadow" : false,
+          "Visible" : true,
+          "bEditorOnly" : false,
+          "bTickEnable" : true
+        }
+      },
+      "Tags" : [],
+      "bVisible" : true
+    }, {
+      "ActorUUID" : 104,
+      "ClassName" : "AActor",
+      "NonSceneComponents" : [],
+      "RootComponent" : {
+        "Children" : [],
+        "ClassName" : "UStaticMeshComponent",
+        "Properties" : {
+          "Blocks Movement" : true,
+          "Cast Shadow" : true,
+          "Element 0" : {
+            "Path" : "Asset/Materials/Auto/ZAKU.mat"
+          },
+          "Generate Overlap Events" : true,
+          "Location" : [4.031149, 2.418369, 5.588399],
+          "Rotation" : [0.000000, 0.000000, 0.000000],
+          "Scale" : [1.000000, 1.000000, 1.000000],
+          "Static Mesh" : "Data/BasicShape/Cube.OBJ",
+          "Two Sided Shadow" : false,
+          "Visible" : true,
+          "bEditorOnly" : false,
+          "bTickEnable" : true
+        }
+      },
+      "Tags" : [],
+      "bVisible" : true
+    }, {
+      "ActorUUID" : 116,
+      "ClassName" : "ADirectionalLightActor",
+      "NonSceneComponents" : [],
+      "RootComponent" : {
+        "Children" : [{
+            "Children" : [],
+            "ClassName" : "UBillboardComponent",
+            "Properties" : {
+              "Blocks Movement" : true,
+              "Cast Shadow" : true,
+              "Generate Overlap Events" : true,
+              "Height" : 1.000000,
+              "Location" : [0.000000, 0.000000, 0.000000],
+              "Material" : {
+                "Path" : "Asset/Materials/Editor/DirectionalLight.mat"
+              },
+              "Rotation" : [0.000000, 0.000000, 0.000000],
+              "Scale" : [1.000000, 1.000000, 1.000000],
+              "Two Sided Shadow" : false,
+              "Visible" : true,
+              "Width" : 1.000000,
+              "bEditorOnly" : true,
+              "bTickEnable" : true
+            },
+            "bEditorOnly" : true,
+            "bHiddenInComponentTree" : true
+          }],
+        "ClassName" : "UDirectionalLightComponent",
+        "Properties" : {
+          "Cast Shadows" : true,
+          "Color" : [1.000000, 1.000000, 1.000000, 1.000000],
+          "Intensity" : 1.000000,
+          "Location" : [0.120924, -1.030332, 3.353861],
+          "Rotation" : [45.000000, -164.600006, 0.000000],
+          "Scale" : [1.000000, 1.000000, 1.000000],
+          "Shadow Bias" : 0.000900,
+          "Shadow Normal Bias" : -0.002000,
+          "Shadow Resolution Scale" : 1.000000,
+          "Shadow Sharpen" : 0.670000,
+          "Shadow Slope Bias" : -0.000700,
+          "Visible" : true,
+          "bEditorOnly" : false,
+          "bTickEnable" : true
+        }
+      },
+      "Tags" : [],
+      "bVisible" : true
+    }, {
+      "ActorUUID" : 118,
+      "ClassName" : "AActor",
+      "NonSceneComponents" : [],
+      "RootComponent" : {
+        "Children" : [],
+        "ClassName" : "USkeletalMeshComponent",
+        "Properties" : {
+          "Blocks Movement" : true,
+          "Cast Shadow" : true,
+          "Element 0" : {
+            "Path" : "Asset/Materials/Auto/ZAKU.mat"
+          },
+          "Element 1" : {
+            "Path" : "Asset/Materials/Auto/ZAKUMACHINEGUN.mat"
+          },
+          "Generate Overlap Events" : true,
+          "Location" : [2.362259, 11.263309, 4.129139],
           "Rotation" : [-0.000000, 0.000000, 0.000000],
           "Scale" : [1.000000, 1.000000, 1.000000],
-          "Skeletal Mesh" : "Asset/SkeletalMeshCache/TestFBX.bin",
+          "Skeletal Mesh" : "Asset/SkeletalMeshCache/ザクII(2025-02-02).bin",
           "Two Sided Shadow" : false,
+          "Visible" : true,
+          "bEditorOnly" : false,
+          "bTickEnable" : true
+        }
+      },
+      "Tags" : [],
+      "bVisible" : true
+    }, {
+      "ActorUUID" : 166,
+      "ClassName" : "AAmbientLightActor",
+      "NonSceneComponents" : [],
+      "RootComponent" : {
+        "Children" : [{
+            "Children" : [],
+            "ClassName" : "UBillboardComponent",
+            "Properties" : {
+              "Blocks Movement" : true,
+              "Cast Shadow" : true,
+              "Generate Overlap Events" : true,
+              "Height" : 1.000000,
+              "Location" : [0.000000, 0.000000, 0.000000],
+              "Material" : {
+                "Path" : "Asset/Materials/Editor/AmbientLight.mat"
+              },
+              "Rotation" : [-0.000000, 0.000000, 0.000000],
+              "Scale" : [1.000000, 1.000000, 1.000000],
+              "Two Sided Shadow" : false,
+              "Visible" : true,
+              "Width" : 1.000000,
+              "bEditorOnly" : true,
+              "bTickEnable" : true
+            },
+            "bEditorOnly" : true,
+            "bHiddenInComponentTree" : true
+          }],
+        "ClassName" : "UAmbientLightComponent",
+        "Properties" : {
+          "Cast Shadows" : true,
+          "Color" : [1.000000, 1.000000, 1.000000, 1.000000],
+          "Intensity" : 0.300000,
+          "Location" : [3.250009, 18.955166, 7.632882],
+          "Rotation" : [-0.000000, 0.000000, 0.000000],
+          "Scale" : [1.000000, 1.000000, 1.000000],
+          "Shadow Bias" : -0.000100,
+          "Shadow Normal Bias" : -0.002000,
+          "Shadow Resolution Scale" : 1.000000,
+          "Shadow Sharpen" : 0.670000,
+          "Shadow Slope Bias" : 0.000100,
           "Visible" : true,
           "bEditorOnly" : false,
           "bTickEnable" : true
@@ -37,14 +179,14 @@
   "ContextName" : "New Scene",
   "Name" : "Default",
   "PerspectiveCamera" : {
-    "AspectRatio" : 1.854027,
+    "AspectRatio" : 1.796748,
     "FOV" : 1.047198,
     "FarClip" : 1000.000000,
-    "Location" : [1.609433, 1.863789, -5.203156],
+    "Location" : [0.211166, 11.532684, 4.621884],
     "NearClip" : 0.100000,
     "OrthoWidth" : 10.000000,
     "Orthographic" : false,
-    "Rotation" : [-0.000000, 12.615304, -152.249771]
+    "Rotation" : [0.000000, -18.134907, -12.749742]
   },
   "Version" : 2,
   "WorldType" : "Editor"

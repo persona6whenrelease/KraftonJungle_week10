@@ -693,7 +693,13 @@ bool FBXSkeletalImporter::BuildVertexFromCorner(
 
 	OutVertex.pos = FBXUtil::ReadPosition(Mesh, ControlPointIndex);
 	OutVertex.normal = FBXUtil::ReadNormal(Mesh, PolyIndex, CornerIndex);
-	OutVertex.tex = FBXUtil::ReadUV(Mesh, PolyIndex, CornerIndex, UVSetName);
+	OutVertex.tex = FBXUtil::ReadUV(
+		Mesh,
+		PolyIndex,
+		CornerIndex,
+		ControlPointIndex,
+		PolygonVertexIndex,
+		UVSetName);
 	OutVertex.tangent = FBXUtil::ReadTangent(Mesh, ControlPointIndex, PolygonVertexIndex);
 
 	if (ControlPointIndex < static_cast<int32>(ControlPointInfluences.size()))

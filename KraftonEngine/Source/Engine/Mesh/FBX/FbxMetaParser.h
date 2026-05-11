@@ -25,6 +25,7 @@ private:
 private:
 	// node/mesh/skin/cluster/bone 테이블 등록을 보조합니다.
 	void RegisterMeshFromNode(FbxNode* Node, int32 NodeId);
+	int32 RegisterMaterial(FbxSurfaceMaterial* SurfaceMaterial);
 	int32 RegisterCluster(int32 SkinId, FbxCluster* Cluster);
 	int32 RegisterBoneNode(FbxNode* Node, bool bReferencedByCluster, bool bInsertedAsParentChain);
 
