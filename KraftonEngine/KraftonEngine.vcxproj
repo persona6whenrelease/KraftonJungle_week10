@@ -355,6 +355,7 @@
     <ClCompile Include="Source\Editor\UI\EditorPropertyWidget.cpp" />
     <ClCompile Include="Source\Editor\UI\EditorSceneWidget.cpp" />
     <ClCompile Include="Source\Editor\UI\EditorShadowMapDebugWidget.cpp" />
+    <ClCompile Include="Source\Editor\UI\EditorSkeletalMeshViewerWidget.cpp" />
     <ClCompile Include="Source\Editor\UI\EditorStatWidget.cpp" />
     <ClCompile Include="Source\Editor\UI\EditorViewportWidget.cpp" />
     <ClCompile Include="Source\Editor\UI\EditorWidget.cpp" />
@@ -624,6 +625,7 @@
     <ClInclude Include="Source\Editor\UI\EditorPropertyWidget.h" />
     <ClInclude Include="Source\Editor\UI\EditorSceneWidget.h" />
     <ClInclude Include="Source\Editor\UI\EditorShadowMapDebugWidget.h" />
+    <ClInclude Include="Source\Editor\UI\EditorSkeletalMeshViewerWidget.h" />
     <ClInclude Include="Source\Editor\UI\EditorStatWidget.h" />
     <ClInclude Include="Source\Editor\UI\EditorViewportWidget.h" />
     <ClInclude Include="Source\Editor\UI\EditorWidget.h" />

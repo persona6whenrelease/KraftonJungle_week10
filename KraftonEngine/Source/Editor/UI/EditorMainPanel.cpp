@@ -69,6 +69,7 @@ void FEditorMainPanel::Create(FWindowsWindow* InWindow, FRenderer& InRenderer, U
 	ImGuiIO& IO = ImGui::GetIO();
 	IO.IniFilename = "Settings/imgui.ini";
 	IO.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+	IO.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
 
 	Window = InWindow;
 	EditorEngine = InEditorEngine;
@@ -85,6 +86,7 @@ void FEditorMainPanel::Create(FWindowsWindow* InWindow, FRenderer& InRenderer, U
 	SceneWidget.Initialize(InEditorEngine);
 	StatWidget.Initialize(InEditorEngine);
 	CurveWidget.Initialize(InEditorEngine);
+	SkeletalMeshViewerWidget.Initialize(InEditorEngine);
 	ContentBrowserWidget.Initialize(InEditorEngine, InRenderer.GetFD3DDevice().GetDevice());
 	ShadowMapDebugWidget.Initialize(InEditorEngine);
 }
@@ -171,6 +173,12 @@ void FEditorMainPanel::Render(float DeltaTime)
 		CurveWidget.Render(DeltaTime);
 	}
 
+	if (!bHideEditorWindows && Settings.UI.bSkeletalMeshViewer)
+	{
+		SCOPE_STAT_CAT("SkeletalMeshViewerWidget.Render", "5_UI");
+		SkeletalMeshViewerWidget.Render(DeltaTime);
+	}
+
 	if (!bHideEditorWindows && Settings.UI.bContentBrowser)
 	{
 		SCOPE_STAT_CAT("ContentBrowserWidget.Render", "5_UI");
@@ -199,6 +207,11 @@ void FEditorMainPanel::Render(float DeltaTime)
 
 	ImGui::Render();
 	ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+	if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+	{
+		ImGui::UpdatePlatformWindows();
+		ImGui::RenderPlatformWindowsDefault();
+	}
 }
 
 void FEditorMainPanel::RenderMainMenuBar()
@@ -263,6 +276,7 @@ void FEditorMainPanel::RenderMainMenuBar()
 		ImGui::Checkbox("Scene", &Settings.UI.bScene);
 		ImGui::Checkbox("Stat", &Settings.UI.bStat);
 		ImGui::Checkbox("Curve", &Settings.UI.bCurve);
+		ImGui::Checkbox("SkeletalMesh Viewer", &Settings.UI.bSkeletalMeshViewer);
 		ImGui::Checkbox("ContentBrowser", &Settings.UI.bContentBrowser);
 		ImGui::Checkbox("Editor Debug", &Settings.UI.bEditorDebug);
 		ImGui::Checkbox("Shadow Map Debug", &Settings.UI.bShadowMapDebug);
@@ -1265,6 +1279,7 @@ void FEditorMainPanel::HideEditorWindows()
 	Settings.UI.bScene = false;
 	Settings.UI.bStat = false;
 	Settings.UI.bCurve = false;
+	Settings.UI.bSkeletalMeshViewer = false;
 	Settings.UI.bContentBrowser = false;
 	Settings.UI.bImGUISettings = false;
 	Settings.UI.bEditorDebug = false;
