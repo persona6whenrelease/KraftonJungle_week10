@@ -16,6 +16,7 @@
 #include "Component/GizmoComponent.h"
 #include "Component/PrimitiveComponent.h"
 #include "Component/StaticMeshComponent.h"
+#include "Component/SkeletalMeshComponent.h"
 #include "Component/SceneComponent.h"
 #include "Component/TextRenderComponent.h"
 #include "Component/Light/LightComponentBase.h"
@@ -34,6 +35,7 @@
 #include "Materials/Material.h"
 #include "Mesh/StaticMeshManager.h"
 #include "Mesh/StaticMesh.h"
+#include "Mesh/SkeletalMeshManager.h"
 #include "Platform/Paths.h"
 
 #include <Windows.h>
@@ -144,6 +146,48 @@ namespace
 		std::transform(Extension.begin(), Extension.end(), Extension.begin(),
 			[](wchar_t Ch) { return static_cast<wchar_t>(std::towlower(Ch)); });
 		return Extension == L".lua";
+	}
+
+	bool IsEmptyStaticMeshRoot(USceneComponent* Component)
+	{
+		UStaticMeshComponent* StaticMeshRoot = Cast<UStaticMeshComponent>(Component);
+		return StaticMeshRoot && StaticMeshRoot->GetStaticMesh() == nullptr;
+	}
+
+	void PromoteSceneComponentToRoot(AActor* Actor, USceneComponent* NewRoot)
+	{
+		if (!Actor || !NewRoot || Actor->GetRootComponent() == NewRoot)
+		{
+			return;
+		}
+
+		USceneComponent* OldRoot = Actor->GetRootComponent();
+		if (!OldRoot)
+		{
+			Actor->SetRootComponent(NewRoot);
+			NewRoot->SetParent(nullptr);
+			return;
+		}
+
+		const FVector OldRootWorldLocation = OldRoot->GetWorldLocation();
+		const TArray<USceneComponent*> OldChildren = OldRoot->GetChildren();
+
+		for (USceneComponent* Child : OldChildren)
+		{
+			if (Child && Child != NewRoot)
+			{
+				Child->AttachToComponent(NewRoot);
+			}
+		}
+
+		NewRoot->SetParent(nullptr);
+		NewRoot->SetWorldLocation(OldRootWorldLocation);
+		Actor->SetRootComponent(NewRoot);
+
+		if (IsEmptyStaticMeshRoot(OldRoot))
+		{
+			Actor->RemoveComponent(OldRoot);
+		}
 	}
 }
 
@@ -941,7 +985,18 @@ void FEditorPropertyWidget::RenderComponentTree(AActor* Actor)
 		if (SelectedClass->IsA(USceneComponent::StaticClass()))
 		{
 			USceneComponent* SceneComp = Cast<USceneComponent>(Comp);
-			if (!Root && SceneComp)
+			const bool bShouldReplaceEmptyStaticRoot =
+				SceneComp &&
+				Root &&
+				SelectedClass == USkeletalMeshComponent::StaticClass() &&
+				IsEmptyStaticMeshRoot(Root);
+
+			if (bShouldReplaceEmptyStaticRoot)
+			{
+				PromoteSceneComponentToRoot(Actor, SceneComp);
+				Root = SceneComp;
+			}
+			else if (!Root && SceneComp)
 			{
 				Actor->SetRootComponent(SceneComp);
 				Root = SceneComp;
@@ -1101,6 +1156,15 @@ void FEditorPropertyWidget::RenderSceneComponentNode(USceneComponent* Comp)
 
 void FEditorPropertyWidget::RenderComponentProperties(AActor* Actor, const TArray<AActor*>& SelectedActors)
 {
+	if (USkeletalMeshComponent* SkeletalComp = Cast<USkeletalMeshComponent>(SelectedComponent))
+	{
+		USceneComponent* Root = Actor ? Actor->GetRootComponent() : nullptr;
+		if (Root && Root != SkeletalComp && IsEmptyStaticMeshRoot(Root))
+		{
+			PromoteSceneComponentToRoot(Actor, SkeletalComp);
+		}
+	}
+
 	ImGui::Text("Component: %s", SelectedComponent->GetClass()->GetName());
 	ImGui::Text("Name: %s", SelectedComponent->GetFName().ToString().c_str());
 	ImGui::SameLine();
@@ -1195,8 +1259,11 @@ void FEditorPropertyWidget::RenderComponentProperties(AActor* Actor, const TArra
 			bAnyChanged = true;
 			PropagatePropertyChange(Props[i].Name, SelectedActors);
 
-			if (Props[i].Type == EPropertyType::StaticMeshRef)
+			if (Props[i].Type == EPropertyType::StaticMeshRef ||
+				Props[i].Type == EPropertyType::SkeletalMeshRef)
+			{
 				break;
+			}
 		}
 	}
 
@@ -1254,7 +1321,12 @@ void FEditorPropertyWidget::PropagatePropertyChange(const FString& PropName, con
 				case EPropertyType::String:
 				case EPropertyType::SceneComponentRef:
 				case EPropertyType::StaticMeshRef:  *static_cast<FString*>(DstProp.ValuePtr) = *static_cast<FString*>(SrcProp->ValuePtr); break;
-				case EPropertyType::Name:           *static_cast<FName*>(DstProp.ValuePtr) = *static_cast<FName*>(SrcProp->ValuePtr); break;
+				case EPropertyType::SkeletalMeshRef: *static_cast<FString*>(DstProp.ValuePtr) = *static_cast<FString*>(
+						SrcProp->ValuePtr);
+					break;
+				case EPropertyType::Name: *static_cast<FName*>(DstProp.ValuePtr) = *static_cast<FName*>(SrcProp->
+						ValuePtr);
+					break;
 				case EPropertyType::MaterialSlot:   *static_cast<FMaterialSlot*>(DstProp.ValuePtr) = *static_cast<FMaterialSlot*>(SrcProp->ValuePtr); break;
 				case EPropertyType::Enum:           Size = sizeof(int32); break;
 				case EPropertyType::Vec3Array:      *static_cast<TArray<FVector>*>(DstProp.ValuePtr) = *static_cast<TArray<FVector>*>(SrcProp->ValuePtr); break;
@@ -1503,7 +1575,8 @@ bool FEditorPropertyWidget::RenderPropertyWidget(TArray<FPropertyDescriptor>& Pr
 			for (const FMeshAssetListItem& Item : MeshFiles)
 			{
 				bool bSelected = (*Val == Item.FullPath);
-				if (ImGui::Selectable(Item.DisplayName.c_str(), bSelected))
+				const FString ItemLabel = Item.DisplayName + "##" + Item.FullPath;
+				if (ImGui::Selectable(ItemLabel.c_str(), bSelected))
 				{
 					*Val = Item.FullPath;
 					bChanged = true;
@@ -1552,6 +1625,91 @@ bool FEditorPropertyWidget::RenderPropertyWidget(TArray<FPropertyDescriptor>& Pr
 
 		break;
 	}
+	case EPropertyType::SkeletalMeshRef:
+		{
+			auto Val = static_cast<FString*>(Prop.ValuePtr);
+
+			FString Preview = Val->empty() ? "None" : GetStemFromPath(*Val);
+			if (*Val == "None")
+			{
+				Preview = "None";
+			}
+
+			ImGui::Text("%s", Prop.Name.c_str());
+			ImGui::SameLine(120);
+
+			const float FbxButtonWidth =
+				ImGui::CalcTextSize("Import FBX").x +
+				ImGui::GetStyle().FramePadding.x * 2.0f;
+
+			const float Spacing = ImGui::GetStyle().ItemSpacing.x;
+
+			ImGui::SetNextItemWidth(-(FbxButtonWidth + Spacing));
+
+			if (ImGui::BeginCombo("##SkeletalMesh", Preview.c_str()))
+			{
+				const bool bSelectedNone = (*Val == "None");
+
+				if (ImGui::Selectable("None", bSelectedNone))
+				{
+					*Val = "None";
+					bChanged = true;
+				}
+
+				if (bSelectedNone)
+				{
+					ImGui::SetItemDefaultFocus();
+				}
+
+				const TArray<FSkeletalMeshAssetListItem>& MeshFiles =
+					FSkeletalMeshManager::GetAvailableMeshFiles();
+
+				for (const FSkeletalMeshAssetListItem& Item : MeshFiles)
+				{
+					const bool bSelected = (*Val == Item.FullPath);
+
+					const FString ItemLabel = Item.DisplayName + "##" + Item.FullPath;
+					if (ImGui::Selectable(ItemLabel.c_str(), bSelected))
+					{
+						*Val = Item.FullPath;
+						bChanged = true;
+					}
+
+					if (bSelected)
+					{
+						ImGui::SetItemDefaultFocus();
+					}
+				}
+
+				ImGui::EndCombo();
+			}
+
+			ImGui::SameLine();
+
+			ImGui::SetCursorPosX(ImGui::GetWindowContentRegionMax().x - FbxButtonWidth);
+
+			if (ImGui::Button("Import FBX"))
+			{
+				FString FbxPath = OpenFbxFileDialog();
+
+				if (!FbxPath.empty())
+				{
+					ID3D11Device* Device =
+						GEngine->GetRenderer().GetFD3DDevice().GetDevice();
+
+					USkeletalMesh* Loaded =
+						FSkeletalMeshManager::LoadFbxSkeletalMesh(FbxPath, Device);
+
+					if (Loaded)
+					{
+						*Val = FbxPath;
+						bChanged = true;
+					}
+				}
+			}
+
+			break;
+		}
 	case EPropertyType::MaterialSlot:
 	{
 		FMaterialSlot* Slot = static_cast<FMaterialSlot*>(Prop.ValuePtr);

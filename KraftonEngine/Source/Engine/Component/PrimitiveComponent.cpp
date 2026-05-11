@@ -260,6 +260,12 @@ void UPrimitiveComponent::CreateRenderState()
 
 	FScene& Scene = Owner->GetWorld()->GetScene();
 	SceneProxy = Scene.AddPrimitive(this);
+
+	// RenderCollector는 FScene 전체를 직접 순회하지 않고 SpatialPartition의
+	// frustum query 결과를 사용한다. 런타임/에디터에서 나중에 추가된 컴포넌트도
+	// draw 후보가 되려면 프록시 생성 시점에 파티션 갱신을 함께 요청해야 한다.
+	Owner->GetWorld()->UpdateActorInOctree(Owner);
+
 	Owner->GetWorld()->InsertWorldPrimitivePickingBVH(this);
 	if (GetCollisionShapeType() != ECollisionShapeType::None)
 	{

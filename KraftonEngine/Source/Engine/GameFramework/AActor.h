@@ -46,7 +46,8 @@ public:
 		{
 			if (USceneComponent* SceneComponent = Cast<USceneComponent>(Comp))
 			{
-				RootComponent = SceneComponent;
+				SetRootComponent(SceneComponent);
+				SceneComponent->SetWorldLocation(PendingActorLocation);
 			}
 		}
 		bPrimitiveCacheDirty = true;

@@ -24,6 +24,7 @@ void FSubUVSceneProxy::UpdateMesh()
 
 	// TexturedQuad (FVertexPNCT with UVs) for rendering
 	MeshBuffer = &FMeshBufferManager::Get().GetMeshBuffer(EMeshShape::TexturedQuad);
+	SetGeometryFromMeshBuffer(MeshBuffer);
 
 	UMaterial* SubUVMat = Comp->GetSubUVMaterial();
 
@@ -39,7 +40,7 @@ void FSubUVSceneProxy::UpdateMesh()
 	SectionDraws.clear();
 	if (SubUVMat)
 	{
-		const uint32 IdxCount = MeshBuffer->GetIndexBuffer().GetIndexCount();
+		const uint32 IdxCount = GetGeometryBuffer().IndexCount;
 		SectionDraws.push_back({ SubUVMat, 0, IdxCount });
 	}
 }
@@ -56,7 +57,7 @@ void FSubUVSceneProxy::UpdateMaterial()
 	UMaterial* SubUVMat = Comp->GetSubUVMaterial();
 	if (SubUVMat)
 	{
-		const uint32 IdxCount = MeshBuffer ? MeshBuffer->GetIndexBuffer().GetIndexCount() : 0;
+		const uint32 IdxCount = GetGeometryBuffer().IndexCount;
 		SectionDraws.push_back({ SubUVMat, 0, IdxCount });
 	}
 }

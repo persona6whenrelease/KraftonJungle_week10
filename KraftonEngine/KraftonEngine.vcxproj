@@ -364,6 +364,8 @@
     <ClCompile Include="Source\Engine\Component\PrimitiveComponent.cpp" />
     <ClCompile Include="Source\Engine\Component\SceneComponent.cpp" />
     <ClCompile Include="Source\Engine\Component\Script\LuaScriptComponent.cpp" />
+      <ClCompile Include="Source\Engine\Component\SkeletalMeshComponent.cpp"/>
+      <ClCompile Include="Source\Engine\Component\SkinnedMeshComponent.cpp"/>
     <ClCompile Include="Source\Engine\Component\StaticMeshComponent.cpp" />
     <ClCompile Include="Source\Engine\Component\SubUVComponent.cpp" />
     <ClCompile Include="Source\Engine\Component\TextRenderComponent.cpp" />
@@ -399,6 +401,8 @@
     <ClCompile Include="Source\Engine\Mesh\FbxImporter.cpp" />
     <ClCompile Include="Source\Engine\Mesh\MeshSimplifier.cpp" />
     <ClCompile Include="Source\Engine\Mesh\ObjImporter.cpp" />
+      <ClCompile Include="Source\Engine\Mesh\SkeletalMesh.cpp"/>
+      <ClCompile Include="Source\Engine\Mesh\SkeletalMeshManager.cpp"/>
       <ClCompile Include="Source\Engine\Mesh\StaticMeshManager.cpp"/>
     <ClCompile Include="Source\Engine\Mesh\StaticMesh.cpp" />
     <ClCompile Include="Source\Engine\Object\FName.cpp" />
@@ -429,6 +433,7 @@
     <ClCompile Include="Source\Engine\Render\Proxy\DecalSceneProxy.cpp" />
     <ClCompile Include="Source\Engine\Render\Proxy\GizmoSceneProxy.cpp" />
     <ClCompile Include="Source\Engine\Render\Proxy\PrimitiveSceneProxy.cpp" />
+      <ClCompile Include="Source\Engine\Render\Proxy\SkeletalMeshSceneProxy.cpp"/>
     <ClCompile Include="Source\Engine\Render\Proxy\StaticMeshSceneProxy.cpp" />
     <ClCompile Include="Source\Engine\Render\Proxy\SubUVSceneProxy.cpp" />
     <ClCompile Include="Source\Engine\Render\Proxy\TextRenderSceneProxy.cpp" />
@@ -617,6 +622,8 @@
     <ClInclude Include="Source\Engine\Component\PrimitiveComponent.h" />
     <ClInclude Include="Source\Engine\Component\SceneComponent.h" />
     <ClInclude Include="Source\Engine\Component\Script\LuaScriptComponent.h" />
+      <ClInclude Include="Source\Engine\Component\SkeletalMeshComponent.h"/>
+      <ClInclude Include="Source\Engine\Component\SkinnedMeshComponent.h"/>
     <ClInclude Include="Source\Engine\Component\StaticMeshComponent.h" />
     <ClInclude Include="Source\Engine\Component\SubUVComponent.h" />
     <ClInclude Include="Source\Engine\Component\TextRenderComponent.h" />
@@ -663,6 +670,9 @@
     <ClInclude Include="Source\Engine\Mesh\FbxImporter.h" />
     <ClInclude Include="Source\Engine\Mesh\MeshSimplifier.h" />
     <ClInclude Include="Source\Engine\Mesh\ObjImporter.h" />
+      <ClInclude Include="Source\Engine\Mesh\SkeletalMesh.h"/>
+      <ClInclude Include="Source\Engine\Mesh\SkeletalMeshAsset.h"/>
+      <ClInclude Include="Source\Engine\Mesh\SkeletalMeshManager.h"/>
       <ClInclude Include="Source\Engine\Mesh\StaticMeshManager.h"/>
     <ClInclude Include="Source\Engine\Mesh\StaticMesh.h" />
     <ClInclude Include="Source\Engine\Mesh\StaticMeshAsset.h" />
@@ -702,6 +712,7 @@
     <ClInclude Include="Source\Engine\Render\Proxy\DirtyFlag.h" />
     <ClInclude Include="Source\Engine\Render\Proxy\GizmoSceneProxy.h" />
     <ClInclude Include="Source\Engine\Render\Proxy\PrimitiveSceneProxy.h" />
+      <ClInclude Include="Source\Engine\Render\Proxy\SkeletalMeshSceneProxy.h"/>
     <ClInclude Include="Source\Engine\Render\Proxy\StaticMeshSceneProxy.h" />
     <ClInclude Include="Source\Engine\Render\Proxy\SubUVSceneProxy.h" />
     <ClInclude Include="Source\Engine\Render\Proxy\TextRenderSceneProxy.h" />

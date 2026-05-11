@@ -31,6 +31,22 @@ enum class EMeshShape
 	ScaleGizmo,
 };
 
+struct FGeometryBufferView
+{
+	ID3D11Buffer* VertexBuffer = nullptr;
+	uint32 VertexStride = 0;
+	uint32 VertexCount = 0;
+
+	ID3D11Buffer* IndexBuffer = nullptr;
+	uint32 IndexCount = 0;
+
+	bool IsValid() const
+	{
+		return VertexBuffer != nullptr && VertexStride > 0;
+	}
+};
+
+
 enum class ERenderPass : uint32
 {
 	PreDepth,		// Depth-only 프리패스 (color write 없음, Early-Z용)

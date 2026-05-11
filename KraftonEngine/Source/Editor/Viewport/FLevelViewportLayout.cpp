@@ -2100,11 +2100,6 @@ AActor* FLevelViewportLayout::SpawnActorFromViewportMenu(EViewportPlaceActorType
 	case EViewportPlaceActorType::EmptyActor:
 	{
 		SpawnedActor = World->SpawnActor<AActor>();
-		if (SpawnedActor)
-		{
-			UStaticMeshComponent* Root = SpawnedActor->AddComponent<UStaticMeshComponent>();
-			if (Root) SpawnedActor->SetRootComponent(Root);
-		}
 		break;
 	}
 	case EViewportPlaceActorType::Pawn:

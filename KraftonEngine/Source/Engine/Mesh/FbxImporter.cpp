@@ -3,8 +3,10 @@
 #include "Core/Log.h"
 #include "Engine/Platform/Paths.h"
 #include "Math/Vector.h"
+#include "Mesh/SkeletalMeshAsset.h"
 #include "Mesh/StaticMeshAsset.h"
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 
@@ -30,6 +32,80 @@ struct FFbxMaterialInfo
 	FString DiffuseTexturePath;
 	FVector DiffuseColor = FVector(1.0f, 1.0f, 1.0f);
 };
+
+static const char* GetFbxAxisName(int32 Axis)
+{
+	switch (std::abs(Axis))
+	{
+	case FbxAxisSystem::eXAxis:
+		return "X";
+	case FbxAxisSystem::eYAxis:
+		return "Y";
+	case FbxAxisSystem::eZAxis:
+		return "Z";
+	default:
+		return "Unknown";
+	}
+}
+
+static const char* GetFbxCoordSystemName(FbxAxisSystem::ECoordSystem CoordSystem)
+{
+	return CoordSystem == FbxAxisSystem::eLeftHanded ? "LeftHanded" : "RightHanded";
+}
+
+static void LogFbxAxisSystem(const char* Label, const FbxAxisSystem& AxisSystem)
+{
+	int UpSign = 1;
+	int FrontSign = 1;
+
+	const int32 UpAxis = static_cast<int32>(AxisSystem.GetUpVector(UpSign));
+	const int32 FrontAxis = static_cast<int32>(AxisSystem.GetFrontVector(FrontSign));
+
+	UE_LOG(
+		"[FBX] %s Axis. Up=%s%s, Front=%s%s, Coord=%s",
+		Label,
+		UpSign < 0 ? "-" : "+",
+		GetFbxAxisName(UpAxis),
+		FrontSign < 0 ? "-" : "+",
+		GetFbxAxisName(FrontAxis),
+		GetFbxCoordSystemName(AxisSystem.GetCoorSystem())
+	);
+}
+
+static FbxAxisSystem MakeUnrealAxisSystem()
+{
+	FbxAxisSystem UnrealAxisSystem;
+
+	if (!FbxAxisSystem::ParseAxisSystem("yzx", UnrealAxisSystem))
+	{
+		UnrealAxisSystem = FbxAxisSystem(FbxAxisSystem::eZAxis, FbxAxisSystem::eParityEven, FbxAxisSystem::eLeftHanded);
+	}
+
+	return UnrealAxisSystem;
+}
+
+static void NormalizeFbxSceneForEngine(FbxScene* Scene)
+{
+	if (!Scene)
+	{
+		return;
+	}
+
+	const FbxAxisSystem SourceAxisSystem =
+		Scene->GetGlobalSettings().GetAxisSystem();
+	const FbxAxisSystem UnrealAxisSystem = MakeUnrealAxisSystem();
+
+	LogFbxAxisSystem("Source", SourceAxisSystem);
+	LogFbxAxisSystem("Target", UnrealAxisSystem);
+
+	UnrealAxisSystem.DeepConvertScene(Scene);
+	FbxSystemUnit::cm.ConvertScene(Scene);
+
+	LogFbxAxisSystem(
+		"Converted",
+		Scene->GetGlobalSettings().GetAxisSystem()
+	);
+}
 
 static void DestroyFbxSceneContext(FFbxSceneContext& Context)
 {
@@ -88,6 +164,8 @@ static bool LoadFbxScene(const FString& FbxFilePath, FFbxSceneContext& OutContex
 	Importer->Destroy();
 
 	// 삼각형이 아닌 polygon에 대해서 Scene을 Triangulation
+	NormalizeFbxSceneForEngine(Scene);
+
 	FbxGeometryConverter GeometryConverter(Manager);
 	GeometryConverter.Triangulate(Scene, true);
 
@@ -129,6 +207,31 @@ static FVector TransformFbxPosition(const FbxAMatrix& Transform, const FbxVector
 static FVector TransformFbxNormal(const FbxAMatrix& Transform, const FbxVector4& Normal)
 {
 	return ToEngineVector(Transform.MultR(Normal)).Normalized();
+}
+
+static FMatrix ToEngineMatrix(const FbxAMatrix& Value)
+{
+	return FMatrix(
+		static_cast<float>(Value.Get(0, 0)),
+		static_cast<float>(Value.Get(0, 1)),
+		static_cast<float>(Value.Get(0, 2)),
+		static_cast<float>(Value.Get(0, 3)),
+
+		static_cast<float>(Value.Get(1, 0)),
+		static_cast<float>(Value.Get(1, 1)),
+		static_cast<float>(Value.Get(1, 2)),
+		static_cast<float>(Value.Get(1, 3)),
+
+		static_cast<float>(Value.Get(2, 0)),
+		static_cast<float>(Value.Get(2, 1)),
+		static_cast<float>(Value.Get(2, 2)),
+		static_cast<float>(Value.Get(2, 3)),
+
+		static_cast<float>(Value.Get(3, 0)),
+		static_cast<float>(Value.Get(3, 1)),
+		static_cast<float>(Value.Get(3, 2)),
+		static_cast<float>(Value.Get(3, 3))
+	);
 }
 
 static void TraverseFbxNode(FbxNode* Node, int32 Depth)
@@ -768,12 +871,6 @@ bool FFbxImporter::CanLoadScene(const FString& FbxFilePath)
 		return false;
 	}
 
-	// // Z-up
-	// FbxAxisSystem EngineAxisSystem(FbxAxisSystem::eZAxis, FbxAxisSystem::eParityOdd, FbxAxisSystem::eRightHanded);
-	// EngineAxisSystem.ConvertScene(Scene);
-	// // 1 unit = 1 cm
-	// FbxSystemUnit::cm.ConvertScene(Scene);
-
 	FbxNode* RootNode = Context.Scene->GetRootNode();
 	const int32 RootChildCount = RootNode ? static_cast<int32>(RootNode->GetChildCount()) : 0;
 	
@@ -873,6 +970,635 @@ bool FFbxImporter::ImportStaticMesh(const FString& FbxFilePath, FStaticMesh& Out
 	UE_LOG("[FBX] ImportStaticMesh result detail: Vertices=%zu, Indices=%zu",
 	       OutMesh.Vertices.size(),
 	       OutMesh.Indices.size());
+
+	DestroyFbxSceneContext(Context);
+
+	return bHasMeshData;
+#endif
+}
+
+// --- Skeletal Mesh ---
+// 이 노드가 Bone인지 검사하면서 Skeleton Node만 모은다.
+static void CollectFbxSkeletonNodes(FbxNode* Node, TArray<FbxNode*>& OutSkeletonNodes)
+{
+	if (!Node)
+	{
+		return;
+	}
+
+	FbxNodeAttribute* Attribute = Node->GetNodeAttribute();
+	// Attribute가 없는 노드도 있기 때문에 Attribute 검사해주어야 한다.
+	if (Attribute && Attribute->GetAttributeType() == FbxNodeAttribute::eSkeleton)
+	{
+		OutSkeletonNodes.push_back(Node);
+	}
+
+	const int32 ChildCount = static_cast<int32>(Node->GetChildCount());
+	for (int32 ChildIndex = 0; ChildIndex < ChildCount; ++ChildIndex)
+	{
+		CollectFbxSkeletonNodes(Node->GetChild(ChildIndex), OutSkeletonNodes);
+	}
+}
+
+// Skeleton 배열에서 Index 찾기.
+// 흠....이 친구는....음....TMap이 더 어울릴 거 같은데
+static int32 FindSkeletonNodeIndex(const TArray<FbxNode*>& SkeletonNodes, FbxNode* TargetNode)
+{
+	for (int32 Index = 0; Index < static_cast<int32>(SkeletonNodes.size()); ++Index)
+	{
+		if (SkeletonNodes[Index] == TargetNode)
+		{
+			return Index;
+		}
+	}
+	return -1;
+}
+
+// 현재 BoneNode의 부모 Bone이 skeleton 배열에서 몇 번째 index인지 찾기.
+static int32 FindParentBoneIndex(FbxNode* BoneNode, const TMap<FbxNode*, int32>& NodeToBoneIndex)
+{
+	if (!BoneNode)
+	{
+		return -1;
+	}
+
+	FbxNode* ParentNode = BoneNode->GetParent();
+
+	// FBX 노드 트리에서 바로 위 부모가 항상 Bone이라는 보장이 없기 때문에 나->부모->...->(Bone)부모 올라감으로써 부모 Bone 찾기.
+	while (ParentNode)
+	{
+		auto Found = NodeToBoneIndex.find(ParentNode);
+		if (Found != NodeToBoneIndex.end())
+		{
+			return Found->second;
+		}
+		ParentNode = ParentNode->GetParent();
+	}
+	return -1;
+}
+
+static TMap<FbxNode*, int32> BuildBoneNodeIndexMap(const TArray<FbxNode*>& SkeletonNodes)
+{
+	TMap<FbxNode*, int32> NodeToBoneIndex;
+
+	for (int32 BoneIndex = 0; BoneIndex < static_cast<int32>(SkeletonNodes.size()); ++BoneIndex)
+	{
+		FbxNode* BoneNode = SkeletonNodes[BoneIndex];
+
+		if (!BoneNode)
+		{
+			continue;
+		}
+
+		NodeToBoneIndex[BoneNode] = BoneIndex;
+	}
+
+	return NodeToBoneIndex;
+}
+
+static int32 FindNearestParentBoneIndex(FbxNode* Node, const TMap<FbxNode*, int32>& NodeToBoneIndex)
+{
+	if (!Node)
+	{
+		return -1;
+	}
+
+	FbxNode* ParentNode = Node->GetParent();
+	while (ParentNode)
+	{
+		auto Found = NodeToBoneIndex.find(ParentNode);
+		if (Found != NodeToBoneIndex.end())
+		{
+			return Found->second;
+		}
+
+		ParentNode = ParentNode->GetParent();
+	}
+
+	return -1;
+}
+
+static void AddBoneInfluenceToControlPoint(TArray<TArray<FFbxBoneInfluence>>& ControlPointInfluences,
+                                           int32 ControlPointIndex, int32 BoneIndex, float Weight)
+{
+	if (ControlPointIndex < 0 || ControlPointIndex >= static_cast<int32>(ControlPointInfluences.size()))
+	{
+		return;
+	}
+
+	if (BoneIndex < 0 || Weight <= 0.0f)
+	{
+		return;
+	}
+
+	FFbxBoneInfluence Influence;
+	Influence.BoneIndex = BoneIndex;
+	Influence.Weight = Weight;
+
+	ControlPointInfluences[ControlPointIndex].push_back(Influence);
+}
+
+static int32 AddFallbackInfluenceToMissingControlPoints(
+	TArray<TArray<FFbxBoneInfluence>>& ControlPointInfluences,
+	int32 FallbackBoneIndex
+)
+{
+	if (FallbackBoneIndex < 0)
+	{
+		return 0;
+	}
+
+	int32 AddedCount = 0;
+
+	for (int32 ControlPointIndex = 0;
+	     ControlPointIndex < static_cast<int32>(ControlPointInfluences.size());
+	     ++ControlPointIndex)
+	{
+		if (!ControlPointInfluences[ControlPointIndex].empty())
+		{
+			continue;
+		}
+
+		AddBoneInfluenceToControlPoint(
+			ControlPointInfluences,
+			ControlPointIndex,
+			FallbackBoneIndex,
+			1.0f
+		);
+
+		++AddedCount;
+	}
+
+	return AddedCount;
+}
+
+static void BuildControlPointInfluences(FbxMesh* Mesh, const TMap<FbxNode*, int32>& NodeToBoneIndex,
+                                        TArray<TArray<FFbxBoneInfluence>>& OutControlPointInfluences)
+{
+	OutControlPointInfluences.clear();
+	if (!Mesh)
+	{
+		return;
+	}
+
+	const int32 ControlPointCount = static_cast<int32>(Mesh->GetControlPointsCount());
+
+	OutControlPointInfluences.resize(ControlPointCount);
+
+	const int32 DeformerCount = static_cast<int32>(Mesh->GetDeformerCount(FbxDeformer::eSkin));
+	for (int32 DeformerIndex = 0; DeformerIndex < DeformerCount; ++DeformerIndex)
+	{
+		auto Skin = static_cast<FbxSkin*>(Mesh->GetDeformer(DeformerIndex, FbxDeformer::eSkin));
+		if (!Skin)
+		{
+			continue;
+		}
+
+		const int32 ClusterCount = static_cast<int32>(Skin->GetClusterCount());
+		for (int32 ClusterIndex = 0; ClusterIndex < ClusterCount; ++ClusterIndex)
+		{
+			FbxCluster* Cluster = Skin->GetCluster(ClusterIndex);
+			if (!Cluster)
+			{
+				continue;
+			}
+			FbxNode* LinkNode = Cluster->GetLink();
+			auto FoundBoneIndex = NodeToBoneIndex.find(LinkNode);
+			if (FoundBoneIndex == NodeToBoneIndex.end())
+			{
+				continue;
+			}
+			const int32 BoneIndex = FoundBoneIndex->second;
+
+			const int32 InfluenceCount = static_cast<int32>(Cluster->GetControlPointIndicesCount());
+			int* ControlPointIndices = Cluster->GetControlPointIndices();
+			double* ControlPointWeights = Cluster->GetControlPointWeights();
+			for (int32 InfluenceIndex = 0; InfluenceIndex < InfluenceCount; ++InfluenceIndex)
+			{
+				const int32 ControlPointIndex = static_cast<int32>(ControlPointIndices[InfluenceIndex]);
+				const float Weight = static_cast<float>(ControlPointWeights[InfluenceIndex]);
+				AddBoneInfluenceToControlPoint(OutControlPointInfluences, ControlPointIndex, BoneIndex, Weight);
+			}
+		}
+	}
+}
+
+static void BuildBoneInfosFromSkeletonNodes(const TArray<FbxNode*>& SkeletonNodes, TArray<FBoneInfo>& OutBones)
+{
+	OutBones.clear();
+
+	TMap<FbxNode*, int32> NodeToBoneIndex = BuildBoneNodeIndexMap(SkeletonNodes);
+
+	for (int32 BoneIndex = 0; BoneIndex < static_cast<int32>(SkeletonNodes.size()); ++BoneIndex)
+	{
+		FbxNode* BoneNode = SkeletonNodes[BoneIndex];
+
+		if (!BoneNode)
+		{
+			continue;
+		}
+		NodeToBoneIndex[BoneNode] = BoneIndex;
+	}
+
+	OutBones.resize(SkeletonNodes.size());
+
+	for (int32 BoneIndex = 0; BoneIndex < static_cast<int32>(SkeletonNodes.size()); ++BoneIndex)
+	{
+		FbxNode* BoneNode = SkeletonNodes[BoneIndex];
+
+		if (!BoneNode)
+		{
+			continue;
+		}
+
+		FBoneInfo& BoneInfo = OutBones[BoneIndex];
+
+		const FbxAMatrix GlobalBindPose = BoneNode->EvaluateGlobalTransform();
+
+		const char* BoneName = BoneNode->GetName();
+		BoneInfo.Name = BoneName ? FString(BoneName) : "None";
+		BoneInfo.ParentIndex = FindParentBoneIndex(BoneNode, NodeToBoneIndex);
+		BoneInfo.GlobalBindPose = ToEngineMatrix(GlobalBindPose);
+	}
+
+	for (int32 BoneIndex = 0; BoneIndex < static_cast<int32>(OutBones.size()); ++BoneIndex)
+	{
+		FBoneInfo& BoneInfo = OutBones[BoneIndex];
+
+		if (BoneInfo.ParentIndex >= 0 &&
+			BoneInfo.ParentIndex < static_cast<int32>(OutBones.size()))
+		{
+			const FMatrix ParentGlobalInverse =
+				OutBones[BoneInfo.ParentIndex].GlobalBindPose.GetInverse();
+
+			BoneInfo.LocalBindPose =
+				BoneInfo.GlobalBindPose * ParentGlobalInverse;
+		}
+		else
+		{
+			BoneInfo.LocalBindPose = BoneInfo.GlobalBindPose;
+		}
+
+		BoneInfo.InverseBindPose = BoneInfo.GlobalBindPose.GetInverse();
+	}
+}
+
+// weight 선별 후 합 1 정규화
+static void AssignTopBoneInfluencesToVertex(const TArray<FFbxBoneInfluence>& SourceInfluences,
+                                            FSkeletalVertex& OutVertex)
+{
+	for (int32 InfluenceIndex = 0; InfluenceIndex < MaxBoneInfluences; ++InfluenceIndex)
+	{
+		OutVertex.BoneIndices[InfluenceIndex] = 0;
+		OutVertex.BoneWeights[InfluenceIndex] = 0.0f;
+	}
+
+	TArray<FFbxBoneInfluence> SortedInfluences = SourceInfluences;
+
+	std::sort(SortedInfluences.begin(), SortedInfluences.end(),
+	          [](const FFbxBoneInfluence& A, const FFbxBoneInfluence& B)
+	          {
+		          return A.Weight > B.Weight;
+	          });
+
+	float WeightSum = 0.0f;
+	const int32 CopyCount = static_cast<int32>(std::min<size_t>(MaxBoneInfluences, SortedInfluences.size()));
+
+	for (int32 InfluenceIndex = 0; InfluenceIndex < CopyCount; ++InfluenceIndex)
+	{
+		OutVertex.BoneIndices[InfluenceIndex] = static_cast<uint32>(SortedInfluences[InfluenceIndex].BoneIndex);
+		OutVertex.BoneWeights[InfluenceIndex] = SortedInfluences[InfluenceIndex].Weight;
+		WeightSum += OutVertex.BoneWeights[InfluenceIndex];
+	}
+
+	if (WeightSum > 0.0001f)
+	{
+		for (int32 InfluenceIndex = 0; InfluenceIndex < CopyCount; ++InfluenceIndex)
+		{
+			OutVertex.BoneWeights[InfluenceIndex] /= WeightSum;
+		}
+	}
+	else
+	{
+		OutVertex.BoneIndices[0] = 0;
+		OutVertex.BoneWeights[0] = 1.0f;
+	}
+}
+
+static void AppendFbxMeshNodeToSkeletalMesh(FbxNode* MeshNode, FSkeletalMesh& OutMesh,
+                                            const TArray<FStaticMaterial>& OutMaterials,
+                                            const TArray<int32>& LocalToGlobalMaterialIndices,
+                                            const TArray<TArray<FFbxBoneInfluence>>& ControlPointInfluences)
+{
+	if (!MeshNode || !MeshNode->GetMesh())
+	{
+		return;
+	}
+
+	FbxMesh* Mesh = MeshNode->GetMesh();
+
+	const int32 ControlPointCount =
+		static_cast<int32>(Mesh->GetControlPointsCount());
+
+	const int32 PolygonCount =
+		static_cast<int32>(Mesh->GetPolygonCount());
+
+	FbxStringList UVSetNames;
+	Mesh->GetUVSetNames(UVSetNames);
+
+	const char* UVSetName = nullptr;
+
+	if (UVSetNames.GetCount() > 0)
+	{
+		UVSetName = UVSetNames[0];
+		UE_LOG("[FBX] SkeletalMesh=%s, Using UV Set: %s", MeshNode->GetName(), UVSetName);
+	}
+	else
+	{
+		UE_LOG("[FBX] SkeletalMesh=%s has no UV set.", MeshNode->GetName());
+	}
+
+	const FbxAMatrix NodeGlobalTransform = MeshNode->EvaluateGlobalTransform();
+
+	int32 CurrentGlobalMaterialIndex = -1;
+	FStaticMeshSection* CurrentSection = nullptr;
+
+	FbxVector4* ControlPoints = Mesh->GetControlPoints();
+
+	for (int32 PolygonIndex = 0; PolygonIndex < PolygonCount; ++PolygonIndex)
+	{
+		const int32 PolygonSize =
+			static_cast<int32>(Mesh->GetPolygonSize(PolygonIndex));
+
+		if (PolygonSize != 3)
+		{
+			UE_LOG(
+				"[FBX] Skip non-triangle skeletal polygon. Mesh=%s, Polygon=%d, Size=%d",
+				MeshNode->GetName(),
+				PolygonIndex,
+				PolygonSize
+			);
+			continue;
+		}
+
+		const int32 LocalMaterialIndex =
+			GetPolygonMaterialIndex(Mesh, PolygonIndex);
+
+		int32 GlobalMaterialIndex = 0;
+
+		if (LocalMaterialIndex >= 0 &&
+			LocalMaterialIndex < static_cast<int32>(LocalToGlobalMaterialIndices.size()))
+		{
+			GlobalMaterialIndex = LocalToGlobalMaterialIndices[LocalMaterialIndex];
+		}
+
+		if (GlobalMaterialIndex < 0 ||
+			GlobalMaterialIndex >= static_cast<int32>(OutMaterials.size()))
+		{
+			GlobalMaterialIndex = 0;
+		}
+
+		if (GlobalMaterialIndex != CurrentGlobalMaterialIndex)
+		{
+			if (CurrentSection)
+			{
+				CurrentSection->NumTriangles =
+					(static_cast<uint32>(OutMesh.Indices.size()) - CurrentSection->FirstIndex) / 3;
+			}
+
+			FStaticMeshSection NewSection;
+			NewSection.MaterialIndex = GlobalMaterialIndex;
+			NewSection.MaterialSlotName = OutMaterials[GlobalMaterialIndex].MaterialSlotName;
+			NewSection.FirstIndex = static_cast<uint32>(OutMesh.Indices.size());
+			NewSection.NumTriangles = 0;
+
+			OutMesh.Sections.push_back(NewSection);
+
+			CurrentSection = &OutMesh.Sections.back();
+			CurrentGlobalMaterialIndex = GlobalMaterialIndex;
+		}
+
+		for (int32 VertexIndex = 0; VertexIndex < PolygonSize; ++VertexIndex)
+		{
+			const int32 ControlPointIndex =
+				static_cast<int32>(Mesh->GetPolygonVertex(PolygonIndex, VertexIndex));
+
+			if (ControlPointIndex < 0 || ControlPointIndex >= ControlPointCount)
+			{
+				UE_LOG(
+					"[FBX] Invalid skeletal ControlPointIndex. Mesh=%s, Polygon=%d, Vertex=%d, ControlPoint=%d",
+					MeshNode->GetName(),
+					PolygonIndex,
+					VertexIndex,
+					ControlPointIndex
+				);
+				continue;
+			}
+
+			const FbxVector4& FbxPosition = ControlPoints[ControlPointIndex];
+			const FVector EnginePosition =
+				TransformFbxPosition(NodeGlobalTransform, FbxPosition);
+
+			FbxVector4 FbxNormal;
+			const bool bHasNormal =
+				Mesh->GetPolygonVertexNormal(PolygonIndex, VertexIndex, FbxNormal);
+
+			auto EngineNormal = FVector(0.0f, 0.0f, 1.0f);
+
+			if (bHasNormal)
+			{
+				EngineNormal = TransformFbxNormal(NodeGlobalTransform, FbxNormal);
+			}
+
+			FVector2 EngineUV(0.0f, 0.0f);
+
+			if (UVSetName)
+			{
+				FbxVector2 FbxUV;
+				bool bUnmapped = false;
+
+				const bool bHasUV = Mesh->GetPolygonVertexUV(
+					PolygonIndex,
+					VertexIndex,
+					UVSetName,
+					FbxUV,
+					bUnmapped
+				);
+
+				if (bHasUV && !bUnmapped)
+				{
+					EngineUV = FVector2(
+						static_cast<float>(FbxUV[0]),
+						1.0f - static_cast<float>(FbxUV[1])
+					);
+				}
+			}
+
+			FSkeletalVertex NewVertex;
+			NewVertex.pos = EnginePosition;
+			NewVertex.normal = EngineNormal;
+			NewVertex.color = FVector4(1.0f, 1.0f, 1.0f, 1.0f);
+			NewVertex.tex = EngineUV;
+			NewVertex.tangent = FVector4(1.0f, 0.0f, 0.0f, 1.0f);
+
+			if (ControlPointIndex < static_cast<int32>(ControlPointInfluences.size()))
+			{
+				AssignTopBoneInfluencesToVertex(
+					ControlPointInfluences[ControlPointIndex],
+					NewVertex
+				);
+			}
+			else
+			{
+				TArray<FFbxBoneInfluence> EmptyInfluences;
+				AssignTopBoneInfluencesToVertex(EmptyInfluences, NewVertex);
+			}
+
+			const uint32 NewVertexIndex =
+				static_cast<uint32>(OutMesh.Vertices.size());
+
+			OutMesh.Vertices.push_back(NewVertex);
+			OutMesh.Indices.push_back(NewVertexIndex);
+		}
+	}
+
+	if (CurrentSection)
+	{
+		CurrentSection->NumTriangles =
+			(static_cast<uint32>(OutMesh.Indices.size()) - CurrentSection->FirstIndex) / 3;
+	}
+
+	UE_LOG(
+		"[FBX] Appended SkeletalMesh=%s, Vertices=%zu, Indices=%zu, Sections=%zu",
+		MeshNode->GetName(),
+		OutMesh.Vertices.size(),
+		OutMesh.Indices.size(),
+		OutMesh.Sections.size()
+	);
+}
+
+bool FFbxImporter::ImportSkeletalMesh(const FString& FbxFilePath, FSkeletalMesh& OutMesh,
+                                      TArray<FStaticMaterial>& OutMaterials)
+{
+#if !WITH_FBX_SDK
+	UE_LOG("FBX SDK is not configured. File: %s", FbxFilePath.c_str());
+	return false;
+#else
+	OutMesh = FSkeletalMesh();
+	OutMaterials.clear();
+	OutMesh.PathFileName = FbxFilePath;
+
+	FFbxSceneContext Context;
+
+	if (!LoadFbxScene(FbxFilePath, Context))
+	{
+		return false;
+	}
+
+	FbxNode* RootNode = Context.Scene->GetRootNode();
+	TArray<FbxNode*> SkeletonNodes;
+	// Skeleton Nodes 수집
+	CollectFbxSkeletonNodes(RootNode, SkeletonNodes);
+	// UE_LOG("[FBX] ImportSkeletalMesh found skeleton nodes: %zu", SkeletonNodes.size());
+	if (SkeletonNodes.empty())
+	{
+		UE_LOG("[FBX] ImportSkeletalMesh failed: skeleton node not found. File: %s", FbxFilePath.c_str());
+		DestroyFbxSceneContext(Context);
+		return false;
+	}
+
+	BuildBoneInfosFromSkeletonNodes(SkeletonNodes, OutMesh.Bones);
+	// UE_LOG("[FBX] ImportSkeletalMesh built bones: %zu", OutMesh.Bones.size());
+	// for (int32 BoneIndex = 0; BoneIndex < static_cast<int32>(OutMesh.Bones.size()); ++BoneIndex)
+	// {
+	// 	const FBoneInfo& Bone = OutMesh.Bones[BoneIndex];
+	//
+	// 	UE_LOG(
+	// 		"[FBX] Bone[%d]: Name=%s, ParentIndex=%d",
+	// 		BoneIndex,
+	// 		Bone.Name.c_str(),
+	// 		Bone.ParentIndex
+	// 	);
+	// }
+
+	TArray<FbxNode*> MeshNodes;
+	CollectFbxMeshNodes(RootNode, MeshNodes);
+	if (MeshNodes.empty())
+	{
+		UE_LOG("[FBX] ImportSkeletalMesh failed: mesh node not found. File: %s", FbxFilePath.c_str());
+		DestroyFbxSceneContext(Context);
+		return false;
+	}
+
+	UE_LOG("[FBX] ImportSkeletalMesh found mesh nodes: %zu", MeshNodes.size());
+
+	TArray<FFbxMaterialInfo> GlobalMaterialInfos;
+	TArray<TArray<int32>> MeshMaterialRemaps;
+	MeshMaterialRemaps.reserve(MeshNodes.size());
+
+	for (FbxNode* MeshNode : MeshNodes)
+	{
+		MeshMaterialRemaps.push_back(
+			BuildMaterialRemapForMeshNode(MeshNode, GlobalMaterialInfos)
+		);
+	}
+
+	BuildStaticMaterialsFromFbxInfos(GlobalMaterialInfos, OutMaterials);
+
+	TMap<FbxNode*, int32> NodeToBoneIndex = BuildBoneNodeIndexMap(SkeletonNodes);
+
+	for (size_t MeshNodeIndex = 0; MeshNodeIndex < MeshNodes.size(); ++MeshNodeIndex)
+	{
+		FbxNode* MeshNode = MeshNodes[MeshNodeIndex];
+		FbxMesh* Mesh = MeshNode ? MeshNode->GetMesh() : nullptr;
+
+		if (!Mesh)
+		{
+			continue;
+		}
+
+		TArray<TArray<FFbxBoneInfluence>> ControlPointInfluences;
+		BuildControlPointInfluences(Mesh, NodeToBoneIndex, ControlPointInfluences);
+
+		const int32 FallbackBoneIndex =
+			FindNearestParentBoneIndex(MeshNode, NodeToBoneIndex);
+
+		const int32 FallbackInfluenceCount =
+			AddFallbackInfluenceToMissingControlPoints(
+				ControlPointInfluences,
+				FallbackBoneIndex >= 0 ? FallbackBoneIndex : 0
+			);
+
+		UE_LOG(
+			"[FBX] ImportSkeletalMesh node[%zu]=%s, control point influences=%zu, fallback bone=%d, fallback control points=%d",
+			MeshNodeIndex,
+			MeshNode->GetName(),
+			ControlPointInfluences.size(),
+			FallbackBoneIndex >= 0 ? FallbackBoneIndex : 0,
+			FallbackInfluenceCount
+		);
+
+		AppendFbxMeshNodeToSkeletalMesh(
+			MeshNode,
+			OutMesh,
+			OutMaterials,
+			MeshMaterialRemaps[MeshNodeIndex],
+			ControlPointInfluences
+		);
+	}
+
+	const bool bHasMeshData =
+		!OutMesh.Vertices.empty() &&
+		!OutMesh.Indices.empty() &&
+		!OutMesh.Bones.empty();
+
+	UE_LOG(
+		"[FBX] ImportSkeletalMesh result detail: Vertices=%zu, Indices=%zu, Sections=%zu, Bones=%zu",
+		OutMesh.Vertices.size(),
+		OutMesh.Indices.size(),
+		OutMesh.Sections.size(),
+		OutMesh.Bones.size()
+	);
 
 	DestroyFbxSceneContext(Context);
 

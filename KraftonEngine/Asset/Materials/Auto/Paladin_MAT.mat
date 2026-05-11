@@ -1,0 +1,14 @@
+{
+  "Origin" : "FbxImport",
+  "Parameters" : {
+    "HasNormalMap" : 0.000000,
+    "SectionColor" : [1.000000, 1.000000, 1.000000, 1.000000],
+    "_pad" : [0.000000, 0.000000, 0.000000]
+  },
+  "PathFileName" : "Asset/Materials/Auto/Paladin_MAT.mat",
+  "RenderPass" : "Opaque",
+  "ShaderPath" : "Shaders/Geometry/UberLit.hlsl",
+  "Textures" : {
+    "DiffuseTexture" : "C:\\Users\\jungle\\HB\\source\\repos\\W10\\KraftonEngine\\Data\\Flair.fbm/Paladin_diffuse.png"
+  }
+}

@@ -47,15 +47,17 @@ void FBillboardSceneProxy::UpdateMesh()
 	{
 		// TexturedQuad (FVertexPNCT with UVs)
 		MeshBuffer = &FMeshBufferManager::Get().GetMeshBuffer(EMeshShape::TexturedQuad);
+		SetGeometryFromMeshBuffer(MeshBuffer);
 
 		// SectionDraws 단일 항목 — Material의 CachedSRVs로 텍스처 바인딩
-		const uint32 IndexCount = MeshBuffer->GetIndexBuffer().GetIndexCount();
+		const uint32 IndexCount = GetGeometryBuffer().IndexCount;
 		SectionDraws.clear();
 		SectionDraws.push_back({ Mat, 0, IndexCount });
 	}
 	else
 	{
 		MeshBuffer = GetOwner()->GetMeshBuffer();
+		SetGeometryFromMeshBuffer(MeshBuffer);
 		SectionDraws.clear();
 	}
 }

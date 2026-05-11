@@ -78,7 +78,8 @@ UActorComponent* AActor::AddComponentByClass(UClass* Class)
 	{
 		if (USceneComponent* SceneComponent = Cast<USceneComponent>(Comp))
 		{
-			RootComponent = SceneComponent;
+			SetRootComponent(SceneComponent);
+			SceneComponent->SetWorldLocation(PendingActorLocation);
 		}
 	}
 	bPrimitiveCacheDirty = true;
@@ -99,7 +100,7 @@ void AActor::RegisterComponent(UActorComponent* Comp)
 		{
 			if (USceneComponent* SceneComponent = Cast<USceneComponent>(Comp))
 			{
-				RootComponent = SceneComponent;
+				SetRootComponent(SceneComponent);
 			}
 		}
 		bPrimitiveCacheDirty = true;

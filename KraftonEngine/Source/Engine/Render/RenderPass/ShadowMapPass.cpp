@@ -627,8 +627,8 @@ void FShadowMapPass::DrawShadowCasters(ID3D11DeviceContext* DC, FScene& Scene, F
 
 		if (!Partition && !LightFrustum.IntersectAABB(Proxy->GetCachedBounds())) continue;
 
-		FMeshBuffer* Mesh = Proxy->GetMeshBuffer();
-		if (!Mesh || !Mesh->IsValid()) continue;
+		const FGeometryBufferView& Geometry = Proxy->GetGeometryBuffer();
+		if (!Geometry.IsValid() || !Geometry.IndexBuffer) continue;
 
 		// Two-sided shadow: front-cull ↔ no-cull 전환
 		bool bTwoSided = Proxy->CastsShadowAsTwoSided();
@@ -644,12 +644,12 @@ void FShadowMapPass::DrawShadowCasters(ID3D11DeviceContext* DC, FScene& Scene, F
 		ID3D11Buffer* b1 = ShadowPerObjectCB.GetBuffer();
 		DC->VSSetConstantBuffers(ECBSlot::PerObject, 1, &b1);
 
-		ID3D11Buffer* VB = Mesh->GetVertexBuffer().GetBuffer();
-		uint32 VBStride = Mesh->GetVertexBuffer().GetStride();
+		ID3D11Buffer* VB = Geometry.VertexBuffer;
+		uint32 VBStride = Geometry.VertexStride;
 		uint32 Offset = 0;
 		DC->IASetVertexBuffers(0, 1, &VB, &VBStride, &Offset);
 
-		ID3D11Buffer* IB = Mesh->GetIndexBuffer().GetBuffer();
+		ID3D11Buffer* IB = Geometry.IndexBuffer;
 		if (IB)
 			DC->IASetIndexBuffer(IB, DXGI_FORMAT_R32_UINT, 0);
 

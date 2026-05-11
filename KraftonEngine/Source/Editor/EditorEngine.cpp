@@ -15,6 +15,7 @@
 #include "Editor/Viewport/LevelEditorViewportClient.h"
 #include "Object/ObjectFactory.h"
 #include "Mesh/StaticMeshManager.h"
+#include "Mesh/SkeletalMeshManager.h"
 #include "Core/ProjectSettings.h"
 #include "Input/InputSystem.h"
 #include "GameFramework/AActor.h"
@@ -54,6 +55,11 @@ void UEditorEngine::Init(FWindowsWindow* InWindow)
 	{
 		SCOPE_STARTUP_STAT("ObjManager::ScanMeshAssets");
 		FStaticMeshManager::ScanMeshAssets();
+	}
+
+	{
+		SCOPE_STARTUP_STAT("SkeletalMeshManager::ScanAssets");
+		FSkeletalMeshManager::ScanSkeletalMeshAssets();
 	}
 
 	{

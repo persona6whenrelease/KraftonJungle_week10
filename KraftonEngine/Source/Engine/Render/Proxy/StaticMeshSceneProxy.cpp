@@ -54,6 +54,7 @@ void FStaticMeshSceneProxy::UpdateMaterial()
 void FStaticMeshSceneProxy::UpdateMesh()
 {
 	MeshBuffer = GetOwner()->GetMeshBuffer();
+	SetGeometryFromMeshBuffer(MeshBuffer);
 	RebuildSectionDraws();
 }
 
@@ -73,6 +74,7 @@ void FStaticMeshSceneProxy::UpdateLOD(uint32 LODLevel)
 	CurrentLOD = LODLevel;
 	std::swap(MeshBuffer, LODData[LODLevel].MeshBuffer);
 	std::swap(SectionDraws, LODData[LODLevel].SectionDraws);
+	SetGeometryFromMeshBuffer(MeshBuffer);
 
 }
 
@@ -94,6 +96,7 @@ void FStaticMeshSceneProxy::RebuildSectionDraws()
 		LODCount = 1;
 		CurrentLOD = 0;
 		MeshBuffer = nullptr;
+		SetGeometryBuffer({});
 		SectionDraws.clear();
 
 		return;
@@ -136,5 +139,6 @@ void FStaticMeshSceneProxy::RebuildSectionDraws()
 	CurrentLOD = 0;
 	std::swap(MeshBuffer, LODData[0].MeshBuffer);
 	std::swap(SectionDraws, LODData[0].SectionDraws);
+	SetGeometryFromMeshBuffer(MeshBuffer);
 
 }

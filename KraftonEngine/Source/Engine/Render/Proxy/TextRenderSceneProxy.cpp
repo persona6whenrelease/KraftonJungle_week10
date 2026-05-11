@@ -31,6 +31,7 @@ void FTextRenderSceneProxy::UpdateMesh()
 {
 	// SelectionMask 아웃라인 패스에서 사용할 mesh/shader
 	MeshBuffer = GetOwner()->GetMeshBuffer();
+	SetGeometryFromMeshBuffer(MeshBuffer);
 	ProxyFlags |= EPrimitiveProxyFlags::FontBatched;
 
 	if (!TextMaterial)
@@ -44,7 +45,7 @@ void FTextRenderSceneProxy::UpdateMesh()
 	SectionDraws.clear();
 	if (MeshBuffer && TextMaterial)
 	{
-		uint32 IdxCount = MeshBuffer->GetIndexBuffer().GetIndexCount();
+		uint32 IdxCount = GetGeometryBuffer().IndexCount;
 		SectionDraws.push_back({ TextMaterial, 0, IdxCount });
 	}
 

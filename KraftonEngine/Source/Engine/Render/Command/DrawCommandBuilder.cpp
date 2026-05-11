@@ -13,6 +13,7 @@
 #include "Render/Pipeline/RenderCollector.h"
 #include "Materials/Material.h"
 #include "Texture/Texture2D.h"
+#include "Core/Log.h"
 
 // UpdateProxyLOD defined in RenderCollector.cpp (shared)
 extern void UpdateProxyLOD(FPrimitiveSceneProxy* Proxy, const FLODUpdateContext& LODCtx);
@@ -114,7 +115,12 @@ void FDrawCommandBuilder::ApplyMaterialRenderState(FDrawCommandRenderState& OutS
 // ============================================================
 void FDrawCommandBuilder::BuildCommandForProxy(const FPrimitiveSceneProxy& Proxy, ERenderPass Pass)
 {
-	if (!Proxy.GetMeshBuffer() || !Proxy.GetMeshBuffer()->IsValid()) return;
+	const FGeometryBufferView& Geometry = Proxy.GetGeometryBuffer();
+
+	if (!Geometry.IsValid())
+	{
+		return;
+	}
 
 	ID3D11DeviceContext* Ctx = CachedContext;
 
@@ -135,11 +141,25 @@ void FDrawCommandBuilder::BuildCommandForProxy(const FPrimitiveSceneProxy& Proxy
 
 	const bool bDepthOnly = (Pass == ERenderPass::PreDepth);
 
-	// MeshBuffer → FDrawCommandBuffer 변환
 	FDrawCommandBuffer ProxyBuffer;
-	ProxyBuffer.VB = Proxy.GetMeshBuffer()->GetVertexBuffer().GetBuffer();
-	ProxyBuffer.VBStride = Proxy.GetMeshBuffer()->GetVertexBuffer().GetStride();
-	ProxyBuffer.IB = Proxy.GetMeshBuffer()->GetIndexBuffer().GetBuffer();
+	ProxyBuffer.VB = Geometry.VertexBuffer;
+	ProxyBuffer.VBStride = Geometry.VertexStride;
+	ProxyBuffer.IB = Geometry.IndexBuffer;
+	ProxyBuffer.VertexCount = Geometry.VertexCount;
+
+	static bool bLoggedLargeDynamicMeshOnce = false;
+	if (!bLoggedLargeDynamicMeshOnce && Geometry.VertexCount > 100000)
+	{
+		bLoggedLargeDynamicMeshOnce = true;
+		UE_LOG(
+			"[DrawCommandBuilder] Large mesh reached builder. Pass=%u, Vertices=%u, Indices=%u, Sections=%zu, RenderPass=%u",
+			static_cast<uint32>(Pass),
+			Geometry.VertexCount,
+			Geometry.IndexCount,
+			Proxy.GetSectionDraws().size(),
+			static_cast<uint32>(Proxy.GetRenderPass())
+		);
+	}
 
 	// 섹션당 1개 커맨드 (per-section 셰이더)
 	for (const FMeshSectionDraw& Section : Proxy.GetSectionDraws())
@@ -191,7 +211,13 @@ void FDrawCommandBuilder::BuildCommandForProxy(const FPrimitiveSceneProxy& Proxy
 // ============================================================
 void FDrawCommandBuilder::BuildDecalCommandForReceiver(const FPrimitiveSceneProxy& ReceiverProxy, const FPrimitiveSceneProxy& DecalProxy)
 {
-	if (!ReceiverProxy.GetMeshBuffer() || !ReceiverProxy.GetMeshBuffer()->IsValid()) return;
+	const FGeometryBufferView& ReceiverGeometry =
+		ReceiverProxy.GetGeometryBuffer();
+
+	if (!ReceiverGeometry.IsValid())
+	{
+		return;
+	}
 
 	// Decal Material은 SectionDraws[0]에 저장됨
 	UMaterial* DecalMat = DecalProxy.GetSectionDraws().empty() ? nullptr : DecalProxy.GetSectionDraws()[0].Material;
@@ -212,9 +238,10 @@ void FDrawCommandBuilder::BuildDecalCommandForReceiver(const FPrimitiveSceneProx
 	DecalMat->FlushDirtyBuffers(CachedDevice, Ctx);
 
 	FDrawCommandBuffer ReceiverBuffer;
-	ReceiverBuffer.VB = ReceiverProxy.GetMeshBuffer()->GetVertexBuffer().GetBuffer();
-	ReceiverBuffer.VBStride = ReceiverProxy.GetMeshBuffer()->GetVertexBuffer().GetStride();
-	ReceiverBuffer.IB = ReceiverProxy.GetMeshBuffer()->GetIndexBuffer().GetBuffer();
+	ReceiverBuffer.VB = ReceiverGeometry.VertexBuffer;
+	ReceiverBuffer.VBStride = ReceiverGeometry.VertexStride;
+	ReceiverBuffer.IB = ReceiverGeometry.IndexBuffer;
+	ReceiverBuffer.VertexCount = ReceiverGeometry.VertexCount;
 
 	auto AddDraw = [&](uint32 FirstIndex, uint32 IndexCount)
 		{
@@ -251,7 +278,7 @@ void FDrawCommandBuilder::BuildDecalCommandForReceiver(const FPrimitiveSceneProx
 	}
 	else if (ReceiverBuffer.IB)
 	{
-		AddDraw(0, ReceiverProxy.GetMeshBuffer()->GetIndexBuffer().GetIndexCount());
+		AddDraw(0, ReceiverGeometry.IndexCount);
 	}
 }
 

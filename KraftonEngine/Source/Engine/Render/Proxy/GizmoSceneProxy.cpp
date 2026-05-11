@@ -47,6 +47,7 @@ void FGizmoSceneProxy::UpdateMesh()
 {
 	UGizmoComponent* Gizmo = GetGizmoComponent();
 	MeshBuffer = Gizmo->GetMeshBuffer();
+	SetGeometryFromMeshBuffer(MeshBuffer);
 	RebuildGizmoSectionDraws();
 }
 
@@ -66,6 +67,7 @@ void FGizmoSceneProxy::UpdatePerViewport(const FFrameContext& Frame)
 
 	// 모드 변경 시 메시가 바뀌므로 매 프레임 갱신
 	MeshBuffer = Gizmo->GetMeshBuffer();
+	SetGeometryFromMeshBuffer(MeshBuffer);
 	RebuildGizmoSectionDraws();
 
 	// Per-viewport 스케일 계산
@@ -99,7 +101,7 @@ void FGizmoSceneProxy::RebuildGizmoSectionDraws()
 	SectionDraws.clear();
 	if (MeshBuffer && GizmoMaterial)
 	{
-		uint32 IdxCount = MeshBuffer->GetIndexBuffer().GetIndexCount();
+		uint32 IdxCount = GetGeometryBuffer().IndexCount;
 		SectionDraws.push_back({ GizmoMaterial, 0, IdxCount });
 	}
 }

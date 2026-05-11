@@ -90,6 +90,8 @@ public:
 	virtual void UpdateLOD(uint32 /*LODLevel*/) {}
 	virtual void UpdatePerViewport(const FFrameContext& /*Frame*/) {}
 
+	const FGeometryBufferView& GetGeometryBuffer() const { return GeometryBuffer; }
+	
 protected:
 	// ================================================================
 	// 서브클래스용 — Update*()에서 쓰기 가능한 캐시 데이터
@@ -123,6 +125,15 @@ protected:
 	// LOD (서브클래스 UpdateLOD에서 변경)
 	uint32 CurrentLOD = 0;
 
+	FGeometryBufferView GeometryBuffer;
+
+	void SetGeometryBuffer(const FGeometryBufferView& InGeometryBuffer)
+	{
+		GeometryBuffer = InGeometryBuffer;
+	}
+
+	void SetGeometryFromMeshBuffer(FMeshBuffer* InMeshBuffer);
+	
 private:
 	// ================================================================
 	// 내부 관리 상태 — FScene만 friend로 접근

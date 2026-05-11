@@ -68,6 +68,7 @@ void FPrimitiveSceneProxy::UpdateVisibility()
 void FPrimitiveSceneProxy::UpdateMesh()
 {
 	MeshBuffer = Owner->GetMeshBuffer();
+	SetGeometryFromMeshBuffer(MeshBuffer);
 
 	if (!DefaultMaterial)
 	{
@@ -80,8 +81,24 @@ void FPrimitiveSceneProxy::UpdateMesh()
 	SectionDraws.clear();
 	if (MeshBuffer && DefaultMaterial)
 	{
-		uint32 IdxCount = MeshBuffer->GetIndexBuffer().GetIndexCount();
+		const uint32 IdxCount = GeometryBuffer.IndexCount;
 		SectionDraws.push_back({ DefaultMaterial, 0, IdxCount });
 	}
 }
 
+void FPrimitiveSceneProxy::SetGeometryFromMeshBuffer(FMeshBuffer* InMeshBuffer)
+{
+	FGeometryBufferView View;
+
+	if (InMeshBuffer && InMeshBuffer->IsValid())
+	{
+		View.VertexBuffer = InMeshBuffer->GetVertexBuffer().GetBuffer();
+		View.VertexStride = InMeshBuffer->GetVertexBuffer().GetStride();
+		View.VertexCount = InMeshBuffer->GetVertexBuffer().GetVertexCount();
+
+		View.IndexBuffer = InMeshBuffer->GetIndexBuffer().GetBuffer();
+		View.IndexCount = InMeshBuffer->GetIndexBuffer().GetIndexCount();
+	}
+
+	SetGeometryBuffer(View);
+}
