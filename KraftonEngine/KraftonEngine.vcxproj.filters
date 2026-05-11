@@ -1089,6 +1089,11 @@
     <ClCompile Include="Source\Engine\Mesh\FBX\FBXImporter.cpp" />
     <ClCompile Include="Source\Engine\Mesh\FBX\FBXUtil.cpp" />
     <ClCompile Include="Source\Engine\Mesh\FBX\FbxMetaParser.cpp" />
+    <ClCompile Include="Source\Engine\Mesh\FBX\FbxMaterialImportUtils.cpp" />
+    <ClCompile Include="Source\Engine\Mesh\FBX\FbxMeshGeometryBuilder.cpp" />
+    <ClCompile Include="Source\Engine\Mesh\FBX\FbxSkeletalMeshAssembler.cpp" />
+    <ClCompile Include="Source\Engine\Mesh\FBX\FbxSkeletalMeshPartParser.cpp" />
+    <ClCompile Include="Source\Engine\Mesh\FBX\FbxStaticMeshParser.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Source\Editor\EditorEngine.h">
@@ -2345,6 +2350,12 @@
     <ClInclude Include="Source\Engine\Mesh\FBX\FBXImporter.h" />
     <ClInclude Include="Source\Engine\Mesh\FBX\FBXUtil.h" />
     <ClInclude Include="Source\Engine\Mesh\FBX\FbxMetaParser.h" />
+    <ClInclude Include="Source\Engine\Mesh\FBX\FBXImportTypes.h" />
+    <ClInclude Include="Source\Engine\Mesh\FBX\FbxMaterialImportUtils.h" />
+    <ClInclude Include="Source\Engine\Mesh\FBX\FbxMeshGeometryBuilder.h" />
+    <ClInclude Include="Source\Engine\Mesh\FBX\FbxSkeletalMeshAssembler.h" />
+    <ClInclude Include="Source\Engine\Mesh\FBX\FbxSkeletalMeshPartParser.h" />
+    <ClInclude Include="Source\Engine\Mesh\FBX\FbxStaticMeshParser.h" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="KraftonEngine.rc" />

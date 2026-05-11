@@ -32,7 +32,7 @@
 #include "Object/FName.h"
 #include "Object/ObjectIterator.h"
 #include "Materials/Material.h"
-#include "Mesh/FBXManager.h"
+#include "Mesh/FBX/FBXManager.h"
 #include "Mesh/ObjManager.h"
 #include "Mesh/SkeletalMesh.h"
 #include "Mesh/StaticMesh.h"

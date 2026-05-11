@@ -3,7 +3,7 @@
 #include <cmath>
 #include <cstring>
 #include "Engine/Runtime/Engine.h"
-#include "Mesh/FBXManager.h"
+#include "Mesh/FBX/FBXManager.h"
 #include "Object/ObjectFactory.h"
 #include "Render/Proxy/SkeletalMeshSceneProxy.h"
 #include "Serialization/Archive.h"
