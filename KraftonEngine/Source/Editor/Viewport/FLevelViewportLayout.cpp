@@ -1516,6 +1516,10 @@ void FLevelViewportLayout::RenderPaneToolbar(int32 SlotIndex)
 	char OverlayID[64];
 	snprintf(OverlayID, sizeof(OverlayID), "##PaneToolbar_%d", SlotIndex);
 
+	if (ImGuiViewport* MainViewport = ImGui::GetMainViewport())
+	{
+		ImGui::SetNextWindowViewport(MainViewport->ID);
+	}
 	ImGui::SetNextWindowPos(ImVec2(PaneRect.X, PaneRect.Y));
 	ImGui::SetNextWindowBgAlpha(0.4f);
 	ImGui::SetNextWindowSize(ImVec2(0, 0)); // auto-size
@@ -1526,7 +1530,8 @@ void FLevelViewportLayout::RenderPaneToolbar(int32 SlotIndex)
 		ImGuiWindowFlags_NoSavedSettings |
 		ImGuiWindowFlags_NoFocusOnAppearing |
 		ImGuiWindowFlags_NoNav |
-		ImGuiWindowFlags_NoMove;
+		ImGuiWindowFlags_NoMove |
+		ImGuiWindowFlags_NoBringToFrontOnFocus;
 
 	ImGui::Begin(OverlayID, nullptr, OverlayFlags);
 	{

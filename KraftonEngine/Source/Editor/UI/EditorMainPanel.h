@@ -9,6 +9,7 @@
 #include "Editor/UI/EditorShadowMapDebugWidget.h"
 #include "Editor/UI/EditorProjectSettingsWidget.h"
 #include "Editor/UI/EditorCurveWidget.h"
+#include "Editor/UI/EditorSkeletalMeshViewerWidget.h"
 #include "Editor/Packaging/EditorPackageSettings.h"
 #include "Editor/UI/ContentBrowser/ContentBrowser.h"
 #include "Math/Vector.h"
@@ -66,6 +67,7 @@ private:
 	FEditorSceneWidget SceneWidget;
 	FEditorStatWidget StatWidget;
 	FEditorCurveWidget CurveWidget;
+	FEditorSkeletalMeshViewerWidget SkeletalMeshViewerWidget;
 	FEditorContentBrowserWidget ContentBrowserWidget;
 	EditorShadowMapDebugWidget ShadowMapDebugWidget;
 	EditorProjectSettingsWidget ProjectSettingsWidget;

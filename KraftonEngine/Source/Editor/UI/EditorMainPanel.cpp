@@ -69,6 +69,8 @@ void FEditorMainPanel::Create(FWindowsWindow* InWindow, FRenderer& InRenderer, U
 	ImGuiIO& IO = ImGui::GetIO();
 	IO.IniFilename = "Settings/imgui.ini";
 	IO.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+	IO.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
+	IO.ConfigViewportsNoTaskBarIcon = true;
 
 	Window = InWindow;
 	EditorEngine = InEditorEngine;
@@ -85,6 +87,7 @@ void FEditorMainPanel::Create(FWindowsWindow* InWindow, FRenderer& InRenderer, U
 	SceneWidget.Initialize(InEditorEngine);
 	StatWidget.Initialize(InEditorEngine);
 	CurveWidget.Initialize(InEditorEngine);
+	SkeletalMeshViewerWidget.Initialize(InEditorEngine);
 	ContentBrowserWidget.Initialize(InEditorEngine, InRenderer.GetFD3DDevice().GetDevice());
 	ShadowMapDebugWidget.Initialize(InEditorEngine);
 }
@@ -147,6 +150,16 @@ void FEditorMainPanel::Render(float DeltaTime)
 		ControlWidget.Render(DeltaTime);
 	}
 
+	if (!bHideEditorWindows && Settings.UI.bConsole)
+	{
+		SCOPE_STAT_CAT("ConsoleWidget.Render", "5_UI");
+		if (ImGuiViewport* MainViewport = ImGui::GetMainViewport())
+		{
+			ImGui::SetNextWindowViewport(MainViewport->ID);
+		}
+		ConsoleWidget.Render(DeltaTime);
+	}
+
 	if (!bHideEditorWindows && Settings.UI.bProperty)
 	{
 		SCOPE_STAT_CAT("PropertyWidget.Render", "5_UI");
@@ -169,6 +182,12 @@ void FEditorMainPanel::Render(float DeltaTime)
 	{
 		SCOPE_STAT_CAT("CurveWidget.Render", "5_UI");
 		CurveWidget.Render(DeltaTime);
+	}
+
+	if (!bHideEditorWindows && Settings.UI.bSkeletalMeshViewer)
+	{
+		SCOPE_STAT_CAT("SkeletalMeshViewerWidget.Render", "5_UI");
+		SkeletalMeshViewerWidget.Render(DeltaTime);
 	}
 
 	if (!bHideEditorWindows && Settings.UI.bContentBrowser)
@@ -199,6 +218,11 @@ void FEditorMainPanel::Render(float DeltaTime)
 
 	ImGui::Render();
 	ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+	if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+	{
+		ImGui::UpdatePlatformWindows();
+		ImGui::RenderPlatformWindowsDefault();
+	}
 }
 
 void FEditorMainPanel::RenderMainMenuBar()
@@ -258,11 +282,13 @@ void FEditorMainPanel::RenderMainMenuBar()
 	}
 	if (ImGui::BeginPopup("##WidgetListPopup"))
 	{
+		ImGui::Checkbox("Console", &Settings.UI.bConsole);
 		ImGui::Checkbox("Control", &Settings.UI.bControl);
 		ImGui::Checkbox("Property", &Settings.UI.bProperty);
 		ImGui::Checkbox("Scene", &Settings.UI.bScene);
 		ImGui::Checkbox("Stat", &Settings.UI.bStat);
 		ImGui::Checkbox("Curve", &Settings.UI.bCurve);
+		ImGui::Checkbox("SkeletalMesh Viewer", &Settings.UI.bSkeletalMeshViewer);
 		ImGui::Checkbox("ContentBrowser", &Settings.UI.bContentBrowser);
 		ImGui::Checkbox("Editor Debug", &Settings.UI.bEditorDebug);
 		ImGui::Checkbox("Shadow Map Debug", &Settings.UI.bShadowMapDebug);
@@ -953,6 +979,7 @@ void FEditorMainPanel::RenderConsoleDrawer(float DeltaTime)
 		MainViewport->WorkPos.x,
 		MainViewport->WorkPos.y + MainViewport->WorkSize.y - FooterHeight - DrawerHeight);
 	const ImVec2 DrawerSize(MainViewport->WorkSize.x, DrawerHeight);
+	ImGui::SetNextWindowViewport(MainViewport->ID);
 	ImGui::SetNextWindowPos(DrawerPos, ImGuiCond_Always);
 	ImGui::SetNextWindowSize(DrawerSize, ImGuiCond_Always);
 	if (bBringConsoleDrawerToFrontNextFrame)
@@ -966,6 +993,7 @@ void FEditorMainPanel::RenderConsoleDrawer(float DeltaTime)
 		| ImGuiWindowFlags_NoMove
 		| ImGuiWindowFlags_NoResize
 		| ImGuiWindowFlags_NoNav
+		| ImGuiWindowFlags_NoBringToFrontOnFocus
 		| ImGuiWindowFlags_NoFocusOnAppearing;
 
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 8.0f));
@@ -1001,6 +1029,7 @@ void FEditorMainPanel::RenderFooterOverlay(float DeltaTime)
 		MainViewport->WorkPos.y + MainViewport->WorkSize.y - FooterHeight);
 	const ImVec2 FooterSize(MainViewport->WorkSize.x, FooterHeight);
 
+	ImGui::SetNextWindowViewport(MainViewport->ID);
 	ImGui::SetNextWindowPos(FooterPos, ImGuiCond_Always);
 	ImGui::SetNextWindowSize(FooterSize, ImGuiCond_Always);
 	ImGuiWindowFlags Flags = ImGuiWindowFlags_NoDecoration
@@ -1008,7 +1037,9 @@ void FEditorMainPanel::RenderFooterOverlay(float DeltaTime)
 		| ImGuiWindowFlags_NoSavedSettings
 		| ImGuiWindowFlags_NoMove
 		| ImGuiWindowFlags_NoResize
-		| ImGuiWindowFlags_NoNav;
+		| ImGuiWindowFlags_NoNav
+		| ImGuiWindowFlags_NoBringToFrontOnFocus
+		| ImGuiWindowFlags_NoFocusOnAppearing;
 
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f);
@@ -1265,6 +1296,7 @@ void FEditorMainPanel::HideEditorWindows()
 	Settings.UI.bScene = false;
 	Settings.UI.bStat = false;
 	Settings.UI.bCurve = false;
+	Settings.UI.bSkeletalMeshViewer = false;
 	Settings.UI.bContentBrowser = false;
 	Settings.UI.bImGUISettings = false;
 	Settings.UI.bEditorDebug = false;

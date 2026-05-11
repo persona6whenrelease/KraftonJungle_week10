@@ -68,6 +68,7 @@ namespace
 		const std::filesystem::path DiskPath(MatDiskPath);
 		if (std::filesystem::exists(DiskPath))
 		{
+			UE_LOG("[FBXImporter] Auto material exists; skip overwrite. Path=%s", MatPath.c_str());
 			return MatPath;
 		}
 
@@ -79,9 +80,31 @@ namespace
 		JsonData["ShaderPath"] = "Shaders/Geometry/UberLit.hlsl";
 		JsonData["RenderPass"] = "Opaque";
 
-		if (!MaterialInfo.DiffuseTexturePath.empty())
+		const bool bHasAnyTexture =
+			!MaterialInfo.DiffuseTexturePath.empty() ||
+			!MaterialInfo.NormalTexturePath.empty() ||
+			!MaterialInfo.SpecularTexturePath.empty() ||
+			!MaterialInfo.EmissiveTexturePath.empty();
+
+		if (bHasAnyTexture)
 		{
-			JsonData["Textures"]["DiffuseTexture"] = MaterialInfo.DiffuseTexturePath;
+			if (!MaterialInfo.DiffuseTexturePath.empty())
+			{
+				JsonData["Textures"]["DiffuseTexture"] = MaterialInfo.DiffuseTexturePath;
+			}
+			if (!MaterialInfo.NormalTexturePath.empty())
+			{
+				JsonData["Textures"]["NormalTexture"] = MaterialInfo.NormalTexturePath;
+			}
+			if (!MaterialInfo.SpecularTexturePath.empty())
+			{
+				JsonData["Textures"]["SpecularTexture"] = MaterialInfo.SpecularTexturePath;
+			}
+			if (!MaterialInfo.EmissiveTexturePath.empty())
+			{
+				JsonData["Textures"]["EmissiveTexture"] = MaterialInfo.EmissiveTexturePath;
+			}
+
 			JsonData["Parameters"]["SectionColor"][0] = 1.0f;
 			JsonData["Parameters"]["SectionColor"][1] = 1.0f;
 			JsonData["Parameters"]["SectionColor"][2] = 1.0f;
