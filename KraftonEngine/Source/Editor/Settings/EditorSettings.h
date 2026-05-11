@@ -64,6 +64,7 @@ public:
 		bool bImGUISettings = false;
 		bool bEditorDebug = false;
 		bool bShadowMapDebug = false;
+		bool bSkeletalMeshViewer = false;
 	} UI;
 
 	void SaveToFile(const FString& Path) const;
