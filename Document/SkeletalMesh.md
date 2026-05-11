@@ -37,7 +37,7 @@
 ---
 
 ## 3. 기수행된 수정 사항 (Applied Fixes)
-1. **Transpose 적용**: `FbxMatrixToFMatrix`에서 Column-Major -> Row-Major 변환을 위해 행렬 전치 수행.
+1. **Transpose 제거**: `FbxMatrixToFMatrix`에서 불필요한 전치(Transpose)를 제거. 실측 결과 FBX(FbxAMatrix)와 엔진(FMatrix) 모두 Row 3에 Translation을 저장하는 동일한 메모리 레이아웃을 사용함을 확인.
 2. **연산 순서 교정**: 
     - 계층 구조: `Local * Parent`
     - 스키닝: `InverseBind * ComponentSpace`

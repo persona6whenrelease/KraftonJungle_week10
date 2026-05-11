@@ -209,7 +209,7 @@ void FFbxImporter::ExtractMesh(FbxMesh* Mesh, FSkeletalMesh* RawMesh, USkeletalM
 			// IBP 계산: 메시 노드 변환(M)과 본 글로벌(L) 모두 반영.
 			// FBX(Column-Major)에서 본의 메시 공간 바인드 글로벌 = M^-1 * L 이므로
 			// IBP_FBX = (M^-1 * L)^-1 = L^-1 * M.
-			// FbxMatrixToFMatrix가 transpose를 적용하므로 FBX 공간에서 합성 후 한 번에 변환.
+			// FbxMatrixToFMatrix는 직접 복사를 수행하므로 FBX 공간에서 모든 행렬 합성을 마친 뒤 변환한다.
 			{
 				FbxAMatrix FbxTransformMatrix;
 				Cluster->GetTransformMatrix(FbxTransformMatrix);            // 메시 노드 변환 M
@@ -222,7 +222,7 @@ void FFbxImporter::ExtractMesh(FbxMesh* Mesh, FSkeletalMesh* RawMesh, USkeletalM
 
 				// 진단 로그: 모든 본의 M, L, IBP Translation 한 줄 출력
 				const FMatrix& IBP = RawMesh->Bones[BoneIndex].InverseBindMatrix;
-				//UE_LOG("[IBP Diag] Bone[%d] %s M=(%.3f, %.3f, %.3f) L=(%.3f, %.3f, %.3f) IBP.Row3=(%.3f, %.3f, %.3f)",
+				{		//UE_LOG("[IBP Diag] Bone[%d] %s M=(%.3f, %.3f, %.3f) L=(%.3f, %.3f, %.3f) IBP.Row3=(%.3f, %.3f, %.3f)",
 				//	BoneIndex, Link->GetName(),
 				//	(float)FbxTransformMatrix.Get(3, 0), (float)FbxTransformMatrix.Get(3, 1), (float)FbxTransformMatrix.Get(3, 2),
 				//	(float)FbxTransformLinkMatrix.Get(3, 0), (float)FbxTransformLinkMatrix.Get(3, 1), (float)FbxTransformLinkMatrix.Get(3, 2),
@@ -237,6 +237,7 @@ void FFbxImporter::ExtractMesh(FbxMesh* Mesh, FSkeletalMesh* RawMesh, USkeletalM
 				//		(float)FbxTransformLinkMatrix.Get(0, 3), (float)FbxTransformLinkMatrix.Get(1, 3), (float)FbxTransformLinkMatrix.Get(2, 3),
 				//		IBP.M[0][3], IBP.M[1][3], IBP.M[2][3]);
 				//}
+				}
 			}
 
 			// 이 본에 영향을 받는 정점 인덱스와 가중치 추출

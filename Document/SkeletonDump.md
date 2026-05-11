@@ -5,12 +5,12 @@
 ## 1. 행렬 컨벤션 변환 (FBX SDK -> Engine)
 
 ### 현상
-- FBX SDK는 **Column-Major (M * V)** 방식을 사용하며, 엔진은 **Row-Major (V * M)** 방식을 사용함.
-- 현재 `FbxMatrixToFMatrix`에서 데이터를 단순 복사하여 엔진 내 행렬이 전치(Transpose)된 상태로 저장됨.
+- FBX SDK(FbxAMatrix)는 내부적으로 Column-Vector convention을 따를 수 있으나, 메모리 레이아웃은 Row 3에 Translation을 저장하는 Row-Major 형식을 사용함.
+- 엔진의 `FMatrix` 또한 Row 3에 Translation을 저장하므로, 두 데이터 간의 **메모리 레이아웃은 동일**함.
 
 ### 수정 사항
-- `FBXImporter.cpp`의 `FbxMatrixToFMatrix` 함수 수정.
-- 데이터를 복사할 때 `OutMat.M[c][r] = FbxMat.Get(r, c)`와 같이 인덱스를 교차하여 전치 수행.
+- `FBXImporter.cpp`의 `FbxMatrixToFMatrix` 함수에서 **전치(Transpose) 없이 직접 복사**하도록 수정.
+- 데이터를 복사할 때 `OutMat.M[r][c] = (float)FbxMat.Get(r, c)`와 같이 순차적으로 복사하여 데이터 무결성 유지.
 
 ---
 
