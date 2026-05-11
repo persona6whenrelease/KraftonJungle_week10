@@ -1302,32 +1302,11 @@ void FFbxMetaParser::BuildSkeletonTables()
 			}
 		}
 
-		int32 SkeletonId = -1;
-		auto ExistingSkeletonIt = RootBoneIdToSkeletonId.find(RootBoneId);
-		if (ExistingSkeletonIt != RootBoneIdToSkeletonId.end())
-		{
-			SkeletonId = ExistingSkeletonIt->second;
-		}
-		else
-		{
-			SkeletonId = static_cast<int32>(ImportMeta.Skeletons.size());
-			FFbxSkeletonMeta SkeletonMeta;
-			SkeletonMeta.SkeletonId = SkeletonId;
-			SkeletonMeta.RootBoneId = RootBoneId;
-			SkeletonMeta.bValid = IsValidIndex(ImportMeta.Bones, RootBoneId);
-			SkeletonMeta.bBuiltFromSkinClusters = true;
-			SkeletonMeta.bHasSingleRoot = !bSyntheticRoot;
-			if (SkeletonMeta.bValid)
-			{
-				const FFbxBoneMeta& RootBone = ImportMeta.Bones[RootBoneId];
-				SkeletonMeta.RootNodeId = RootBone.NodeId;
-				SkeletonMeta.Name = RootBone.Name;
-			}
-
-			AddBoneDfs(RootBoneId, SkeletonMeta, SkeletonId);
-			ImportMeta.Skeletons.push_back(SkeletonMeta);
-			RootBoneIdToSkeletonId[RootBoneId] = SkeletonId;
-		}
+		const int32 SkeletonId = FindOrCreateSkeletonForRoot(
+			RootBoneId,
+			true,
+			!bSyntheticRoot,
+			RootBoneIdToSkeletonId);
 
 		SkinMeta.SkeletonId = SkeletonId;
 		if (IsValidIndex(ImportMeta.Meshes, SkinMeta.MeshId))
@@ -1341,6 +1320,79 @@ void FFbxMetaParser::BuildSkeletonTables()
 			}
 		}
 	}
+
+	for (int32 BoneId = 0; BoneId < static_cast<int32>(ImportMeta.Bones.size()); ++BoneId)
+	{
+		const int32 RootBoneId = FindTopRootBone(BoneId);
+		if (!IsValidIndex(ImportMeta.Bones, RootBoneId) ||
+			RootBoneIdToSkeletonId.find(RootBoneId) != RootBoneIdToSkeletonId.end())
+		{
+			continue;
+		}
+
+		if (!ShouldBuildRigidSkeletonForRoot(RootBoneId))
+		{
+			continue;
+		}
+
+		FindOrCreateSkeletonForRoot(
+			RootBoneId,
+			false,
+			true,
+			RootBoneIdToSkeletonId);
+	}
+}
+
+int32 FFbxMetaParser::FindOrCreateSkeletonForRoot(
+	int32 RootBoneId,
+	bool bBuiltFromSkinClusters,
+	bool bHasSingleRoot,
+	TMap<int32, int32>& RootBoneIdToSkeletonId)
+{
+	if (!IsValidIndex(ImportMeta.Bones, RootBoneId))
+	{
+		return -1;
+	}
+
+	auto ExistingSkeletonIt = RootBoneIdToSkeletonId.find(RootBoneId);
+	if (ExistingSkeletonIt != RootBoneIdToSkeletonId.end())
+	{
+		const int32 ExistingSkeletonId = ExistingSkeletonIt->second;
+		if (IsValidIndex(ImportMeta.Skeletons, ExistingSkeletonId))
+		{
+			FFbxSkeletonMeta& SkeletonMeta = ImportMeta.Skeletons[ExistingSkeletonId];
+			SkeletonMeta.bBuiltFromSkinClusters = SkeletonMeta.bBuiltFromSkinClusters || bBuiltFromSkinClusters;
+			SkeletonMeta.bHasSingleRoot = SkeletonMeta.bHasSingleRoot && bHasSingleRoot;
+		}
+		return ExistingSkeletonId;
+	}
+
+	const int32 SkeletonId = static_cast<int32>(ImportMeta.Skeletons.size());
+	FFbxSkeletonMeta SkeletonMeta;
+	SkeletonMeta.SkeletonId = SkeletonId;
+	SkeletonMeta.RootBoneId = RootBoneId;
+	SkeletonMeta.bValid = true;
+	SkeletonMeta.bBuiltFromSkinClusters = bBuiltFromSkinClusters;
+	SkeletonMeta.bHasSingleRoot = bHasSingleRoot;
+
+	const FFbxBoneMeta& RootBone = ImportMeta.Bones[RootBoneId];
+	SkeletonMeta.RootNodeId = RootBone.NodeId;
+	SkeletonMeta.Name = RootBone.Name.empty()
+		? "Skeleton_" + std::to_string(SkeletonId)
+		: RootBone.Name;
+
+	AddBoneDfs(RootBoneId, SkeletonMeta, SkeletonId);
+	ImportMeta.Skeletons.push_back(SkeletonMeta);
+	RootBoneIdToSkeletonId[RootBoneId] = SkeletonId;
+
+	UE_LOG("[FBXMetaParser] Built %s skeleton table. SkeletonId=%d RootBoneId=%d RootName=%s Bones=%u",
+		bBuiltFromSkinClusters ? "skinned" : "rigid",
+		SkeletonId,
+		RootBoneId,
+		RootBone.Name.c_str(),
+		static_cast<uint32>(ImportMeta.Skeletons.back().BoneIds.size()));
+
+	return SkeletonId;
 }
 
 void FFbxMetaParser::AddBoneDfs(int32 CurrentBoneId, FFbxSkeletonMeta& SkeletonMeta, uint32 SkeletonId)
@@ -1393,6 +1445,35 @@ int32 FFbxMetaParser::FindSkeletonRootBoneForSkin(const TArray<int32>& BoneIds) 
 	}
 
 	return SharedRootBoneId;
+}
+
+bool FFbxMetaParser::ShouldBuildRigidSkeletonForRoot(int32 RootBoneId) const
+{
+	if (!IsValidIndex(ImportMeta.Bones, RootBoneId))
+	{
+		return false;
+	}
+
+	for (const FFbxMeshMeta& MeshMeta : ImportMeta.Meshes)
+	{
+		if (MeshMeta.bHasSkin || !MeshMeta.Node)
+		{
+			continue;
+		}
+
+		const int32 AttachedBoneId = FindNearestParentBoneIdForNode(MeshMeta.Node);
+		if (!IsValidIndex(ImportMeta.Bones, AttachedBoneId))
+		{
+			continue;
+		}
+
+		if (FindTopRootBone(AttachedBoneId) == RootBoneId)
+		{
+			return true;
+		}
+	}
+
+	return false;
 }
 
 int32 FFbxMetaParser::FindSkeletonIdForBone(int32 BoneId) const
@@ -1552,6 +1633,7 @@ void FFbxMetaParser::ClassifyMeshes()
 		{
 			MeshMeta.bRigidAttachedCandidate = true;
 			MeshMeta.bStaticCandidate = false;
+			MeshMeta.bSkeletalCandidate = true;
 			MeshMeta.bIndependentStaticCandidate = false;
 			AddUniqueId(ImportMeta.RigidAttachedMeshIds, MeshMeta.MeshId);
 			AddUniqueId(ImportMeta.Skeletons[MeshMeta.AttachedSkeletonId].RigidAttachedMeshIds, MeshMeta.MeshId);
