@@ -23,7 +23,7 @@ public:
 	FViewportRenderOptions& GetRenderOptions() { return RenderOptions; }
 	const FViewportRenderOptions& GetRenderOptions() const { return RenderOptions; }
 
-	void Tick(float DeltaTime, bool bViewportHovered);
+	void Tick(float DeltaTime, bool bViewportHovered, bool bIsCapturing);
 
 private:
 	UCameraComponent* Camera = nullptr;

@@ -130,9 +130,10 @@ void FEditorSkeletalMeshViewerWidget::ReleasePreviewScene()
 	}
 }
 
-void FEditorSkeletalMeshViewerWidget::SetPreviewMesh(USkeletalMesh* InMesh)
+void FEditorSkeletalMeshViewerWidget::SetPreviewMesh(USkeletalMesh* InMesh, bool bResetCamera)
 {
 	EnsurePreviewScene();
+	PreviewSkeletalMesh = InMesh;
 
 	if (!PreviewMeshComponent)
 	{
@@ -153,7 +154,7 @@ void FEditorSkeletalMeshViewerWidget::SetPreviewMesh(USkeletalMesh* InMesh)
 		PreviewMeshComponent->SetRelativeLocation(FVector(-Center.X, -Center.Y, -Center.Z));
 	}
 
-	if (PreviewViewportClient)
+	if (bResetCamera && PreviewViewportClient)
 	{
 		PreviewViewportClient->FrameMesh(MeshAsset);
 	}
@@ -308,6 +309,10 @@ void FEditorSkeletalMeshViewerWidget::RenderViewportPanel(float DeltaTime)
 	}
 
 	USkeletalMesh* SelectedMesh = GetSelectedSkeletalMesh();
+	if (!SelectedMesh && PreviewSkeletalMesh)
+	{
+		SelectedMesh = PreviewSkeletalMesh;
+	}
 	if (!SelectedMesh)
 	{
 		ImGui::TextDisabled("No SkeletalMesh loaded");
@@ -317,19 +322,57 @@ void FEditorSkeletalMeshViewerWidget::RenderViewportPanel(float DeltaTime)
 
 	EnsurePreviewScene();
 
+	// 에디터 메인 뷰포트에서 액터를 선택하는 등 외부 동작 후 preview의 SceneProxy가
+	// 누락되는 케이스 방어 — 컴포넌트 상태가 어긋났으면 매 프레임 자가 복구한다.
+	// 사용자의 카메라 조작을 보존하기 위해 복구 경로에서는 FrameMesh를 건너뛴다.
+	if (PreviewMeshComponent &&
+		(PreviewMeshComponent->GetSkeletalMesh() != SelectedMesh ||
+			PreviewMeshComponent->GetSceneProxy() == nullptr))
+	{
+		SetPreviewMesh(SelectedMesh, /*bResetCamera=*/false);
+	}
+
+	if (PreviewSkeletalMesh &&
+		PreviewMeshComponent &&
+		PreviewMeshComponent->GetSkeletalMesh() != PreviewSkeletalMesh)
+	{
+		PreviewMeshComponent->SetSkeletalMesh(PreviewSkeletalMesh);
+	}
+	if (PreviewSkeletalMesh &&
+		PreviewMeshComponent &&
+		!PreviewMeshComponent->GetSceneProxy())
+	{
+		PreviewMeshComponent->MarkRenderStateDirty();
+	}
+
 	if (PreviewViewport && PreviewViewportClient && EditorEngine)
 	{
 		const bool bViewportHovered = ImGui::IsWindowHovered();
-		const bool bPreviewMouseButtonDown =
-			ImGui::IsMouseDown(ImGuiMouseButton_Right) ||
-			ImGui::IsMouseDown(ImGuiMouseButton_Middle);
-		const bool bContinuePreviewMouseCapture =
-			bPreviewViewportWantsMouseCapture && bPreviewMouseButtonDown;
-		bPreviewViewportWantsMouseCapture = bViewportHovered || bContinuePreviewMouseCapture;
-		bPreviewViewportWantsKeyboardCapture =
-			bPreviewViewportWantsMouseCapture && ImGui::IsMouseDown(ImGuiMouseButton_Right);
+		const bool bRightMouseDown = ImGui::IsMouseDown(ImGuiMouseButton_Right);
+		const bool bMiddleMouseDown = ImGui::IsMouseDown(ImGuiMouseButton_Middle);
+		const bool bAnyCaptureButtonDown = bRightMouseDown || bMiddleMouseDown;
 
-		PreviewViewportClient->Tick(DeltaTime, bPreviewViewportWantsMouseCapture);
+		// preview 위에서 right/middle 마우스를 실제로 누른 순간에만 capture를 시작한다.
+		// hover만으로 capture를 켜면 에디터 뷰포트의 우클릭(액터 spawn 컨텍스트 메뉴 등)이
+		// preview 카메라로 새어 들어와 카메라가 점프하는 문제가 있다.
+		if (!bPreviewViewportWantsMouseCapture)
+		{
+			if (bViewportHovered &&
+				(ImGui::IsMouseClicked(ImGuiMouseButton_Right) ||
+					ImGui::IsMouseClicked(ImGuiMouseButton_Middle)))
+			{
+				bPreviewViewportWantsMouseCapture = true;
+			}
+		}
+		else if (!bAnyCaptureButtonDown)
+		{
+			bPreviewViewportWantsMouseCapture = false;
+		}
+		
+		bPreviewViewportWantsKeyboardCapture =
+			bPreviewViewportWantsMouseCapture && bRightMouseDown;
+
+		PreviewViewportClient->Tick(DeltaTime, bViewportHovered, bPreviewViewportWantsMouseCapture);
 
 		PreviewViewport->RequestResize(
 			static_cast<uint32>(ViewportSize.x),

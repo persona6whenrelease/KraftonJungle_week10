@@ -22,7 +22,7 @@ public:
 private:
 	void EnsurePreviewScene();
 	void ReleasePreviewScene();
-	void SetPreviewMesh(USkeletalMesh* PreviewMesh);
+	void SetPreviewMesh(USkeletalMesh* PreviewMesh, bool bResetCamera = true);
 	
 	void RenderResourcePanel();
 	void RenderViewportPanel(float DeltaTime);
@@ -31,6 +31,7 @@ private:
 	USkeletalMesh* GetSelectedSkeletalMesh() const;
 
 	UFBXSceneAsset* CurrentSceneAsset = nullptr;
+	USkeletalMesh* PreviewSkeletalMesh = nullptr;
 	FString CurrentFbxPath;
 	FString StatusMessage = "Double-click an FBX asset in ContentBrowser";
 	int32 SelectedResourceIndex = -1;

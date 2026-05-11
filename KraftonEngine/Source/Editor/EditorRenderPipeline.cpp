@@ -200,9 +200,30 @@ void FEditorRenderPipeline::RenderPreviewViewport(
 	FDrawCommandBuilder& Builder = Renderer.GetBuilder();
 	Builder.BeginCollect(Frame, Scene.GetProxyCount());
 
+	Scene.UpdateDirtyProxies();
 	PreviewWorld->GetPartition().FlushPrimitive();
+	Output.FrustumVisibleProxies.clear();
+	Output.RenderableProxies.clear();
+	Output.VisibleProxySet.clear();
+	const TArray<FPrimitiveSceneProxy*>& PreviewProxies = Scene.GetAllProxies();
+	Output.FrustumVisibleProxies.reserve(PreviewProxies.size());
+	Output.RenderableProxies.reserve(PreviewProxies.size());
+	for (FPrimitiveSceneProxy* Proxy : PreviewProxies)
+	{
+		if (!Proxy || !Proxy->IsVisible())
+		{
+			continue;
+		}
 
-	Collector.Collect(PreviewWorld, Frame, Output);
+		if (Proxy->HasProxyFlag(EPrimitiveProxyFlags::PerViewportUpdate))
+		{
+			Proxy->UpdatePerViewport(Frame);
+		}
+
+		Output.FrustumVisibleProxies.push_back(Proxy);
+		Output.RenderableProxies.push_back(Proxy);
+		Output.VisibleProxySet.insert(Proxy);
+	}
 
 	const FShowFlags& Flags = Frame.RenderOptions.ShowFlags;
 	Collector.CollectGrid(Frame.RenderOptions.GridSpacing, Frame.RenderOptions.GridHalfLineCount, Scene);

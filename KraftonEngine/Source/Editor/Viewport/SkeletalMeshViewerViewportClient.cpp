@@ -64,22 +64,39 @@ void FSkeletalMeshViewerViewportClient::FrameMesh(const FSkeletalMesh* MeshAsset
 	Camera->LookAt(FVector::ZeroVector);
 }
 
-void FSkeletalMeshViewerViewportClient::Tick(float DeltaTime, bool bViewportHovered)
+void FSkeletalMeshViewerViewportClient::Tick(float DeltaTime, bool bViewportHovered, bool bIsCapturing)
 {
-	if (!Camera || !bViewportHovered)
+	if (!Camera)
 	{
 		return;
 	}
 
 	ImGuiIO& IO = ImGui::GetIO();
 
-	const bool bRightMouseDown = ImGui::IsMouseDown(ImGuiMouseButton_Right);
-	const bool bMiddleMouseDown = ImGui::IsMouseDown(ImGuiMouseButton_Middle);
+	// const bool bRightMouseDown = ImGui::IsMouseDown(ImGuiMouseButton_Right);
+	// const bool bMiddleMouseDown = ImGui::IsMouseDown(ImGuiMouseButton_Middle);
 
 	const float MoveSpeed = ImGui::IsKeyDown(ImGuiKey_LeftShift) ? 35.0f : 10.0f;
 	const float RotateSpeed = 0.15f;
 	const float PanSpeed = 0.015f;
 	const float ZoomSpeed = 0.35f;
+
+	// Wheel zoom은 hover만으로 허용 — 직관적인 UX.
+	if (bViewportHovered && IO.MouseWheel != 0.0f)
+	{
+		Camera->SetWorldLocation(
+			Camera->GetWorldLocation() +
+			Camera->GetForwardVector() * IO.MouseWheel * ZoomSpeed);
+	}
+
+	// Drag/rotate/pan/WASD는 preview에서 명시적으로 클릭한 capture 상태에서만 동작.
+	if (!bIsCapturing)
+	{
+		return;
+	}
+
+	const bool bRightMouseDown = ImGui::IsMouseDown(ImGuiMouseButton_Right);
+	const bool bMiddleMouseDown = ImGui::IsMouseDown(ImGuiMouseButton_Middle);
 
 	if (bRightMouseDown)
 	{
@@ -141,10 +158,10 @@ void FSkeletalMeshViewerViewportClient::Tick(float DeltaTime, bool bViewportHove
 		}
 	}
 
-	if (IO.MouseWheel != 0.0f)
-	{
-		Camera->SetWorldLocation(
-			Camera->GetWorldLocation() +
-			Camera->GetForwardVector() * IO.MouseWheel * ZoomSpeed);
-	}
+	// if (IO.MouseWheel != 0.0f)
+	// {
+	// 	Camera->SetWorldLocation(
+	// 		Camera->GetWorldLocation() +
+	// 		Camera->GetForwardVector() * IO.MouseWheel * ZoomSpeed);
+	// }
 }
