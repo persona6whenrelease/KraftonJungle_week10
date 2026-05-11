@@ -268,6 +268,7 @@ void FOverlayStatSystem::RenderImGui(const UEditorEngine& Editor, const FRect& V
 	float CurrentX = ViewportLeft + PaddingX;
 	float CurrentY = ViewportTop + PaddingY;
 	float CurrentColumnWidth = 0.0f;
+	ImGuiViewport* MainViewport = ImGui::GetMainViewport();
 
 	ImGuiWindowFlags Flags =
 		ImGuiWindowFlags_NoDecoration |
@@ -276,7 +277,8 @@ void FOverlayStatSystem::RenderImGui(const UEditorEngine& Editor, const FRect& V
 		ImGuiWindowFlags_NoFocusOnAppearing |
 		ImGuiWindowFlags_NoNav |
 		ImGuiWindowFlags_NoMove |
-		ImGuiWindowFlags_NoInputs;
+		ImGuiWindowFlags_NoInputs |
+		ImGuiWindowFlags_NoBringToFrontOnFocus;
 
 	auto RenderWindow = [&](const char* WindowID, const char* Title, const ImVec4& BgColor, const TArray<FString>& Lines)
 		{
@@ -296,6 +298,10 @@ void FOverlayStatSystem::RenderImGui(const UEditorEngine& Editor, const FRect& V
 			}
 			CurrentX = (std::max)(ViewportLeft + PaddingX, (std::min)(CurrentX, ViewportRight - PaddingX - 40.0f));
 
+			if (MainViewport)
+			{
+				ImGui::SetNextWindowViewport(MainViewport->ID);
+			}
 			ImGui::SetNextWindowPos(ImVec2(CurrentX, CurrentY), ImGuiCond_Always);
 			ImGui::SetNextWindowBgAlpha(BgColor.w);
 			ImGui::PushStyleColor(ImGuiCol_WindowBg, BgColor);
