@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "Core/CoreTypes.h"
+#include "Mesh/MeshCommonTypes.h"
 #include "Object/ObjectIterator.h"
 #include "Render/Types/RenderTypes.h"
 #include <map>
@@ -8,15 +9,8 @@
 #include <memory>
 
 struct FStaticMesh;
-struct FStaticMaterial;
 struct FImportOptions;
 class UStaticMesh;
-
-struct FMeshAssetListItem
-{
-	FString DisplayName;
-	FString FullPath;
-};
 
 class FObjManager
 {

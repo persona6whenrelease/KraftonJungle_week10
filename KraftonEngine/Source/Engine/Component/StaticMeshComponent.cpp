@@ -4,6 +4,7 @@
 #include "Object/ObjectFactory.h"
 #include "Core/PropertyTypes.h"
 #include "Collision/RayUtils.h"
+#include "Mesh/FBX/FBXManager.h"
 #include "Mesh/StaticMeshAsset.h"
 #include "Engine/Runtime/Engine.h"
 #include "Render/Shader/ShaderManager.h"
@@ -26,25 +27,12 @@ void UStaticMeshComponent::SetStaticMesh(UStaticMesh* InMesh)
 	{
 		StaticMeshPath = InMesh->GetAssetPathFileName();
 		const TArray<FStaticMaterial>& DefaultMaterials = StaticMesh->GetStaticMaterials();
-
-		OverrideMaterials.resize(DefaultMaterials.size());
-		MaterialSlots.resize(DefaultMaterials.size());
-
-		for (int32 i = 0; i < (int32)DefaultMaterials.size(); ++i)
-		{
-			OverrideMaterials[i] = DefaultMaterials[i].MaterialInterface;
-
-			if (OverrideMaterials[i])
-				MaterialSlots[i].Path = OverrideMaterials[i]->GetAssetPathFileName();
-			else
-				MaterialSlots[i].Path = "None";
-		}
+		InitializeMaterialSlots(DefaultMaterials);
 	}
 	else
 	{
 		StaticMeshPath = "None";
-		OverrideMaterials.clear();
-		MaterialSlots.clear();
+		ClearMaterialSlots();
 	}
 	CacheLocalBounds();
 	MarkRenderStateDirty();
@@ -72,34 +60,6 @@ void UStaticMeshComponent::CacheLocalBounds()
 UStaticMesh* UStaticMeshComponent::GetStaticMesh() const
 {
 	return StaticMesh;
-}
-
-void UStaticMeshComponent::SetMaterial(int32 ElementIndex, UMaterial* InMaterial)
-{
-	if (ElementIndex >= 0 && ElementIndex < static_cast<int32>(OverrideMaterials.size()))
-	{
-		OverrideMaterials[ElementIndex] = InMaterial;
-
-		// MaterialSlots 동기화 — 씬 저장 시 경로가 올바르게 직렬화되도록
-		if (ElementIndex < static_cast<int32>(MaterialSlots.size()))
-		{
-			MaterialSlots[ElementIndex].Path = InMaterial
-				? InMaterial->GetAssetPathFileName()
-				: "None";
-		}
-
-		// 프록시에 Material dirty 전파
-		MarkProxyDirty(EDirtyFlag::Material);
-	}
-}
-
-UMaterial* UStaticMeshComponent::GetMaterial(int32 ElementIndex) const
-{
-	if (ElementIndex >= 0 && ElementIndex < OverrideMaterials.size())
-	{
-		return OverrideMaterials[ElementIndex];
-	}
-	return nullptr;
 }
 
 UStaticMeshComponent::~UStaticMeshComponent()
@@ -210,13 +170,6 @@ primitive AABB 기준으로 후보만 추립니다.
 	return false; // bHit;
 }
 
-// FArchive 기반 직렬화 — 복제 왕복용. 자산은 경로로만 들고, 실제 로드는 PostDuplicate에서.
-static FArchive& operator<<(FArchive& Ar, FMaterialSlot& Slot)
-{
-	Ar << Slot.Path;
-	return Ar;
-}
-
 void UStaticMeshComponent::Serialize(FArchive& Ar)
 {
 	UMeshComponent::Serialize(Ar);
@@ -231,29 +184,24 @@ void UStaticMeshComponent::PostDuplicate()
 	// 메시 에셋 재로딩
 	if (!StaticMeshPath.empty() && StaticMeshPath != "None")
 	{
-		ID3D11Device* Device = GEngine->GetRenderer().GetFD3DDevice().GetDevice();
-		UStaticMesh* Loaded = FObjManager::LoadObjStaticMesh(StaticMeshPath, Device);
+		const bool bFbxSceneMeshReference = StaticMeshPath.find("#Mesh_") != FString::npos;
+		UStaticMesh* Loaded = bFbxSceneMeshReference
+			? FFBXManager::LoadStaticMeshFromFbxSceneReference(StaticMeshPath)
+			: nullptr;
+		if (!Loaded && !bFbxSceneMeshReference)
+		{
+			ID3D11Device* Device = GEngine->GetRenderer().GetFD3DDevice().GetDevice();
+			Loaded = FObjManager::LoadObjStaticMesh(StaticMeshPath, Device);
+		}
 		if (Loaded)
 		{
 			// SetStaticMesh는 MaterialSlots를 덮어쓰므로, 직렬화된 슬롯 정보를 백업·복원한다.
 			TArray<FMaterialSlot> SavedSlots = MaterialSlots;
 			SetStaticMesh(Loaded);
 
-			// Override material 재로딩
 			for (int32 i = 0; i < (int32)MaterialSlots.size() && i < (int32)SavedSlots.size(); ++i)
-			{
 				MaterialSlots[i] = SavedSlots[i];
-				const FString& MatPath = MaterialSlots[i].Path;
-				if (MatPath.empty() || MatPath == "None")
-				{
-					OverrideMaterials[i] = nullptr;
-				}
-				else
-				{
-					UMaterial* LoadedMat = FMaterialManager::Get().GetOrCreateMaterial(MatPath);
-					OverrideMaterials[i] = LoadedMat;
-				}
-			}
+			RestoreOverrideMaterialsFromSlots();
 		}
 	}
 
@@ -266,20 +214,12 @@ void UStaticMeshComponent::GetEditableProperties(TArray<FPropertyDescriptor>& Ou
 {
 	UPrimitiveComponent::GetEditableProperties(OutProps);
 	OutProps.push_back({ "Static Mesh", EPropertyType::StaticMeshRef, &StaticMeshPath });
-
-	for (int32 i = 0; i < (int32)MaterialSlots.size(); ++i)
-	{
-		FPropertyDescriptor Desc;
-		Desc.Name = "Element " + std::to_string(i);
-		Desc.Type = EPropertyType::MaterialSlot;
-		Desc.ValuePtr = &MaterialSlots[i];
-		OutProps.push_back(Desc);
-	}
+	AppendMaterialSlotProperties(OutProps);
 }
 
 void UStaticMeshComponent::PostEditProperty(const char* PropertyName)
 {
-	UPrimitiveComponent::PostEditProperty(PropertyName);
+	UMeshComponent::PostEditProperty(PropertyName);
 
 	if (strcmp(PropertyName, "Static Mesh") == 0)
 	{
@@ -289,38 +229,21 @@ void UStaticMeshComponent::PostEditProperty(const char* PropertyName)
 		}
 		else
 		{
-			ID3D11Device* Device = GEngine->GetRenderer().GetFD3DDevice().GetDevice();
-			UStaticMesh* Loaded = FObjManager::LoadObjStaticMesh(StaticMeshPath, Device);
+			const bool bFbxSceneMeshReference = StaticMeshPath.find("#Mesh_") != FString::npos;
+			UStaticMesh* Loaded = bFbxSceneMeshReference
+				? FFBXManager::LoadStaticMeshFromFbxSceneReference(StaticMeshPath)
+				: nullptr;
+			if (!Loaded && !bFbxSceneMeshReference)
+			{
+				ID3D11Device* Device = GEngine->GetRenderer().GetFD3DDevice().GetDevice();
+				Loaded = FObjManager::LoadObjStaticMesh(StaticMeshPath, Device);
+			}
 			SetStaticMesh(Loaded);
 		}
 		CacheLocalBounds();
 		MarkWorldBoundsDirty();
 	}
 
-	if (strncmp(PropertyName, "Element ", 8) == 0)
-	{
-		// "Element 0"에서 8번째 인덱스부터 시작하는 숫자를 정수로 변환
-		int32 Index = atoi(&PropertyName[8]);
-
-		// 인덱스 범위 유효성 검사
-		if (Index >= 0 && Index < (int32)MaterialSlots.size())
-		{
-			FString NewMatPath = MaterialSlots[Index].Path;
-
-			if (NewMatPath == "None" || NewMatPath.empty())
-			{
-				SetMaterial(Index, nullptr);
-			}
-			else
-			{
-				UMaterial* LoadedMat = FMaterialManager::Get().GetOrCreateMaterial(NewMatPath);
-				if (LoadedMat)
-				{
-					SetMaterial(Index, LoadedMat);
-				}
-			}
-		}
-	}
 }
 
 

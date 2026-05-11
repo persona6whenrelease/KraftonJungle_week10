@@ -32,10 +32,6 @@ public:
 	void SetStaticMesh(UStaticMesh* InMesh);
 	UStaticMesh* GetStaticMesh() const;
 
-	void SetMaterial(int32 ElementIndex, UMaterial* InMaterial);
-	UMaterial* GetMaterial(int32 ElementIndex) const;
-	const TArray<UMaterial*>& GetOverrideMaterials() const { return OverrideMaterials; }
-
 	void Serialize(FArchive& Ar) override;
 	void PostDuplicate() override;
 
@@ -51,8 +47,6 @@ private:
 
 	UStaticMesh* StaticMesh = nullptr;
 	FString StaticMeshPath = "None";
-	TArray<UMaterial*> OverrideMaterials;
-	TArray<FMaterialSlot> MaterialSlots; // 경로 + UVScroll 묶음
 
 	FVector CachedLocalCenter = { 0, 0, 0 };
 	FVector CachedLocalExtent = { 0.5f, 0.5f, 0.5f };

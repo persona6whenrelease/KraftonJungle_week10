@@ -53,6 +53,12 @@ public:
 	virtual const char* GetDragItemType() override { return "ObjectContentItem"; }
 };
 
+class FBXElement final : public ContentBrowserElement
+{
+public:
+	virtual const char* GetDragItemType() override { return "FBXContentItem"; }
+};
+
 class PNGElement final : public ContentBrowserElement
 {
 public:

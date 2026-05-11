@@ -1,4 +1,4 @@
-#include "Editor/Viewport/FLevelViewportLayout.h"
+﻿#include "Editor/Viewport/FLevelViewportLayout.h"
 
 #include "Editor/EditorEngine.h"
 #include "Editor/Viewport/LevelEditorViewportClient.h"
@@ -39,7 +39,9 @@
 #include "Serialization/PrefabSaveManager.h"
 
 #include "GameFramework/StaticMeshActor.h"
-
+#include "Mesh/FBX/FBXManager.h"
+#include "Mesh/FBX/FBXSceneAsset.h"
+#include "Component/SkeletalMeshComponent.h"
 #include <algorithm>
 
 namespace
@@ -1051,7 +1053,89 @@ void FLevelViewportLayout::RenderViewportUI(float DeltaTime)
 					SelectionManager->Select(NewActor);
 				}
 			}
-			if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("PrefabContentItem"))
+			else if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("FBXContentItem"))
+			{
+				FContentItem ContentItem = *reinterpret_cast<const FContentItem*>(payload->Data);
+
+				const FString FbxPath = FPaths::ToUtf8(ContentItem.Path);
+				UFBXSceneAsset* SceneAsset = FFBXManager::LoadFbxScene(FbxPath);
+				if (!SceneAsset || SceneAsset->GetSceneComponents().empty())
+				{
+					UE_LOG("[Viewport] Failed to load FBX scene for drag-drop: %s",
+						FbxPath.c_str());
+				}
+				else
+				{
+					auto NewActor = Cast<AActor>(FObjectFactory::Get().Create(AActor::StaticClass()->GetName(), Editor->GetWorld()));
+					USceneComponent* RootComponent = NewActor->AddComponent<USceneComponent>();
+					NewActor->SetRootComponent(RootComponent);
+
+					int32 SpawnedMeshComponentCount = 0;
+					for (const FFBXSceneComponentDesc& Desc : SceneAsset->GetSceneComponents())
+					{
+						if (Desc.Type == EFBXSceneComponentType::StaticMesh)
+						{
+							const TArray<UStaticMesh*>& StaticMeshes = SceneAsset->GetStaticMeshes();
+							if (Desc.StaticMeshAssetIndex < 0 ||
+								Desc.StaticMeshAssetIndex >= static_cast<int32>(StaticMeshes.size()) ||
+								!StaticMeshes[Desc.StaticMeshAssetIndex])
+							{
+								UE_LOG("[Viewport] Skipping invalid FBX static scene component. Path=%s MeshId=%d AssetIndex=%d",
+									FbxPath.c_str(),
+									Desc.SourceMeshId,
+									Desc.StaticMeshAssetIndex);
+								continue;
+							}
+
+							UStaticMeshComponent* StaticMeshComponent = NewActor->AddComponent<UStaticMeshComponent>();
+							StaticMeshComponent->AttachToComponent(RootComponent);
+							StaticMeshComponent->SetStaticMesh(StaticMeshes[Desc.StaticMeshAssetIndex]);
+							++SpawnedMeshComponentCount;
+						}
+						else if (Desc.Type == EFBXSceneComponentType::SkeletalMesh)
+						{
+							const TArray<USkeletalMesh*>& SkeletalMeshes = SceneAsset->GetSkeletalMeshes();
+							if (Desc.SkeletalMeshAssetIndex < 0 ||
+								Desc.SkeletalMeshAssetIndex >= static_cast<int32>(SkeletalMeshes.size()) ||
+								!SkeletalMeshes[Desc.SkeletalMeshAssetIndex])
+							{
+								UE_LOG("[Viewport] Skipping invalid FBX skeletal scene component. Path=%s SkeletonId=%d AssetIndex=%d",
+									FbxPath.c_str(),
+									Desc.SourceSkeletonId,
+									Desc.SkeletalMeshAssetIndex);
+								continue;
+							}
+
+							USkeletalMeshComponent* SkeletalMeshComponent = NewActor->AddComponent<USkeletalMeshComponent>();
+							SkeletalMeshComponent->AttachToComponent(RootComponent);
+							SkeletalMeshComponent->SetSkeletalMesh(SkeletalMeshes[Desc.SkeletalMeshAssetIndex]);
+							++SpawnedMeshComponentCount;
+						}
+					}
+
+					if (SpawnedMeshComponentCount <= 0)
+					{
+						UE_LOG("[Viewport] FBX scene had no spawnable mesh components: %s", FbxPath.c_str());
+						UObjectManager::Get().DestroyObject(NewActor);
+					}
+					else
+					{
+						Editor->GetWorld()->AddActor(NewActor);
+
+						FVector SpawnLocation(0, 0, 0);
+						FPoint MP = { ImGui::GetIO().MousePos.x, ImGui::GetIO().MousePos.y };
+						if (TryComputePlacementLocation(GetActiveViewportSlotIndex(), MP, SpawnLocation))
+						{
+							NewActor->SetActorLocation(SpawnLocation);
+						}
+						if (SelectionManager)
+						{
+							SelectionManager->Select(NewActor);
+						}
+					}
+				}
+			}
+			else if(const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("PrefabContentItem"))
 			{
 				FContentItem ContentItem = *reinterpret_cast<const FContentItem*>(payload->Data);
 				FString PrefabPath = FPaths::ToUtf8(ContentItem.Path.wstring());

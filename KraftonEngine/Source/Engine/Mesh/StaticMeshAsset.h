@@ -3,11 +3,9 @@
 #include "Core/CoreTypes.h"
 #include "Math/Vector.h"
 #include "Engine/Object/Object.h"
+#include "Mesh/MeshCommonTypes.h"
 #include "Render/Resource/Buffer.h"
 #include "Serialization/Archive.h"
-#include "Engine/Object/FName.h"
-#include "Materials/Material.h"
-#include "Materials/MaterialManager.h"
 #include <memory>
 #include <algorithm>
 // Cooked Data 내부용 정점
@@ -20,56 +18,6 @@ struct FNormalVertex
 	FVector4 tangent;
 };
 
-
-struct FStaticMeshSection
-{
-	int32 MaterialIndex = -1; // Index into UStaticMesh's FStaticMaterial array. Cached to avoid per-frame string comparison.
-	FString MaterialSlotName;
-	uint32 FirstIndex;
-	uint32 NumTriangles;
-
-	friend FArchive& operator<<(FArchive& Ar, FStaticMeshSection& Section)
-	{
-		Ar << Section.MaterialSlotName << Section.FirstIndex << Section.NumTriangles;
-		return Ar;
-	}
-};
-
-struct FStaticMaterial
-{
-	// std::shared_ptr<class UMaterialInterface> MaterialInterface;
-	UMaterial* MaterialInterface;
-	FString MaterialSlotName = "None"; // "None"은 특별한 슬롯 이름으로, OBJ 파일에서 머티리얼이 지정되지 않은 섹션에 할당됩니다.
-
-	friend FArchive& operator<<(FArchive& Ar, FStaticMaterial& Mat)
-	{
-		// 1. 슬롯 이름 직렬화 (메시 섹션과 매핑용)
-		Ar << Mat.MaterialSlotName;
-
-		// 2. Material path serialization (Source of Truth = Asset/Materials/*.mat)
-		FString JsonPath;
-		if (Ar.IsSaving() && Mat.MaterialInterface)
-		{
-			JsonPath = Mat.MaterialInterface->GetAssetPathFileName();
-		}
-		Ar << JsonPath;
-
-		// 3. 로딩 시 FMaterialManager를 통해 머티리얼 복원
-		if (Ar.IsLoading())
-		{
-			if (!JsonPath.empty())
-			{
-				Mat.MaterialInterface = FMaterialManager::Get().GetOrCreateMaterial(JsonPath);
-			}
-			else
-			{
-				Mat.MaterialInterface = nullptr;
-			}
-		}
-
-		return Ar;
-	}
-};
 
 // Cooked Data — GPU용 정점/인덱스
 // FStaticMeshLODResources in UE5

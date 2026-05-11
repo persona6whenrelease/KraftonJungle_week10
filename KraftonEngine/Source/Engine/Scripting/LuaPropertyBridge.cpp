@@ -67,6 +67,7 @@ namespace
 	bool IsLuaPathProperty(EPropertyType Type)
 	{
 		return Type == EPropertyType::StaticMeshRef ||
+			Type == EPropertyType::SkeletalMeshRef ||
 			Type == EPropertyType::SceneComponentRef ||
 			Type == EPropertyType::MaterialSlot;
 	}
@@ -207,6 +208,7 @@ const char* FLuaPropertyBridge::ToLuaTypeName(EPropertyType Type)
 	case EPropertyType::Name:
 	case EPropertyType::SceneComponentRef:
 	case EPropertyType::StaticMeshRef:
+	case EPropertyType::SkeletalMeshRef:
 	case EPropertyType::MaterialSlot:
 		return "string";
 
@@ -316,6 +318,7 @@ sol::object FLuaPropertyBridge::GetProperty(sol::this_state State, UActorCompone
 
 	case EPropertyType::String:
 	case EPropertyType::StaticMeshRef:
+	case EPropertyType::SkeletalMeshRef:
 	case EPropertyType::SceneComponentRef:
 		return sol::make_object(Lua, *static_cast<FString*>(Desc->ValuePtr));
 
@@ -419,6 +422,7 @@ bool FLuaPropertyBridge::SetProperty(UActorComponent* Component, const FString& 
 		}
 
 		case EPropertyType::StaticMeshRef:
+		case EPropertyType::SkeletalMeshRef:
 		case EPropertyType::SceneComponentRef:
 		{
 			const FString NewValue = Value.as<FString>();

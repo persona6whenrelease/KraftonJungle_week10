@@ -14,6 +14,7 @@
 #include "Editor/UI/EditorFileUtils.h"
 #include "Editor/Viewport/LevelEditorViewportClient.h"
 #include "Object/ObjectFactory.h"
+#include "Mesh/FBX/FBXManager.h"
 #include "Mesh/ObjManager.h"
 #include "Core/ProjectSettings.h"
 #include "Input/InputSystem.h"
@@ -67,6 +68,12 @@ void UEditorEngine::Init(FWindowsWindow* InWindow)
 	{
 		SCOPE_STARTUP_STAT("ObjManager::ScanMeshAssets");
 		FObjManager::ScanMeshAssets();
+	}
+
+	{
+		SCOPE_STARTUP_STAT("FBXManager::ScanSkeletalMeshAssets");
+		FFBXManager::ScanSkeletalMeshAssets();
+		FFBXManager::ScanFbxSourceFiles();
 	}
 
 	{
