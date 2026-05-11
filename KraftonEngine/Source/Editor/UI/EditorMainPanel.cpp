@@ -1150,6 +1150,11 @@ void FEditorMainPanel::Update()
 				bWantKeyboard = false;
 			}
 		}
+		if (FEditorSettings::Get().UI.bSkeletalMeshViewer)
+		{
+			bWantMouse = bWantMouse || SkeletalMeshViewerWidget.WantsMouseCapture();
+			bWantKeyboard = bWantKeyboard || SkeletalMeshViewerWidget.WantsKeyboardCapture();
+		}
 		InputSystem::Get().SetGuiMouseCapture(bWantMouse);
 		InputSystem::Get().SetGuiKeyboardCapture(bWantKeyboard);
 		InputSystem::Get().SetGuiTextInputCapture(IO.WantTextInput);

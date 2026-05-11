@@ -16,6 +16,8 @@ public:
 	
 	void Render(float DeltaTime) override;
 	bool OpenFbxAsset(const FString& FbxPath);
+	bool WantsMouseCapture() const { return bPreviewViewportWantsMouseCapture; }
+	bool WantsKeyboardCapture() const { return bPreviewViewportWantsKeyboardCapture; }
 
 private:
 	void EnsurePreviewScene();
@@ -23,7 +25,7 @@ private:
 	void SetPreviewMesh(USkeletalMesh* PreviewMesh);
 	
 	void RenderResourcePanel();
-	void RenderViewportPanel();
+	void RenderViewportPanel(float DeltaTime);
 	void RenderBonePanel();
 	void RenderTransformPanel();
 	USkeletalMesh* GetSelectedSkeletalMesh() const;
@@ -39,4 +41,6 @@ private:
 	USkeletalMeshComponent* PreviewMeshComponent = nullptr;
 	FViewport* PreviewViewport = nullptr;
 	FSkeletalMeshViewerViewportClient* PreviewViewportClient = nullptr;
+	bool bPreviewViewportWantsMouseCapture = false;
+	bool bPreviewViewportWantsKeyboardCapture = false;
 };

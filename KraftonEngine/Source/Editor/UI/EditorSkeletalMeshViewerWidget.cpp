@@ -13,6 +13,7 @@
 #include "Viewport/Viewport.h"
 #include "Component/SkeletalMeshComponent.h"
 #include "Editor/Viewport/SkeletalMeshViewerViewportClient.h"
+#include "Editor/EditorEngine.h"
 
 namespace
 {
@@ -98,6 +99,7 @@ void FEditorSkeletalMeshViewerWidget::EnsurePreviewScene()
 	if (Device)
 	{
 		PreviewViewport->Initialize(Device, 512, 512);
+		PreviewViewport->SetClient(PreviewViewportClient);
 	}
 }
 
@@ -228,7 +230,7 @@ void FEditorSkeletalMeshViewerWidget::Render(float DeltaTime)
 		RenderBonePanel();
 
 		ImGui::TableSetColumnIndex(1);
-		RenderViewportPanel();
+		RenderViewportPanel(DeltaTime);
 
 		ImGui::TableSetColumnIndex(2);
 		RenderTransformPanel();
@@ -281,7 +283,7 @@ void FEditorSkeletalMeshViewerWidget::RenderResourcePanel()
 	ImGui::EndChild();
 }
 
-void FEditorSkeletalMeshViewerWidget::RenderViewportPanel()
+void FEditorSkeletalMeshViewerWidget::RenderViewportPanel(float DeltaTime)
 {
 	ImVec2 AvailableSize = ImGui::GetContentRegionAvail();
 	if (AvailableSize.x < 1.0f)
@@ -295,26 +297,67 @@ void FEditorSkeletalMeshViewerWidget::RenderViewportPanel()
 
 	ImGui::BeginChild("##SkeletalMeshViewport", AvailableSize, true, ImGuiWindowFlags_NoScrollbar);
 
-	const ImVec2 ViewportMin = ImGui::GetCursorScreenPos();
-	const ImVec2 ViewportSize = ImGui::GetContentRegionAvail();
-	const ImVec2 ViewportMax(ViewportMin.x + ViewportSize.x, ViewportMin.y + ViewportSize.y);
+	ImVec2 ViewportSize = ImGui::GetContentRegionAvail();
+	if (ViewportSize.x < 1.0f)
+	{
+		ViewportSize.x = 1.0f;
+	}
+	if (ViewportSize.y < 1.0f)
+	{
+		ViewportSize.y = 1.0f;
+	}
 
-	ImDrawList* DrawList = ImGui::GetWindowDrawList();
-	DrawList->AddRectFilled(ViewportMin, ViewportMax, IM_COL32(42, 42, 42, 255));
-	DrawList->AddRect(ViewportMin, ViewportMax, IM_COL32(95, 95, 95, 255));
+	USkeletalMesh* SelectedMesh = GetSelectedSkeletalMesh();
+	if (!SelectedMesh)
+	{
+		ImGui::TextDisabled("No SkeletalMesh loaded");
+		ImGui::EndChild();
+		return;
+	}
 
-	const ImVec2 Center((ViewportMin.x + ViewportMax.x) * 0.5f, (ViewportMin.y + ViewportMax.y) * 0.5f);
-	DrawList->AddLine(ImVec2(ViewportMin.x + 20.0f, Center.y), ImVec2(ViewportMax.x - 20.0f, Center.y), IM_COL32(70, 120, 70, 255));
-	DrawList->AddLine(ImVec2(Center.x, ViewportMin.y + 20.0f), ImVec2(Center.x, ViewportMax.y - 20.0f), IM_COL32(90, 90, 150, 255));
+	EnsurePreviewScene();
 
-	const char* Message = GetSelectedSkeletalMesh() ? "SkeletalMesh preview viewport placeholder" : "No SkeletalMesh loaded";
-	const ImVec2 TextSize = ImGui::CalcTextSize(Message);
-	DrawList->AddText(
-		ImVec2(Center.x - TextSize.x * 0.5f, Center.y - TextSize.y * 0.5f),
-		IM_COL32(210, 210, 210, 255),
-		Message);
+	if (PreviewViewport && PreviewViewportClient && EditorEngine)
+	{
+		const bool bViewportHovered = ImGui::IsWindowHovered();
+		const bool bPreviewMouseButtonDown =
+			ImGui::IsMouseDown(ImGuiMouseButton_Right) ||
+			ImGui::IsMouseDown(ImGuiMouseButton_Middle);
+		const bool bContinuePreviewMouseCapture =
+			bPreviewViewportWantsMouseCapture && bPreviewMouseButtonDown;
+		bPreviewViewportWantsMouseCapture = bViewportHovered || bContinuePreviewMouseCapture;
+		bPreviewViewportWantsKeyboardCapture =
+			bPreviewViewportWantsMouseCapture && ImGui::IsMouseDown(ImGuiMouseButton_Right);
 
-	ImGui::Dummy(ViewportSize);
+		PreviewViewportClient->Tick(DeltaTime, bPreviewViewportWantsMouseCapture);
+
+		PreviewViewport->RequestResize(
+			static_cast<uint32>(ViewportSize.x),
+			static_cast<uint32>(ViewportSize.y));
+
+		EditorEngine->RenderSkeletalMeshViewerPreview(
+			PreviewWorld,
+			PreviewViewport,
+			PreviewViewportClient);
+
+		if (PreviewViewport->GetSRV())
+		{
+			ImGui::Image(
+				(ImTextureID)PreviewViewport->GetSRV(),
+				ViewportSize);
+		}
+		else
+		{
+			ImGui::TextDisabled("Preview render target is not ready");
+		}
+	}
+	else
+	{
+		bPreviewViewportWantsMouseCapture = false;
+		bPreviewViewportWantsKeyboardCapture = false;
+		ImGui::TextDisabled("Preview scene is not ready");
+	}
+
 	ImGui::EndChild();
 }
 

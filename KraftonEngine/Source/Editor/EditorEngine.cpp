@@ -834,3 +834,24 @@ bool UEditorEngine::LoadSceneWithDialog()
 
 	return LoadSceneFromPath(SelectedPath);
 }
+
+void UEditorEngine::RenderSkeletalMeshViewerPreview(
+	UWorld* PreviewWorld,
+	FViewport* PreviewViewport,
+	FSkeletalMeshViewerViewportClient* PreviewClient)
+{
+	auto EditorPipeline = static_cast<FEditorRenderPipeline*>(GetRenderPipeline());
+	if (!EditorPipeline)
+	{
+		return;
+	}
+
+	EditorPipeline->RenderPreviewViewport(
+		PreviewWorld,
+		PreviewViewport,
+		PreviewClient,
+		Renderer);
+
+	Renderer.BeginFrame();
+}
+

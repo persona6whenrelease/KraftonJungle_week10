@@ -6,9 +6,11 @@
 #include <memory>
 
 class UEditorEngine;
+class UWorld;
 class FViewport;
 class UCameraComponent;
 class FLevelEditorViewportClient;
+class FSkeletalMeshViewerViewportClient;
 
 class FEditorRenderPipeline : public IRenderPipeline
 {
@@ -18,6 +20,8 @@ public:
 
 	void Execute(float DeltaTime, FRenderer& Renderer) override;
 	void OnSceneCleared() override;
+	void RenderPreviewViewport(UWorld* PreviewWorld, FViewport* PreviewViewport,
+	                           FSkeletalMeshViewerViewportClient* PreviewClient, FRenderer& Renderer);
 
 private:
 	// 단일 뷰포트 렌더 오케스트레이션

@@ -20,6 +20,7 @@ class FOverlayStatSystem;
 class AActor;
 class UGameViewportClient;
 struct FPerspectiveCameraData;
+class FSkeletalMeshViewerViewportClient;
 
 class UEditorEngine : public UEngine
 {
@@ -117,6 +118,9 @@ public:
 	// 즉시 동기 종료 — Save / NewScene / Load 등 에디터 월드를 만지는 작업 직전에 호출.
 	// PIE 중이 아니면 no-op.
 	void StopPlayInEditorImmediate() { if (IsPlayingInEditor()) EndPlayMap(); }
+
+	void RenderSkeletalMeshViewerPreview(UWorld* PreviewWorld, FViewport* PreviewViewport,
+	                                     FSkeletalMeshViewerViewportClient* PreviewClient);
 
 private:
 	// Tick 내에서 호출 — 큐에 요청이 있으면 StartPlayInEditorSession 실행
