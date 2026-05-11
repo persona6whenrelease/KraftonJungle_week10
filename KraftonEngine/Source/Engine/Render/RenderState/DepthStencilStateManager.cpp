@@ -91,9 +91,9 @@ void FDepthStencilStateManager::Release()
 	SAFE_RELEASE(GizmoOutside);
 }
 
-void FDepthStencilStateManager::Set(ID3D11DeviceContext* InContext, EDepthStencilState InState)
+void FDepthStencilStateManager::Set(ID3D11DeviceContext* InContext, EDepthStencilState InState, bool bForce)
 {
-	if (CurrentState == InState) return;
+	if (!bForce && CurrentState == InState) return;
 
 	switch (InState)
 	{

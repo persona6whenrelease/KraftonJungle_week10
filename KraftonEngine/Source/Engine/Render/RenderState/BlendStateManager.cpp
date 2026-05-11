@@ -52,9 +52,9 @@ void FBlendStateManager::Release()
 	SAFE_RELEASE(NoColorWrite);
 }
 
-void FBlendStateManager::Set(ID3D11DeviceContext* InContext, EBlendState InState)
+void FBlendStateManager::Set(ID3D11DeviceContext* InContext, EBlendState InState, bool bForce)
 {
-	if (CurrentState == InState) return;
+	if (!bForce && CurrentState == InState) return;
 
 	const float BlendFactor[4] = { 0, 0, 0, 0 };
 

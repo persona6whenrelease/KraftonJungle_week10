@@ -67,8 +67,8 @@ void FShadowMapPass::SetupShadowRenderState(FD3DDevice& Device, FSystemResources
 	Resources.ResetRenderStateCache();
 
 	// 공용 렌더 상태 세팅 (Reversed-Z: GREATER_EQUAL — 엔진 컨벤션 통일)
-	Resources.SetDepthStencilState(Device, EDepthStencilState::Default);
-	Resources.SetRasterizerState(Device, ERasterizerState::SolidFrontCull);
+	Resources.SetDepthStencilState(Device, EDepthStencilState::Default, true);
+	Resources.SetRasterizerState(Device, ERasterizerState::SolidFrontCull, true);
 	DC->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
 	if (CurrentFilterMode == EShadowFilterMode::VSM)
@@ -165,7 +165,7 @@ void FShadowMapPass::EndPass(const FPassContext& Ctx)
 	FShadowMapResources& ShadowRes = Ctx.Resources.ShadowResources;
 
 	// 메인 RT/DSV 복원
-	Ctx.Resources.SetRasterizerState(Ctx.Device, ERasterizerState::SolidBackCull);
+	Ctx.Resources.SetRasterizerState(Ctx.Device, ERasterizerState::SolidBackCull, true);
 	DC->OMSetRenderTargets(1, &Ctx.Cache.RTV, Ctx.Cache.DSV);
 	Ctx.Cache.bForceAll = true;
 
@@ -638,7 +638,7 @@ void FShadowMapPass::DrawShadowCasters(ID3D11DeviceContext* DC, FScene& Scene, F
 		{
 			bCurrentTwoSided = bTwoSided;
 			Resources.RasterizerStateManager.Set(DC,
-				bTwoSided ? ERasterizerState::SolidNoCull : ERasterizerState::SolidFrontCull);
+				bTwoSided ? ERasterizerState::SolidNoCull : ERasterizerState::SolidFrontCull, true);
 		}
 
 		++LastDrawCasterCount;
@@ -664,7 +664,7 @@ void FShadowMapPass::DrawShadowCasters(ID3D11DeviceContext* DC, FScene& Scene, F
 	}
 	// Front-cull로 복원
 	if (bCurrentTwoSided)
-		Resources.RasterizerStateManager.Set(DC, ERasterizerState::SolidFrontCull);
+		Resources.RasterizerStateManager.Set(DC, ERasterizerState::SolidFrontCull, true);
 }
 
 void FShadowMapPass::DrawShadowCasters(const FPassContext& Ctx, const FConvexVolume& LightFrustum)
@@ -694,9 +694,9 @@ void FShadowMapPass::BlurVSMTexture(const FPassContext& Ctx, FShadowMapResources
 	ID3D11DeviceContext* DC = Ctx.Device.GetDeviceContext();
 
 	// Save current state — we'll restore after blur
-	Ctx.Resources.SetDepthStencilState(Ctx.Device, EDepthStencilState::NoDepth);
+	Ctx.Resources.SetDepthStencilState(Ctx.Device, EDepthStencilState::NoDepth, true);
 	Ctx.Resources.SetBlendState(Ctx.Device, EBlendState::Opaque);
-	Ctx.Resources.SetRasterizerState(Ctx.Device, ERasterizerState::SolidNoCull);
+	Ctx.Resources.SetRasterizerState(Ctx.Device, ERasterizerState::SolidNoCull, true);
 
 	BlurShader->Bind(DC);
 	DC->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -822,8 +822,8 @@ void FShadowMapPass::BlurVSMTexture(const FPassContext& Ctx, FShadowMapResources
 	}
 
 	// Restore shadow render state
-	Ctx.Resources.SetDepthStencilState(Ctx.Device, EDepthStencilState::Default);
-	Ctx.Resources.SetRasterizerState(Ctx.Device, ERasterizerState::SolidFrontCull);
+	Ctx.Resources.SetDepthStencilState(Ctx.Device, EDepthStencilState::Default, true);
+	Ctx.Resources.SetRasterizerState(Ctx.Device, ERasterizerState::SolidFrontCull, true);
 }
 
 // ============================================================

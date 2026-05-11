@@ -940,19 +940,19 @@ void FSystemResources::BindSystemSamplers(FD3DDevice& Device)
 	SamplerStateManager.BindSystemSamplers(Device.GetDeviceContext());
 }
 
-void FSystemResources::SetDepthStencilState(FD3DDevice& Device, EDepthStencilState InState)
+void FSystemResources::SetDepthStencilState(FD3DDevice& Device, EDepthStencilState InState, bool bForce)
 {
-	DepthStencilStateManager.Set(Device.GetDeviceContext(), InState);
+	DepthStencilStateManager.Set(Device.GetDeviceContext(), InState, bForce);
 }
 
-void FSystemResources::SetBlendState(FD3DDevice& Device, EBlendState InState)
+void FSystemResources::SetBlendState(FD3DDevice& Device, EBlendState InState, bool bForce)
 {
-	BlendStateManager.Set(Device.GetDeviceContext(), InState);
+	BlendStateManager.Set(Device.GetDeviceContext(), InState, bForce);
 }
 
-void FSystemResources::SetRasterizerState(FD3DDevice& Device, ERasterizerState InState)
+void FSystemResources::SetRasterizerState(FD3DDevice& Device, ERasterizerState InState, bool bForce)
 {
-	RasterizerStateManager.Set(Device.GetDeviceContext(), InState);
+	RasterizerStateManager.Set(Device.GetDeviceContext(), InState, bForce);
 }
 
 void FSystemResources::ResetRenderStateCache()

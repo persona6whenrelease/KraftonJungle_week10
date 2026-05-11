@@ -135,19 +135,19 @@ void FDrawCommandList::SubmitCommand(const FDrawCommand& Cmd,
 	// --- 렌더 상태 ---
 	if (bForce || Cmd.RenderState.DepthStencil != Cache.RenderState.DepthStencil)
 	{
-		Resources.SetDepthStencilState(Device, Cmd.RenderState.DepthStencil);
+		Resources.SetDepthStencilState(Device, Cmd.RenderState.DepthStencil, bForce);
 		Cache.RenderState.DepthStencil = Cmd.RenderState.DepthStencil;
 	}
 
 	if (bForce || Cmd.RenderState.Blend != Cache.RenderState.Blend)
 	{
-		Resources.SetBlendState(Device, Cmd.RenderState.Blend);
+		Resources.SetBlendState(Device, Cmd.RenderState.Blend, bForce);
 		Cache.RenderState.Blend = Cmd.RenderState.Blend;
 	}
 
 	if (bForce || Cmd.RenderState.Rasterizer != Cache.RenderState.Rasterizer)
 	{
-		Resources.SetRasterizerState(Device, Cmd.RenderState.Rasterizer);
+		Resources.SetRasterizerState(Device, Cmd.RenderState.Rasterizer, bForce);
 		Cache.RenderState.Rasterizer = Cmd.RenderState.Rasterizer;
 	}
 

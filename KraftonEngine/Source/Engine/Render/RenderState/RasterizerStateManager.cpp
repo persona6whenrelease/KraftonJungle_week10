@@ -1,4 +1,4 @@
-#include "RasterizerStateManager.h"
+﻿#include "RasterizerStateManager.h"
 
 #define SAFE_RELEASE(Obj) if (Obj) { Obj->Release(); Obj = nullptr; }
 
@@ -19,7 +19,7 @@ void FRasterizerStateManager::Create(ID3D11Device* InDevice)
 	Desc.CullMode = D3D11_CULL_NONE;
 	InDevice->CreateRasterizerState(&Desc, &WireFrame);
 
-	CurrentState = ERasterizerState::SolidBackCull;
+	CurrentState = static_cast<ERasterizerState>(-1);
 }
 
 void FRasterizerStateManager::Release()
@@ -30,9 +30,9 @@ void FRasterizerStateManager::Release()
 	SAFE_RELEASE(WireFrame);
 }
 
-void FRasterizerStateManager::Set(ID3D11DeviceContext* InContext, ERasterizerState InState)
+void FRasterizerStateManager::Set(ID3D11DeviceContext* InContext, ERasterizerState InState, bool bForce)
 {
-	if (CurrentState == InState) return;
+	if (!bForce && CurrentState == InState) return;
 
 	switch (InState)
 	{

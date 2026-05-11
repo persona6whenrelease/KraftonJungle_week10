@@ -270,9 +270,9 @@ struct FSystemResources
 	void Release();
 
 	// 렌더 상태 전환
-	void SetDepthStencilState(FD3DDevice& Device, EDepthStencilState InState);
-	void SetBlendState(FD3DDevice& Device, EBlendState InState);
-	void SetRasterizerState(FD3DDevice& Device, ERasterizerState InState);
+	void SetDepthStencilState(FD3DDevice& Device, EDepthStencilState InState, bool bForce = false);
+	void SetBlendState(FD3DDevice& Device, EBlendState InState, bool bForce = false);
+	void SetRasterizerState(FD3DDevice& Device, ERasterizerState InState, bool bForce = false);
 
 	// 리사이즈 시 렌더 상태 캐시 무효화
 	void ResetRenderStateCache();

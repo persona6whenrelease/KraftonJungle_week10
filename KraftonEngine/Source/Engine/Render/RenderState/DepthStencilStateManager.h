@@ -8,7 +8,7 @@ class FDepthStencilStateManager
 public:
 	void Create(ID3D11Device* InDevice);
 	void Release();
-	void Set(ID3D11DeviceContext* InContext, EDepthStencilState InState);
+	void Set(ID3D11DeviceContext* InContext, EDepthStencilState InState, bool bForce = false);
 	void ResetCache() { CurrentState = static_cast<EDepthStencilState>(-1); }
 
 private:
