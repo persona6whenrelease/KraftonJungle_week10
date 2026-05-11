@@ -3,7 +3,11 @@
 
 #include "Core/Log.h"
 #include "Engine/Platform/Paths.h"
+#include <algorithm>
+#include <cctype>
+#include <cstring>
 #include <functional>
+#include <filesystem>
 
 
 namespace
@@ -103,50 +107,535 @@ namespace
 			static_cast<float>(Diffuse[2]));
 	}
 
-	FbxFileTexture* FindDiffuseFileTexture(FbxSurfaceMaterial* SurfaceMaterial)
+	const char* DiffusePropertyNames[] = {
+		"Diffuse",
+		"DiffuseColor",
+		"BaseColor",
+		"Maya|baseColor",
+		"Maya|DiffuseColor"
+	};
+
+	const char* NormalPropertyNames[] = {
+		"NormalMap",
+		"Bump",
+		"Maya|normalCamera",
+		"NormalCamera"
+	};
+
+	const char* SpecularPropertyNames[] = {
+		"Specular",
+		"SpecularColor",
+		"Maya|specularColor"
+	};
+
+	const char* EmissivePropertyNames[] = {
+		"Emissive",
+		"EmissiveColor",
+		"EmissionColor",
+		"Maya|emissionColor"
+	};
+
+	bool IsFbxFileTextureObject(FbxObject* Object)
 	{
-		if (!SurfaceMaterial)
+		if (!Object)
 		{
-			return nullptr;
+			return false;
 		}
 
-		FbxProperty DiffuseProperty = SurfaceMaterial->FindProperty("Diffuse");
-		if (!DiffuseProperty.IsValid() || DiffuseProperty.GetSrcObjectCount() <= 0)
-		{
-			return nullptr;
-		}
+		const char* ClassName = Object->GetClassId().GetName();
+		return ClassName &&
+			(std::strcmp(ClassName, "FbxFileTexture") == 0 ||
+			 std::strcmp(ClassName, "FileTexture") == 0);
+	}
 
-		for (int32 TextureIndex = 0; TextureIndex < DiffuseProperty.GetSrcObjectCount(); ++TextureIndex)
-		{
-			if (FbxFileTexture* Texture = dynamic_cast<FbxFileTexture*>(DiffuseProperty.GetSrcObject(TextureIndex)))
+	FString ToLowerAscii(FString Text)
+	{
+		std::transform(Text.begin(), Text.end(), Text.begin(),
+			[](unsigned char Ch)
 			{
-				return Texture;
+				return static_cast<char>(std::tolower(Ch));
+			});
+		return Text;
+	}
+
+	bool ContainsToken(const FString& Text, const char* Token)
+	{
+		return Text.find(Token) != FString::npos;
+	}
+
+	FString GetTextureIdentityText(FbxFileTexture* Texture)
+	{
+		FString Text;
+		if (!Texture)
+		{
+			return Text;
+		}
+
+		if (Texture->GetName())
+		{
+			Text += Texture->GetName();
+			Text += " ";
+		}
+		if (Texture->GetFileName())
+		{
+			Text += Texture->GetFileName();
+			Text += " ";
+		}
+		if (Texture->GetRelativeFileName())
+		{
+			Text += Texture->GetRelativeFileName();
+		}
+		return ToLowerAscii(Text);
+	}
+
+	FbxFileTexture* FindFileTextureRecursive(FbxObject* Object, int32 Depth = 0)
+	{
+		if (!Object || Depth > 8)
+		{
+			return nullptr;
+		}
+
+		if (IsFbxFileTextureObject(Object))
+		{
+			return static_cast<FbxFileTexture*>(Object);
+		}
+
+		const int32 SourceCount = Object->GetSrcObjectCount();
+		for (int32 SourceIndex = 0; SourceIndex < SourceCount; ++SourceIndex)
+		{
+			if (FbxFileTexture* FileTexture = FindFileTextureRecursive(Object->GetSrcObject(SourceIndex), Depth + 1))
+			{
+				return FileTexture;
 			}
 		}
 
 		return nullptr;
 	}
 
-	FString ReadDiffuseTexturePath(FbxSurfaceMaterial* SurfaceMaterial, const FString& SourceFilePath)
+	void CollectFileTexturesRecursive(FbxObject* Object, TArray<FbxFileTexture*>& OutTextures, int32 Depth = 0)
 	{
-		FbxFileTexture* Texture = FindDiffuseFileTexture(SurfaceMaterial);
+		if (!Object || Depth > 8)
+		{
+			return;
+		}
+
+		if (IsFbxFileTextureObject(Object))
+		{
+			FbxFileTexture* Texture = static_cast<FbxFileTexture*>(Object);
+			if (std::find(OutTextures.begin(), OutTextures.end(), Texture) == OutTextures.end())
+			{
+				OutTextures.push_back(Texture);
+			}
+			return;
+		}
+
+		const int32 SourceCount = Object->GetSrcObjectCount();
+		for (int32 SourceIndex = 0; SourceIndex < SourceCount; ++SourceIndex)
+		{
+			CollectFileTexturesRecursive(Object->GetSrcObject(SourceIndex), OutTextures, Depth + 1);
+		}
+	}
+
+	template <size_t N>
+	FbxFileTexture* FindFileTextureForProperties(FbxSurfaceMaterial* SurfaceMaterial, const char* const (&PropertyNames)[N])
+	{
+		if (!SurfaceMaterial)
+		{
+			return nullptr;
+		}
+
+		for (const char* PropertyName : PropertyNames)
+		{
+			FbxProperty Property = SurfaceMaterial->FindProperty(PropertyName);
+			if (!Property.IsValid() || Property.GetSrcObjectCount() <= 0)
+			{
+				continue;
+			}
+
+			for (int32 TextureIndex = 0; TextureIndex < Property.GetSrcObjectCount(); ++TextureIndex)
+			{
+				if (FbxFileTexture* Texture = FindFileTextureRecursive(Property.GetSrcObject(TextureIndex)))
+				{
+					return Texture;
+				}
+			}
+		}
+
+		return nullptr;
+	}
+
+	void CollectFileTexturesForProperty(FbxProperty Property, TArray<FbxFileTexture*>& OutTextures)
+	{
+		if (!Property.IsValid() || Property.GetSrcObjectCount() <= 0)
+		{
+			return;
+		}
+
+		for (int32 TextureIndex = 0; TextureIndex < Property.GetSrcObjectCount(); ++TextureIndex)
+		{
+			CollectFileTexturesRecursive(Property.GetSrcObject(TextureIndex), OutTextures);
+		}
+	}
+
+	TArray<FbxFileTexture*> CollectAllMaterialFileTextures(FbxSurfaceMaterial* SurfaceMaterial)
+	{
+		TArray<FbxFileTexture*> Textures;
+		if (!SurfaceMaterial)
+		{
+			return Textures;
+		}
+
+		FbxProperty Property = SurfaceMaterial->GetFirstProperty();
+		while (Property.IsValid())
+		{
+			CollectFileTexturesForProperty(Property, Textures);
+			Property = SurfaceMaterial->GetNextProperty(Property);
+		}
+
+		const int32 SourceCount = SurfaceMaterial->GetSrcObjectCount();
+		for (int32 SourceIndex = 0; SourceIndex < SourceCount; ++SourceIndex)
+		{
+			CollectFileTexturesRecursive(SurfaceMaterial->GetSrcObject(SourceIndex), Textures);
+		}
+
+		return Textures;
+	}
+
+	bool TextureMatchesRole(FbxFileTexture* Texture, const char* TextureRole)
+	{
+		const FString Identity = GetTextureIdentityText(Texture);
+		if (Identity.empty() || !TextureRole)
+		{
+			return false;
+		}
+
+		if (std::strcmp(TextureRole, "Diffuse") == 0)
+		{
+			return ContainsToken(Identity, "base_color") ||
+				ContainsToken(Identity, "basecolor") ||
+				ContainsToken(Identity, "diffuse") ||
+				ContainsToken(Identity, "albedo") ||
+				ContainsToken(Identity, "_d.") ||
+				ContainsToken(Identity, "-d.");
+		}
+		if (std::strcmp(TextureRole, "Normal") == 0)
+		{
+			return ContainsToken(Identity, "normalmap") ||
+				ContainsToken(Identity, "normal") ||
+				ContainsToken(Identity, "_n.") ||
+				ContainsToken(Identity, "-n.");
+		}
+		if (std::strcmp(TextureRole, "Specular") == 0)
+		{
+			return ContainsToken(Identity, "specular") ||
+				ContainsToken(Identity, "spec");
+		}
+		if (std::strcmp(TextureRole, "Emissive") == 0)
+		{
+			return ContainsToken(Identity, "emission") ||
+				ContainsToken(Identity, "emissive") ||
+				ContainsToken(Identity, "_e.") ||
+				ContainsToken(Identity, "-e.");
+		}
+
+		return false;
+	}
+
+	FbxFileTexture* FindFileTextureByRoleFallback(FbxSurfaceMaterial* SurfaceMaterial, const char* TextureRole)
+	{
+		TArray<FbxFileTexture*> Textures = CollectAllMaterialFileTextures(SurfaceMaterial);
+		for (FbxFileTexture* Texture : Textures)
+		{
+			if (TextureMatchesRole(Texture, TextureRole))
+			{
+				return Texture;
+			}
+		}
+		return nullptr;
+	}
+
+	bool TryMakeProjectRelativePath(const std::filesystem::path& DiskPath, FString& OutPath)
+	{
+		if (!std::filesystem::exists(DiskPath))
+		{
+			return false;
+		}
+
+		const std::filesystem::path Root = std::filesystem::path(FPaths::RootDir()).lexically_normal();
+		const std::filesystem::path NormalizedDiskPath = DiskPath.lexically_normal();
+		std::filesystem::path RelativePath = NormalizedDiskPath.lexically_relative(Root);
+		if (RelativePath.empty() || RelativePath.native().rfind(L"..", 0) == 0)
+		{
+			RelativePath = std::filesystem::relative(NormalizedDiskPath, Root);
+		}
+
+		OutPath = FPaths::ToUtf8(RelativePath.generic_wstring());
+		return !OutPath.empty();
+	}
+
+	TArray<std::filesystem::path> BuildTextureSearchBaseDirs(const std::filesystem::path& SourceFbxDir)
+	{
+		TArray<std::filesystem::path> BaseDirs;
+		auto AddUniqueDir = [&BaseDirs](const std::filesystem::path& Dir)
+		{
+			if (Dir.empty())
+			{
+				return;
+			}
+
+			const std::filesystem::path Normalized = Dir.lexically_normal();
+			if (std::find(BaseDirs.begin(), BaseDirs.end(), Normalized) == BaseDirs.end())
+			{
+				BaseDirs.push_back(Normalized);
+			}
+		};
+
+		const std::filesystem::path ParentDir = SourceFbxDir.parent_path();
+		AddUniqueDir(SourceFbxDir);
+		AddUniqueDir(ParentDir);
+		AddUniqueDir(ParentDir / L"textures");
+		AddUniqueDir(ParentDir / L"texture");
+		AddUniqueDir(ParentDir / L"tex");
+		AddUniqueDir(ParentDir / L"maps");
+		AddUniqueDir(ParentDir / L"materials");
+		AddUniqueDir(ParentDir / L"images");
+		return BaseDirs;
+	}
+
+	FString SearchCaseInsensitiveInDirectory(
+		const std::filesystem::path& Directory,
+		const std::filesystem::path& RelativePath)
+	{
+		if (Directory.empty() || RelativePath.empty())
+		{
+			return "";
+		}
+
+		std::filesystem::path Current = Directory;
+		for (const std::filesystem::path& Part : RelativePath)
+		{
+			if (Part.empty() || Part == L".")
+			{
+				continue;
+			}
+
+			const std::filesystem::path Direct = Current / Part;
+			if (std::filesystem::exists(Direct))
+			{
+				Current = Direct;
+				continue;
+			}
+
+			if (!std::filesystem::is_directory(Current))
+			{
+				return "";
+			}
+
+			const FString Wanted = ToLowerAscii(FPaths::ToUtf8(Part.wstring()));
+			bool bFound = false;
+			for (const std::filesystem::directory_entry& Entry : std::filesystem::directory_iterator(Current))
+			{
+				const FString EntryName = ToLowerAscii(FPaths::ToUtf8(Entry.path().filename().wstring()));
+				if (EntryName == Wanted)
+				{
+					Current = Entry.path();
+					bFound = true;
+					break;
+				}
+			}
+
+			if (!bFound)
+			{
+				return "";
+			}
+		}
+
+		FString ResolvedPath;
+		return TryMakeProjectRelativePath(Current, ResolvedPath) ? ResolvedPath : FString();
+	}
+
+	FString TryResolveTextureCandidate(
+		const TArray<std::filesystem::path>& SearchBaseDirs,
+		const FString& CandidateText)
+	{
+		if (CandidateText.empty())
+		{
+			return "";
+		}
+
+		const std::filesystem::path Candidate(FPaths::ToWide(CandidateText));
+		FString ResolvedPath;
+		if (Candidate.is_absolute() && TryMakeProjectRelativePath(Candidate, ResolvedPath))
+		{
+			return ResolvedPath;
+		}
+
+		if (!Candidate.is_absolute())
+		{
+			for (const std::filesystem::path& BaseDir : SearchBaseDirs)
+			{
+				if (TryMakeProjectRelativePath(BaseDir / Candidate, ResolvedPath))
+				{
+					return ResolvedPath;
+				}
+
+				ResolvedPath = SearchCaseInsensitiveInDirectory(BaseDir, Candidate);
+				if (!ResolvedPath.empty())
+				{
+					return ResolvedPath;
+				}
+			}
+		}
+
+		return "";
+	}
+
+	FString ResolveTexturePathByFileNameHeuristic(
+		const TArray<std::filesystem::path>& SearchBaseDirs,
+		const FString& RawFileName,
+		const FString& RawRelativeFileName)
+	{
+		std::filesystem::path CleanFileName;
+		if (!RawFileName.empty())
+		{
+			CleanFileName = std::filesystem::path(FPaths::ToWide(RawFileName)).filename();
+		}
+		if (CleanFileName.empty() && !RawRelativeFileName.empty())
+		{
+			CleanFileName = std::filesystem::path(FPaths::ToWide(RawRelativeFileName)).filename();
+		}
+		if (CleanFileName.empty())
+		{
+			return "";
+		}
+
+		static const char* SearchFolders[] = {
+			"",
+			"texture",
+			"textures",
+			"tex",
+			"maps",
+			"materials",
+			"images",
+			"src"
+		};
+
+		for (const std::filesystem::path& BaseDir : SearchBaseDirs)
+		{
+			for (const char* FolderName : SearchFolders)
+			{
+				const std::filesystem::path Candidate = FString(FolderName).empty()
+					? BaseDir / CleanFileName
+					: BaseDir / FPaths::ToWide(FolderName) / CleanFileName;
+
+				FString ResolvedPath;
+				if (TryMakeProjectRelativePath(Candidate, ResolvedPath))
+				{
+					return ResolvedPath;
+				}
+
+				ResolvedPath = SearchCaseInsensitiveInDirectory(Candidate.parent_path(), Candidate.filename());
+				if (!ResolvedPath.empty())
+				{
+					return ResolvedPath;
+				}
+			}
+		}
+
+		return "";
+	}
+
+	FString FormatSearchBaseDirs(const TArray<std::filesystem::path>& SearchBaseDirs)
+	{
+		FString Text;
+		for (const std::filesystem::path& Dir : SearchBaseDirs)
+		{
+			if (!Text.empty())
+			{
+				Text += "; ";
+			}
+			Text += FPaths::ToUtf8(Dir.generic_wstring());
+		}
+		return Text;
+	}
+
+	FString ReadTexturePath(
+		FbxSurfaceMaterial* SurfaceMaterial,
+		const FString& SourceFilePath,
+		FbxFileTexture* Texture,
+		const char* TextureRole)
+	{
 		if (!Texture)
 		{
 			return "";
 		}
 
-		FString TexturePath = Texture->GetFileName() ? Texture->GetFileName() : "";
-		if (TexturePath.empty())
+		const FString RawFileName = Texture->GetFileName() ? Texture->GetFileName() : "";
+		const FString RawRelativeFileName = Texture->GetRelativeFileName() ? Texture->GetRelativeFileName() : "";
+		const std::filesystem::path SourceFbxDir = std::filesystem::path(FPaths::ToWide(SourceFilePath)).parent_path();
+		const TArray<std::filesystem::path> SearchBaseDirs = BuildTextureSearchBaseDirs(SourceFbxDir);
+
+		FString ResolvedPath = TryResolveTextureCandidate(SearchBaseDirs, RawFileName);
+		if (ResolvedPath.empty())
 		{
-			TexturePath = Texture->GetRelativeFileName() ? Texture->GetRelativeFileName() : "";
+			ResolvedPath = TryResolveTextureCandidate(SearchBaseDirs, RawRelativeFileName);
+		}
+		if (!ResolvedPath.empty())
+		{
+			UE_LOG("[FBXImporter] Resolved %s texture. Material=%s RawFile=%s RawRelative=%s Path=%s",
+				TextureRole,
+				SurfaceMaterial && SurfaceMaterial->GetName() ? SurfaceMaterial->GetName() : "<null>",
+				RawFileName.c_str(),
+				RawRelativeFileName.c_str(),
+				ResolvedPath.c_str());
+			return ResolvedPath;
 		}
 
-		return TexturePath.empty() ? "" : FPaths::ResolveAssetPath(SourceFilePath, TexturePath);
+		ResolvedPath = ResolveTexturePathByFileNameHeuristic(SearchBaseDirs, RawFileName, RawRelativeFileName);
+		if (!ResolvedPath.empty())
+		{
+			UE_LOG("[FBXImporter] Resolved %s texture by filename search. Material=%s RawFile=%s RawRelative=%s Path=%s",
+				TextureRole,
+				SurfaceMaterial && SurfaceMaterial->GetName() ? SurfaceMaterial->GetName() : "<null>",
+				RawFileName.c_str(),
+				RawRelativeFileName.c_str(),
+				ResolvedPath.c_str());
+			return ResolvedPath;
+		}
+
+		UE_LOG("[FBXImporter] Texture path not found. Role=%s Material=%s FileName=%s RelativeFileName=%s Source=%s SearchDirs=%s",
+			TextureRole,
+			SurfaceMaterial && SurfaceMaterial->GetName() ? SurfaceMaterial->GetName() : "<null>",
+			RawFileName.c_str(),
+			RawRelativeFileName.c_str(),
+			SourceFilePath.c_str(),
+			FormatSearchBaseDirs(SearchBaseDirs).c_str());
+		return "";
+	}
+
+	template <size_t N>
+	FString ReadTexturePathForProperties(
+		FbxSurfaceMaterial* SurfaceMaterial,
+		const FString& SourceFilePath,
+		const char* const (&PropertyNames)[N],
+		const char* TextureRole)
+	{
+		FbxFileTexture* Texture = FindFileTextureForProperties(SurfaceMaterial, PropertyNames);
+		if (!Texture)
+		{
+			Texture = FindFileTextureByRoleFallback(SurfaceMaterial, TextureRole);
+		}
+
+		return ReadTexturePath(SurfaceMaterial, SourceFilePath, Texture, TextureRole);
 	}
 
 	FString ReadDiffuseUVSetName(FbxSurfaceMaterial* SurfaceMaterial)
 	{
-		FbxFileTexture* Texture = FindDiffuseFileTexture(SurfaceMaterial);
+		FbxFileTexture* Texture = FindFileTextureForProperties(SurfaceMaterial, DiffusePropertyNames);
+		if (!Texture)
+		{
+			Texture = FindFileTextureByRoleFallback(SurfaceMaterial, "Diffuse");
+		}
 		if (!Texture)
 		{
 			return "";
@@ -368,7 +857,26 @@ int32 FFbxMetaParser::RegisterMaterial(FbxSurfaceMaterial* SurfaceMaterial)
 	MaterialInfo.MaterialId = MaterialId;
 	MaterialInfo.MaterialSlotName = SlotName;
 	MaterialInfo.DiffuseColor = ReadDiffuseColor(SurfaceMaterial);
-	MaterialInfo.DiffuseTexturePath = ReadDiffuseTexturePath(SurfaceMaterial, ImportMeta.SourceFilePath);
+	MaterialInfo.DiffuseTexturePath = ReadTexturePathForProperties(
+		SurfaceMaterial,
+		ImportMeta.SourceFilePath,
+		DiffusePropertyNames,
+		"Diffuse");
+	MaterialInfo.NormalTexturePath = ReadTexturePathForProperties(
+		SurfaceMaterial,
+		ImportMeta.SourceFilePath,
+		NormalPropertyNames,
+		"Normal");
+	MaterialInfo.SpecularTexturePath = ReadTexturePathForProperties(
+		SurfaceMaterial,
+		ImportMeta.SourceFilePath,
+		SpecularPropertyNames,
+		"Specular");
+	MaterialInfo.EmissiveTexturePath = ReadTexturePathForProperties(
+		SurfaceMaterial,
+		ImportMeta.SourceFilePath,
+		EmissivePropertyNames,
+		"Emissive");
 	MaterialInfo.DiffuseUVSetName = ReadDiffuseUVSetName(SurfaceMaterial);
 
 	ImportMeta.Materials.push_back(std::move(MaterialInfo));

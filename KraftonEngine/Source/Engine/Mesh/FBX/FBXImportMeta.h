@@ -124,6 +124,9 @@ struct FFbxMaterialInfo
 	FString MaterialAssetPath;
 	FVector DiffuseColor = FVector(1.0f, 0.0f, 1.0f);
 	FString DiffuseTexturePath;
+	FString NormalTexturePath;
+	FString SpecularTexturePath;
+	FString EmissiveTexturePath;
 	FString DiffuseUVSetName;
 };
 
