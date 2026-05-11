@@ -43,6 +43,8 @@ private:
 	bool BuildReferenceSkeleton(FbxNode* InNode, TArray<FBoneInfo>& OutBoneInfo, int32 ParentIndex);
 	bool BuildSkinningWeight(FbxMesh* InMesh, TArray<TArray<VertexBlendingInfo>>& OutWeights, TArray<FBoneInfo>& InBones);
 	bool SaveVertexData(FbxMesh* InMesh, const TArray<TArray<VertexBlendingInfo>>& InWeights, const TArray<FBoneInfo>& InBones);
+	FString ConvertSurfaceMatToMaterialJSON(FbxSurfaceMaterial* InMaterial);
+	
 	void Shutdown();
 
 private:

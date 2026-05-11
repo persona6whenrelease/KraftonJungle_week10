@@ -1,8 +1,16 @@
 ﻿#include "FBXImporter.h"
 #include "Mesh/SkeletalMeshAsset.h"
 #include "Math/Transform.h"
+#include "Materials/Material.h"
+#include "Engine/Platform/Paths.h"
+#include "SimpleJSON/json.hpp"
+#include "Materials/MaterialManager.h"
+#include "Core/Log.h"
 #include <algorithm>
-
+#include <fstream>
+#include <filesystem>
+#include <charconv>
+#include <chrono>
 namespace
 {
 	constexpr float GFBXImportUniformScale = 0.01f;
@@ -152,6 +160,8 @@ bool FFBXImporter::Import(const char* fileName, FStkeletalMesh& OutMesh)
 
 		// 5. 메시의 정점 데이터(위치, 인덱스) 저장
 		SaveVertexData(m_meshes[i], ControlPointWeights, ExtractedBones);
+
+
 	}
 
 	//outMesh 완전히 채우기
@@ -187,6 +197,14 @@ void FFBXImporter::FindMesh(FbxNode* InNode)
 		}
 	}
 
+	//fbx node를 순회하면서 메시의 재질 데이터 저장
+	int materialCount = InNode->GetMaterialCount();
+	for (int i = 0; i < materialCount; ++i)
+	{
+		FbxSurfaceMaterial* material = InNode->GetMaterial(i);
+		ConvertSurfaceMatToMaterialJSON(material);
+
+	}
 	// 노드의 자식의 수만큼 반복
 	int childCnt = InNode->GetChildCount();
 	for (int i = 0; i < childCnt; ++i)
@@ -453,4 +471,143 @@ bool FFBXImporter::SaveVertexData(FbxMesh* InMesh, const TArray<TArray<VertexBle
 	}
 
 	return true;
+}
+
+FString FFBXImporter::ConvertSurfaceMatToMaterialJSON(FbxSurfaceMaterial* InMaterial)
+{
+
+	const FString materialName = InMaterial->GetName();
+
+	FString MatPath = "Asset/Materials/Auto/" + materialName + ".mat";
+	std::wstring MatDiskPath;
+	FString Error;
+	if (!FPaths::TryResolvePackagePath(MatPath, MatDiskPath, &Error))
+	{
+		return "";
+	}
+
+	// 이미 존재하면 덮어쓰지 않음 (에디터에서 수정했을 수 있으므로)
+	if (std::filesystem::exists(std::filesystem::path(MatDiskPath)))
+		return MatPath;
+
+	// Auto/ 디렉토리 보장
+	std::filesystem::create_directories(std::filesystem::path(MatDiskPath).parent_path());
+
+	json::JSON JsonData;
+	JsonData["PathFileName"] = MatPath;
+	JsonData["Origin"] = "FbxImport";
+	JsonData["ShaderPath"] = "Shaders/Geometry/UberLit.hlsl";
+	JsonData["RenderPass"] = "Opaque";
+
+	//SurfaceMaterial의 종류에 따라 컬러 정보를 추출하여 JSON에 넣어줍니다.
+	if (InMaterial->GetClassId().Is(FbxSurfacePhong::ClassId))
+	{
+
+		//컬러 정보
+		FbxSurfacePhong* phong = (FbxSurfacePhong*)InMaterial;
+		FbxDouble3 diffuse = phong->Diffuse.Get();
+
+		JsonData["Parameters"]["SectionColor"][0] = static_cast<float>(diffuse[0]);
+		JsonData["Parameters"]["SectionColor"][1] = static_cast<float>(diffuse[1]);
+		JsonData["Parameters"]["SectionColor"][2] = static_cast<float>(diffuse[2]);
+		JsonData["Parameters"]["SectionColor"][3] = 1.0f;
+	}
+	else if (InMaterial->GetClassId().Is(FbxSurfaceLambert::ClassId))
+	{
+
+		//컬러 정보
+		FbxSurfaceLambert* lambert = (FbxSurfaceLambert*)InMaterial;
+		FbxDouble3 diffuse = lambert->Diffuse.Get();
+
+		JsonData["Parameters"]["SectionColor"][0] = static_cast<float>(diffuse[0]);
+		JsonData["Parameters"]["SectionColor"][1] = static_cast<float>(diffuse[1]);
+		JsonData["Parameters"]["SectionColor"][2] = static_cast<float>(diffuse[2]);
+		JsonData["Parameters"]["SectionColor"][3] = 1.0f;
+	}
+
+	//Textue 정보 추출
+	// 추출하고 싶은 Property 이름 배열 (디퓨즈, 노말, 에미시브 등)
+	const char* propertyNames[] = {
+		FbxSurfaceMaterial::sDiffuse,
+		FbxSurfaceMaterial::sNormalMap, // 또는 "NormalMap"
+		FbxSurfaceMaterial::sSpecular,
+		FbxSurfaceMaterial::sEmissive
+	};
+	//  모델러들이 흔히 쓰는 텍스처 폴더 이름 후보군
+	TArray<FString> searchFolders = {
+		"",           // 1순위: FBX와 같은 폴더에 있을 경우
+		"texture",    // 2순위
+		"textures",
+		"tex",
+		"maps",
+		"materials",
+		"images",
+		"src"
+	};
+	for (const char* propName : propertyNames)
+	{
+		FbxProperty prop = InMaterial->FindProperty(propName);
+
+		if (prop.IsValid())
+		{
+			// 이 Property에 연결된 텍스처 개수 확인
+			int textureCount = prop.GetSrcObjectCount<FbxTexture>();
+
+			for (int j = 0; j < textureCount; ++j)
+			{
+				// 텍스처 객체 가져오기
+				FbxTexture* texture = prop.GetSrcObject<FbxTexture>(j);
+
+				// 파일 텍스처(이미지 파일)인지 확인
+				FbxFileTexture* fileTexture = FbxCast<FbxFileTexture>(texture);
+
+				if (fileTexture)
+				{
+					// 텍스처 파일 경로 추출!
+					const char* absolutePath = fileTexture->GetFileName();
+					const char* relativePath = fileTexture->GetRelativeFileName();
+
+					// 2. 경로에서 "파일명.확장자" (예: "albedo.png")만 쏙 빼내기
+					std::filesystem::path texturePath(absolutePath);
+					std::string fileNameOnly = texturePath.filename().string();
+
+					std::filesystem::path finalTexturePath;
+					bool isFound = false;
+					//for (const FString& folder : searchFolders)
+					//{
+					//	std::filesystem::path checkPath = fbxDir / folder / fileNameOnly;
+
+					//	if (std::filesystem::exists(checkPath))
+					//	{
+					//		finalTexturePath = checkPath;
+					//		isFound = true;
+					//		break; // 찾았으면 탐색 종료!
+					//	}
+					//}
+					std::filesystem::path fbxDirectory = "Data/";
+					if (isFound) {
+						// TODO: 엔진의 Material 구조체에 이 파일 경로를 저장합니다.
+						JsonData["Textures"]["DiffuseTexture"] = "Data/" + FString(relativePath);
+						UE_LOG("Get TextureMap file path: %s", "Data/" + FString(relativePath));
+
+					}
+					else {
+						UE_LOG("Invalid TextureMap file path: %s", FPaths::ResolveAssetPath(absolutePath, relativePath));
+					}
+
+				}
+			}
+		}
+	}
+
+
+#if IS_GAME_CLIENT
+	return MatPath;
+#else
+	std::ofstream File(std::filesystem::path(MatDiskPath), std::ios::binary);
+	File << JsonData.dump();
+
+	return MatPath;
+#endif
+
 }
