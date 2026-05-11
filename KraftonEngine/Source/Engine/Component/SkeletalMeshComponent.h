@@ -12,4 +12,7 @@ public:
 
 protected:
 	void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction& ThisTickFunction) override;
+	void ApplyDebugRandomBoneAnimation(float DeltaTime);
+
+	float DebugBoneAnimTime = 0.0f;
 };
