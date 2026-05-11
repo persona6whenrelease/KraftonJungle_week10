@@ -29,17 +29,90 @@ void USkinnedMeshComponent::SetSkeletalMesh(USkeletalMesh* InMesh)
 	{
 		SkeletalMeshPath = "None";
 		ClearMaterialSlots();
-		SkinnedVertices.clear();
-		RuntimeMeshBuffer.Release();
 	}
 
-	CacheLocalBounds();
-	BuildReferencePoseMatrices();
-	BuildBindPoseRenderVertices();
+	SkinnedVertices.clear();
+	LocalBonePoseMatrices.clear();
+	MeshSpaceBoneMatrices.clear();
 	RuntimeMeshBuffer.Release();
+
+	CacheLocalBounds();
+	ResetBonePoseToBindPose();
 	EnsureRuntimeResources();
 	MarkRenderStateDirty();
 	MarkWorldBoundsDirty();
+}
+
+int32 USkinnedMeshComponent::FindBoneIndexByName(const FString& BoneName) const
+{
+	if (!SkeletalMesh || !SkeletalMesh->GetSkeletalMeshAsset())
+	{
+		return -1;
+	}
+
+	const TArray<FBoneInfo>& Bones = SkeletalMesh->GetSkeletalMeshAsset()->Bones;
+	for (int32 BoneIndex = 0; BoneIndex < static_cast<int32>(Bones.size()); ++BoneIndex)
+	{
+		if (Bones[BoneIndex].Name == BoneName)
+		{
+			return BoneIndex;
+		}
+	}
+
+	return -1;
+}
+
+void USkinnedMeshComponent::ResetBonePoseToBindPose()
+{
+	LocalBonePoseMatrices.clear();
+	MeshSpaceBoneMatrices.clear();
+	if (!SkeletalMesh || !SkeletalMesh->GetSkeletalMeshAsset())
+	{
+		return;
+	}
+
+	const TArray<FBoneInfo>& Bones = SkeletalMesh->GetSkeletalMeshAsset()->Bones;
+	LocalBonePoseMatrices.resize(Bones.size(), FMatrix::Identity);
+	for (int32 BoneIndex = 0; BoneIndex < static_cast<int32>(Bones.size()); ++BoneIndex)
+	{
+		LocalBonePoseMatrices[BoneIndex] = Bones[BoneIndex].LocalBindPose;
+	}
+
+	RebuildMeshSpaceBoneMatrices();
+	SkinVerticesToReferencePose();
+	EnsureRuntimeResources();
+	MarkWorldBoundsDirty();
+}
+
+bool USkinnedMeshComponent::SetBoneLocalPose(int32 BoneIndex, const FMatrix& LocalPose)
+{
+	if (!SkeletalMesh || !SkeletalMesh->GetSkeletalMeshAsset())
+	{
+		return false;
+	}
+
+	const TArray<FBoneInfo>& Bones = SkeletalMesh->GetSkeletalMeshAsset()->Bones;
+	if (BoneIndex < 0 || BoneIndex >= static_cast<int32>(Bones.size()))
+	{
+		return false;
+	}
+
+	if (LocalBonePoseMatrices.size() != Bones.size())
+	{
+		ResetBonePoseToBindPose();
+	}
+
+	LocalBonePoseMatrices[BoneIndex] = LocalPose;
+	RebuildMeshSpaceBoneMatrices();
+	SkinVerticesToReferencePose();
+	EnsureRuntimeResources();
+	MarkWorldBoundsDirty();
+	return true;
+}
+
+bool USkinnedMeshComponent::SetBoneLocalPoseByName(const FString& BoneName, const FMatrix& LocalPose)
+{
+	return SetBoneLocalPose(FindBoneIndexByName(BoneName), LocalPose);
 }
 
 FMeshBuffer* USkinnedMeshComponent::GetMeshBuffer() const
@@ -131,7 +204,7 @@ void USkinnedMeshComponent::PostDuplicate()
 
 	RestoreOverrideMaterialsFromSlots();
 	CacheLocalBounds();
-	BuildReferencePoseMatrices();
+	ResetBonePoseToBindPose();
 	BuildBindPoseRenderVertices();
 	EnsureRuntimeResources();
 	MarkRenderStateDirty();
@@ -247,22 +320,31 @@ void USkinnedMeshComponent::UploadSkinnedVertices()
 	}
 }
 
-void USkinnedMeshComponent::BuildReferencePoseMatrices()
+void USkinnedMeshComponent::RebuildMeshSpaceBoneMatrices()
 {
-	ReferenceBoneMatrices.clear();
+	MeshSpaceBoneMatrices.clear();
 	if (!SkeletalMesh || !SkeletalMesh->GetSkeletalMeshAsset())
 	{
 		return;
 	}
 
 	const TArray<FBoneInfo>& Bones = SkeletalMesh->GetSkeletalMeshAsset()->Bones;
-	ReferenceBoneMatrices.resize(Bones.size(), FMatrix::Identity);
+	if (LocalBonePoseMatrices.size() != Bones.size())
+	{
+		LocalBonePoseMatrices.resize(Bones.size(), FMatrix::Identity);
+		for (int32 BoneIndex = 0; BoneIndex < static_cast<int32>(Bones.size()); ++BoneIndex)
+		{
+			LocalBonePoseMatrices[BoneIndex] = Bones[BoneIndex].LocalBindPose;
+		}
+	}
+
+	MeshSpaceBoneMatrices.resize(Bones.size(), FMatrix::Identity);
 	for (int32 i = 0; i < static_cast<int32>(Bones.size()); ++i)
 	{
 		const int32 ParentIndex = Bones[i].ParentIndex;
-		ReferenceBoneMatrices[i] = (ParentIndex >= 0 && ParentIndex < i)
-			? Bones[i].LocalBindPose * ReferenceBoneMatrices[ParentIndex]
-			: Bones[i].LocalBindPose;
+		MeshSpaceBoneMatrices[i] = (ParentIndex >= 0 && ParentIndex < i)
+			? LocalBonePoseMatrices[i] * MeshSpaceBoneMatrices[ParentIndex]
+			: LocalBonePoseMatrices[i];
 	}
 }
 
@@ -278,6 +360,10 @@ void USkinnedMeshComponent::SkinVerticesToReferencePose()
 	{
 		BuildBindPoseRenderVertices();
 	}
+	if (MeshSpaceBoneMatrices.size() != Asset->Bones.size())
+	{
+		RebuildMeshSpaceBoneMatrices();
+	}
 
 	for (int32 VertexIndex = 0; VertexIndex < static_cast<int32>(Asset->Vertices.size()); ++VertexIndex)
 	{
@@ -290,13 +376,13 @@ void USkinnedMeshComponent::SkinVerticesToReferencePose()
 		{
 			const float Weight = Source.BoneWeights[Influence];
 			const uint32 BoneIndex = Source.BoneIDs[Influence];
-			if (Weight <= 0.0f || BoneIndex >= ReferenceBoneMatrices.size())
+			if (Weight <= 0.0f || BoneIndex >= MeshSpaceBoneMatrices.size())
 			{
 				continue;
 			}
 
 			const FMatrix SkinMatrix =
-				Asset->Bones[BoneIndex].InverseBindPose * ReferenceBoneMatrices[BoneIndex];
+				Asset->Bones[BoneIndex].InverseBindPose * MeshSpaceBoneMatrices[BoneIndex];
 			SkinnedPos += SkinMatrix.TransformPositionWithW(Source.pos) * Weight;
 			SkinnedNormal += SkinMatrix.TransformVector(Source.normal) * Weight;
 			TotalWeight += Weight;

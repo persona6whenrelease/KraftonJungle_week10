@@ -11,8 +11,6 @@ void USkeletalMeshComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 	USkinnedMeshComponent::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
 	ApplyDebugRandomBoneAnimation(DeltaTime);
-	SkinVerticesToReferencePose();
-	EnsureRuntimeResources();
 }
 
 void USkeletalMeshComponent::ApplyDebugRandomBoneAnimation(float DeltaTime)
@@ -30,7 +28,7 @@ void USkeletalMeshComponent::ApplyDebugRandomBoneAnimation(float DeltaTime)
 	}
 
 	DebugBoneAnimTime += DeltaTime;
-	ReferenceBoneMatrices.resize(Bones.size(), FMatrix::Identity);
+	LocalBonePoseMatrices.resize(Bones.size(), FMatrix::Identity);
 
 	constexpr float MaxAngleRadians = 15.0f * 3.1415926535f / 180.0f;
 	for (int32 BoneIndex = 0; BoneIndex < static_cast<int32>(Bones.size()); ++BoneIndex)
@@ -51,13 +49,10 @@ void USkeletalMeshComponent::ApplyDebugRandomBoneAnimation(float DeltaTime)
 			AnimatedLocal = FMatrix::MakeRotationAxis(Axis, Angle) * Bone.LocalBindPose;
 		}
 
-		if (Bone.ParentIndex >= 0 && Bone.ParentIndex < BoneIndex)
-		{
-			ReferenceBoneMatrices[BoneIndex] = AnimatedLocal * ReferenceBoneMatrices[Bone.ParentIndex];
-		}
-		else
-		{
-			ReferenceBoneMatrices[BoneIndex] = AnimatedLocal;
-		}
+		LocalBonePoseMatrices[BoneIndex] = AnimatedLocal;
 	}
+
+	RebuildMeshSpaceBoneMatrices();
+	SkinVerticesToReferencePose();
+	EnsureRuntimeResources();
 }
