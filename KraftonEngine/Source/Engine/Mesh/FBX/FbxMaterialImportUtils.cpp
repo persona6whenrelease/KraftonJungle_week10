@@ -111,6 +111,48 @@ namespace FbxMaterialImportUtils
 		return SlotName.empty() ? "None" : SlotName;
 	}
 
+	void BuildStaticMaterials(FFbxImportMeta& ImportMeta, const FStaticMesh& Mesh, TArray<FMeshMaterial>& OutMaterials)
+	{
+		OutMaterials.clear();
+		TSet<FString> AddedSlotNames;
+		UMaterial* FallbackMaterial = FMaterialManager::Get().GetOrCreateMaterial("None");
+
+		for (const FStaticMeshSection& Section : Mesh.Sections)
+		{
+			const FString SlotName = NormalizeMaterialSlotName(Section.MaterialSlotName);
+			if (AddedSlotNames.find(SlotName) != AddedSlotNames.end())
+			{
+				continue;
+			}
+
+			FMeshMaterial Material;
+			Material.MaterialSlotName = SlotName;
+			Material.MaterialInterface = FallbackMaterial;
+			FString MaterialPath = "None";
+
+			const int32 MaterialInfoId = FindMaterialInfoBySlotName(ImportMeta, SlotName);
+			if (IsValidIndex(ImportMeta.Materials, MaterialInfoId))
+			{
+				MaterialPath = ConvertFbxMaterialInfoToMat(ImportMeta.Materials[MaterialInfoId]);
+				if (!MaterialPath.empty())
+				{
+					Material.MaterialInterface = FMaterialManager::Get().GetOrCreateMaterial(MaterialPath);
+				}
+			}
+
+			OutMaterials.push_back(std::move(Material));
+			AddedSlotNames.insert(SlotName);
+		}
+
+		if (OutMaterials.empty())
+		{
+			FMeshMaterial Material;
+			Material.MaterialSlotName = "None";
+			Material.MaterialInterface = FallbackMaterial;
+			OutMaterials.push_back(std::move(Material));
+		}
+	}
+
 	void BuildSkeletalMaterials(FFbxImportMeta& ImportMeta, const FSkeletalMesh& Mesh, TArray<FMeshMaterial>& OutMaterials)
 	{
 		OutMaterials.clear();

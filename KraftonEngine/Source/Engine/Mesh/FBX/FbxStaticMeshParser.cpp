@@ -6,9 +6,12 @@
 
 #include <fbxsdk.h>
 
-bool FFbxStaticMeshParser::Parse(TArray<FStaticMesh>& OutStaticMeshes) const
+bool FFbxStaticMeshParser::Parse(
+	TArray<FStaticMesh>& OutStaticMeshes,
+	TMap<int32, int32>& OutMeshIdToStaticMeshAssetIndex) const
 {
 	OutStaticMeshes.clear();
+	OutMeshIdToStaticMeshAssetIndex.clear();
 
 	for (const FFbxMeshMeta& MeshMeta : ImportMeta.Meshes)
 	{
@@ -33,7 +36,9 @@ bool FFbxStaticMeshParser::Parse(TArray<FStaticMesh>& OutStaticMeshes) const
 			continue;
 		}
 
+		const int32 AssetIndex = static_cast<int32>(OutStaticMeshes.size());
 		OutStaticMeshes.push_back(std::move(StaticMesh));
+		OutMeshIdToStaticMeshAssetIndex[MeshMeta.MeshId] = AssetIndex;
 	}
 
 	UE_LOG("[FBXImporter] Parsed static meshes. Total=%u",

@@ -6,7 +6,7 @@
 #include "Mesh/SkeletalMeshAsset.h"
 #include "Mesh/StaticMeshAsset.h"
 
-enum class ELightType
+enum class EFBXLightType
 {
 	Point,
 	Directional,
@@ -15,18 +15,41 @@ enum class ELightType
 
 struct FLightAsset
 {
-	ELightType LightType;
+	EFBXLightType LightType;
 	FMatrix Transform;
 };
 
 using FCameraAsset = FMatrix;
 
+enum class EFBXSceneComponentType
+{
+	StaticMesh,
+	SkeletalMesh
+};
+
+struct FFBXSceneComponentDesc
+{
+	EFBXSceneComponentType Type = EFBXSceneComponentType::StaticMesh;
+	FString Name;
+	int32 SourceNodeId = -1;
+	int32 SourceMeshId = -1;
+	int32 SourceSkeletonId = -1;
+	int32 StaticMeshAssetIndex = -1;
+	int32 SkeletalMeshAssetIndex = -1;
+	FMatrix RelativeTransform = FMatrix::Identity;
+};
+
 struct FFBXAsset
 {
 	FString PathFileName;
-	TArray<FSkeletalMesh> SkeletalMeshes;
-	TArray<FMeshMaterial> SkeletalMaterials;
 	TArray<FStaticMesh> StaticMeshes;
+	TArray<FSkeletalMesh> SkeletalMeshes;
+	TArray<TArray<FMeshMaterial>> StaticMeshMaterials;
+	TArray<TArray<FMeshMaterial>> SkeletalMeshMaterials;
+	TArray<FMeshMaterial> SkeletalMaterials;
+	TArray<FFBXSceneComponentDesc> SceneComponents;
+	TMap<int32, int32> MeshIdToStaticMeshAssetIndex;
+	TMap<int32, int32> SkeletonIdToSkeletalMeshAssetIndex;
 	TArray<FLightAsset> LightAssets;
 	TArray<FCameraAsset> CameraAssets;
 };

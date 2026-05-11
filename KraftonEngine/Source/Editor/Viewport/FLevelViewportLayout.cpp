@@ -40,6 +40,7 @@
 
 #include "GameFramework/StaticMeshActor.h"
 #include "Mesh/FBX/FBXManager.h"
+#include "Mesh/FBX/FBXSceneAsset.h"
 #include "Component/SkeletalMeshComponent.h"
 #include <algorithm>
 
@@ -1057,29 +1058,80 @@ void FLevelViewportLayout::RenderViewportUI(float DeltaTime)
 				FContentItem ContentItem = *reinterpret_cast<const FContentItem*>(payload->Data);
 
 				const FString FbxPath = FPaths::ToUtf8(ContentItem.Path);
-				auto SkeletalMesh = FFBXManager::LoadSkeletalMesh(FbxPath);
-				if (!SkeletalMesh || !SkeletalMesh->GetSkeletalMeshAsset())
+				UFBXSceneAsset* SceneAsset = FFBXManager::LoadFbxScene(FbxPath);
+				if (!SceneAsset || SceneAsset->GetSceneComponents().empty())
 				{
-					UE_LOG("[Viewport] Failed to load FBX skeletal mesh for drag-drop: %s",
+					UE_LOG("[Viewport] Failed to load FBX scene for drag-drop: %s",
 						FbxPath.c_str());
 				}
 				else
 				{
 					auto NewActor = Cast<AActor>(FObjectFactory::Get().Create(AActor::StaticClass()->GetName(), Editor->GetWorld()));
-					auto SkeletalMeshComponent = NewActor->AddComponent<USkeletalMeshComponent>();
-					SkeletalMeshComponent->SetSkeletalMesh(SkeletalMesh);
-					NewActor->SetRootComponent(SkeletalMeshComponent);
-					Editor->GetWorld()->AddActor(NewActor);
+					USceneComponent* RootComponent = NewActor->AddComponent<USceneComponent>();
+					NewActor->SetRootComponent(RootComponent);
 
-					FVector SpawnLocation(0, 0, 0);
-					FPoint MP = { ImGui::GetIO().MousePos.x, ImGui::GetIO().MousePos.y };
-					if (TryComputePlacementLocation(GetActiveViewportSlotIndex(), MP, SpawnLocation))
+					int32 SpawnedMeshComponentCount = 0;
+					for (const FFBXSceneComponentDesc& Desc : SceneAsset->GetSceneComponents())
 					{
-						NewActor->SetActorLocation(SpawnLocation);
+						if (Desc.Type == EFBXSceneComponentType::StaticMesh)
+						{
+							const TArray<UStaticMesh*>& StaticMeshes = SceneAsset->GetStaticMeshes();
+							if (Desc.StaticMeshAssetIndex < 0 ||
+								Desc.StaticMeshAssetIndex >= static_cast<int32>(StaticMeshes.size()) ||
+								!StaticMeshes[Desc.StaticMeshAssetIndex])
+							{
+								UE_LOG("[Viewport] Skipping invalid FBX static scene component. Path=%s MeshId=%d AssetIndex=%d",
+									FbxPath.c_str(),
+									Desc.SourceMeshId,
+									Desc.StaticMeshAssetIndex);
+								continue;
+							}
+
+							UStaticMeshComponent* StaticMeshComponent = NewActor->AddComponent<UStaticMeshComponent>();
+							StaticMeshComponent->AttachToComponent(RootComponent);
+							StaticMeshComponent->SetStaticMesh(StaticMeshes[Desc.StaticMeshAssetIndex]);
+							++SpawnedMeshComponentCount;
+						}
+						else if (Desc.Type == EFBXSceneComponentType::SkeletalMesh)
+						{
+							const TArray<USkeletalMesh*>& SkeletalMeshes = SceneAsset->GetSkeletalMeshes();
+							if (Desc.SkeletalMeshAssetIndex < 0 ||
+								Desc.SkeletalMeshAssetIndex >= static_cast<int32>(SkeletalMeshes.size()) ||
+								!SkeletalMeshes[Desc.SkeletalMeshAssetIndex])
+							{
+								UE_LOG("[Viewport] Skipping invalid FBX skeletal scene component. Path=%s SkeletonId=%d AssetIndex=%d",
+									FbxPath.c_str(),
+									Desc.SourceSkeletonId,
+									Desc.SkeletalMeshAssetIndex);
+								continue;
+							}
+
+							USkeletalMeshComponent* SkeletalMeshComponent = NewActor->AddComponent<USkeletalMeshComponent>();
+							SkeletalMeshComponent->AttachToComponent(RootComponent);
+							SkeletalMeshComponent->SetSkeletalMesh(SkeletalMeshes[Desc.SkeletalMeshAssetIndex]);
+							++SpawnedMeshComponentCount;
+						}
 					}
-					if (SelectionManager)
+
+					if (SpawnedMeshComponentCount <= 0)
 					{
-						SelectionManager->Select(NewActor);
+						UE_LOG("[Viewport] FBX scene had no spawnable mesh components: %s", FbxPath.c_str());
+						UObjectManager::Get().DestroyObject(NewActor);
+					}
+					else
+					{
+						Editor->GetWorld()->AddActor(NewActor);
+
+						FVector SpawnLocation(0, 0, 0);
+						FPoint MP = { ImGui::GetIO().MousePos.x, ImGui::GetIO().MousePos.y };
+						if (TryComputePlacementLocation(GetActiveViewportSlotIndex(), MP, SpawnLocation))
+						{
+							NewActor->SetActorLocation(SpawnLocation);
+						}
+						if (SelectionManager)
+						{
+							SelectionManager->Select(NewActor);
+						}
 					}
 				}
 			}

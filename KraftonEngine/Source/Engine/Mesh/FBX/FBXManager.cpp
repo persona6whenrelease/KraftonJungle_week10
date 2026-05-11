@@ -2,9 +2,12 @@
 
 #include "Core/Log.h"
 #include "Engine/Platform/Paths.h"
+#include "Engine/Runtime/Engine.h"
 #include "Materials/MaterialManager.h"
 #include "Mesh/FBX/FBXImporter.h"
+#include "Mesh/FBX/FBXSceneAsset.h"
 #include "Mesh/SkeletalMesh.h"
+#include "Mesh/StaticMesh.h"
 #include "Object/Object.h"
 #include "Serialization/WindowsArchive.h"
 
@@ -13,6 +16,7 @@
 #include <filesystem>
 
 TMap<FString, USkeletalMesh*> FFBXManager::SkeletalMeshCache;
+TMap<FString, UFBXSceneAsset*> FFBXManager::FbxSceneCache;
 TArray<FMeshAssetListItem> FFBXManager::AvailableSkeletalMeshFiles;
 TArray<FMeshAssetListItem> FFBXManager::AvailableFbxFiles;
 
@@ -335,6 +339,78 @@ USkeletalMesh* FFBXManager::LoadSkeletalMesh(const FString& PathFileName)
 	return SkeletalMesh;
 }
 
+UFBXSceneAsset* FFBXManager::LoadFbxScene(const FString& PathFileName)
+{
+	if (PathFileName.empty() || PathFileName == "None" || !IsFbxPath(PathFileName))
+	{
+		return nullptr;
+	}
+
+	const FString CacheKey = NormalizePackagePath(PathFileName);
+	auto It = FbxSceneCache.find(CacheKey);
+	if (It != FbxSceneCache.end())
+	{
+		return It->second;
+	}
+
+	FFBXAsset ImportedAsset;
+	FBXImporter Importer;
+	if (!Importer.ImportFbxAsset(PathFileName, ImportedAsset) ||
+		ImportedAsset.SceneComponents.empty())
+	{
+		UE_LOG("[FBXManager] FBX scene import failed or produced no scene components: %s",
+			PathFileName.c_str());
+		return nullptr;
+	}
+
+	UFBXSceneAsset* SceneAsset = UObjectManager::Get().CreateObject<UFBXSceneAsset>();
+	SceneAsset->SetSourcePath(PathFileName);
+
+	ID3D11Device* Device = GEngine ? GEngine->GetRenderer().GetFD3DDevice().GetDevice() : nullptr;
+	for (int32 StaticMeshIndex = 0; StaticMeshIndex < static_cast<int32>(ImportedAsset.StaticMeshes.size()); ++StaticMeshIndex)
+	{
+		UStaticMesh* StaticMesh = UObjectManager::Get().CreateObject<UStaticMesh>();
+		TArray<FStaticMaterial> Materials;
+		if (StaticMeshIndex < static_cast<int32>(ImportedAsset.StaticMeshMaterials.size()))
+		{
+			Materials = std::move(ImportedAsset.StaticMeshMaterials[StaticMeshIndex]);
+		}
+		StaticMesh->SetStaticMaterials(std::move(Materials));
+
+		FStaticMesh* MeshAsset = new FStaticMesh(std::move(ImportedAsset.StaticMeshes[StaticMeshIndex]));
+		StaticMesh->SetStaticMeshAsset(MeshAsset);
+		if (Device)
+		{
+			StaticMesh->InitResources(Device);
+		}
+		SceneAsset->AddStaticMesh(StaticMesh);
+	}
+
+	for (int32 SkeletalMeshIndex = 0; SkeletalMeshIndex < static_cast<int32>(ImportedAsset.SkeletalMeshes.size()); ++SkeletalMeshIndex)
+	{
+		USkeletalMesh* SkeletalMesh = UObjectManager::Get().CreateObject<USkeletalMesh>();
+		TArray<FMeshMaterial> Materials;
+		if (SkeletalMeshIndex < static_cast<int32>(ImportedAsset.SkeletalMeshMaterials.size()))
+		{
+			Materials = std::move(ImportedAsset.SkeletalMeshMaterials[SkeletalMeshIndex]);
+		}
+		SkeletalMesh->SetMaterials(std::move(Materials));
+		SkeletalMesh->SetSkeletalMeshAsset(new FSkeletalMesh(std::move(ImportedAsset.SkeletalMeshes[SkeletalMeshIndex])));
+		SceneAsset->AddSkeletalMesh(SkeletalMesh);
+	}
+
+	SceneAsset->SetSceneComponents(std::move(ImportedAsset.SceneComponents));
+	FbxSceneCache[CacheKey] = SceneAsset;
+
+	UE_LOG("[FBXManager] Loaded FBX scene. Path=%s StaticMeshes=%u SkeletalMeshes=%u Components=%u",
+		PathFileName.c_str(),
+		static_cast<uint32>(SceneAsset->GetStaticMeshes().size()),
+		static_cast<uint32>(SceneAsset->GetSkeletalMeshes().size()),
+		static_cast<uint32>(SceneAsset->GetSceneComponents().size()));
+
+	return SceneAsset;
+}
+
 void FFBXManager::ScanSkeletalMeshAssets()
 {
 	AddFilesWithExtension(
@@ -364,4 +440,5 @@ const TArray<FMeshAssetListItem>& FFBXManager::GetAvailableFbxSourceFiles()
 void FFBXManager::ReleaseAllGPU()
 {
 	SkeletalMeshCache.clear();
+	FbxSceneCache.clear();
 }

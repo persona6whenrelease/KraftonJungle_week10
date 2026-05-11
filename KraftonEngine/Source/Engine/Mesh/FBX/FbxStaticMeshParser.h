@@ -12,7 +12,9 @@ public:
 	{
 	}
 
-	bool Parse(TArray<FStaticMesh>& OutStaticMeshes) const;
+	bool Parse(
+		TArray<FStaticMesh>& OutStaticMeshes,
+		TMap<int32, int32>& OutMeshIdToStaticMeshAssetIndex) const;
 
 private:
 	const FFbxImportMeta& ImportMeta;

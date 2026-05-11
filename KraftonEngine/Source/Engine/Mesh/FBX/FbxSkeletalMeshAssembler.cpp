@@ -17,9 +17,11 @@ namespace
 
 bool FFbxSkeletalMeshAssembler::Assemble(
 	const TArray<FFbxSkinnedMeshPart>& SkinnedMeshParts,
-	TArray<FSkeletalMesh>& OutSkeletalMeshAssets) const
+	TArray<FSkeletalMesh>& OutSkeletalMeshAssets,
+	TMap<int32, int32>& OutSkeletonIdToSkeletalMeshAssetIndex) const
 {
 	OutSkeletalMeshAssets.clear();
+	OutSkeletonIdToSkeletalMeshAssetIndex.clear();
 
 	for (const FFbxSkeletonMeta& SkeletonMeta : ImportMeta.Skeletons)
 	{
@@ -66,7 +68,9 @@ bool FFbxSkeletalMeshAssembler::Assemble(
 			static_cast<uint32>(SkeletalMesh.Sections.size()),
 			static_cast<uint32>(SkeletalMesh.Bones.size()));
 
+		const int32 AssetIndex = static_cast<int32>(OutSkeletalMeshAssets.size());
 		OutSkeletalMeshAssets.push_back(SkeletalMesh);
+		OutSkeletonIdToSkeletalMeshAssetIndex[SkeletonMeta.SkeletonId] = AssetIndex;
 	}
 
 	return true;

@@ -15,7 +15,8 @@ public:
 
 	bool Assemble(
 		const TArray<FFbxSkinnedMeshPart>& SkinnedMeshParts,
-		TArray<FSkeletalMesh>& OutSkeletalMeshAssets) const;
+		TArray<FSkeletalMesh>& OutSkeletalMeshAssets,
+		TMap<int32, int32>& OutSkeletonIdToSkeletalMeshAssetIndex) const;
 
 private:
 	bool BuildSkeletalMeshFromParts(
