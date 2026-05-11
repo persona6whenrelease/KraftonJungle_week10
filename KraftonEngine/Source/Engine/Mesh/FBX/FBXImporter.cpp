@@ -112,6 +112,48 @@ namespace
 		return Node ? FBXUtil::ConvertFbxMatrix(Node->EvaluateGlobalTransform()) : FMatrix::Identity;
 	}
 
+	FMatrix BuildRigidAttachedMeshBindGlobal(
+		const FFbxMeshMeta& MeshMeta,
+		const FFbxImportMeta& ImportMeta)
+	{
+		if (!MeshMeta.Node)
+		{
+			UE_LOG("[FBXImporter] Rigid attached mesh has null node. MeshId=%d",
+				MeshMeta.MeshId);
+			return FMatrix::Identity;
+		}
+
+		if (!IsValidIndex(ImportMeta.Bones, MeshMeta.AttachedBoneId))
+		{
+			UE_LOG("[FBXImporter] Rigid attached mesh has invalid attached bone. MeshId=%d BoneId=%d",
+				MeshMeta.MeshId,
+				MeshMeta.AttachedBoneId);
+			return GetMeshNodeGlobalBind(MeshMeta.Node);
+		}
+
+		const FFbxBoneMeta& AttachedBone = ImportMeta.Bones[MeshMeta.AttachedBoneId];
+		if (!AttachedBone.Node)
+		{
+			UE_LOG("[FBXImporter] Rigid attached mesh attached bone has null node. MeshId=%d BoneId=%d BoneName=%s",
+				MeshMeta.MeshId,
+				MeshMeta.AttachedBoneId,
+				AttachedBone.Name.c_str());
+			return GetMeshNodeGlobalBind(MeshMeta.Node);
+		}
+
+		const FMatrix MeshEvaluateGlobal = FBXUtil::ConvertFbxMatrix(MeshMeta.Node->EvaluateGlobalTransform());
+		const FMatrix AttachedBoneEvaluateGlobal = FBXUtil::ConvertFbxMatrix(AttachedBone.Node->EvaluateGlobalTransform());
+		const FMatrix MeshLocalToAttachedBone = MeshEvaluateGlobal * AttachedBoneEvaluateGlobal.GetInverse();
+
+		UE_LOG("[FBXImporter] Rigid attached bind. MeshId=%d Node=%s AttachedBoneId=%d AttachedBoneName=%s",
+			MeshMeta.MeshId,
+			MeshMeta.SourceNodePath.c_str(),
+			MeshMeta.AttachedBoneId,
+			AttachedBone.Name.c_str());
+
+		return MeshLocalToAttachedBone * AttachedBone.BindGlobalMatrix;
+	}
+
 	bool AreMatricesNearlyEqual(const FMatrix& A, const FMatrix& B, float Tolerance)
 	{
 		for (int32 Row = 0; Row < 4; ++Row)
@@ -234,7 +276,8 @@ namespace
 		const FFbxSkeletonMeta& SkeletonMeta)
 	{
 		const FMatrix GeometricTransform = BuildGeometricTransform(MeshNode);
-		const FMatrix SkeletonRootBindGlobal = GetSkeletonRootBindGlobal(ImportMeta, SkeletonMeta);
+		//const FMatrix SkeletonRootBindGlobal = GetSkeletonRootBindGlobal(ImportMeta, SkeletonMeta);
+		const FMatrix SkeletonRootBindGlobal = FMatrix::Identity;
 		return GeometricTransform * MeshBindGlobal * SkeletonRootBindGlobal.GetInverse();
 	}
 
@@ -330,11 +373,8 @@ namespace
 			for (int32 i = 1; i + 1 < static_cast<int32>(PolygonVertexIndices.size()); ++i)
 			{
 				SectionIndices.push_back(PolygonVertexIndices[0]);
-				SectionIndices.push_back(PolygonVertexIndices[i]);
 				SectionIndices.push_back(PolygonVertexIndices[i + 1]);
-				//SectionIndices.push_back(PolygonVertexIndices[0]);
-				//SectionIndices.push_back(PolygonVertexIndices[i + 1]);
-				//SectionIndices.push_back(PolygonVertexIndices[i]);
+				SectionIndices.push_back(PolygonVertexIndices[i]);
 			}
 		}
 
@@ -740,7 +780,7 @@ bool FBXImporter::ParseRigidAttachedMeshPart(int32 MeshId, FFbxSkinnedMeshPart& 
 	OutPart.bRigidAttached = true;
 	OutPart.SourceNodePath = MeshMeta.SourceNodePath;
 
-	const FMatrix MeshBindGlobal = GetMeshNodeGlobalBind(MeshMeta.Node);
+	const FMatrix MeshBindGlobal = BuildRigidAttachedMeshBindGlobal(MeshMeta, ImportMeta);
 	const FMatrix MeshToSkeletonBindMatrix = BuildMeshToSkeletonBindMatrix(
 		MeshMeta.Node,
 		MeshBindGlobal,
@@ -840,7 +880,8 @@ bool FBXImporter::BuildSkeletalMeshFromParts(
 	BoneBindInSkeletonSpace.resize(SkeletonMeta.BoneIds.size(), FMatrix::Identity);
 
 	const FMatrix SkeletonRootBindGlobal = ImportMeta.Bones[SkeletonMeta.RootBoneId].BindGlobalMatrix;
-	const FMatrix InvSkeletonRootBindGlobal = SkeletonRootBindGlobal.GetInverse();
+	//const FMatrix InvSkeletonRootBindGlobal = SkeletonRootBindGlobal.GetInverse();
+	const FMatrix InvSkeletonRootBindGlobal = FMatrix::Identity;
 
 	for (int32 SkeletonBoneIndex = 0; SkeletonBoneIndex < static_cast<int32>(SkeletonMeta.BoneIds.size()); ++SkeletonBoneIndex)
 	{
@@ -1092,7 +1133,7 @@ void FBXImporter::PreprocessScene()
 	UnitOptions.mConvertPhotometricLProperties = true;
 	UnitOptions.mConvertCameraClipPlanes = true;
 
-	const FbxSystemUnit CentimeterUnit(1.0);
+	const FbxSystemUnit CentimeterUnit(100.0);
 	CentimeterUnit.ConvertScene(Scene, UnitOptions);
 
 	FbxGeometryConverter Converter(Manager);
