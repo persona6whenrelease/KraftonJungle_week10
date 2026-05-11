@@ -109,7 +109,14 @@ void USkinnedMeshComponent::PostDuplicate()
 
 	if (!SkeletalMeshPath.empty() && SkeletalMeshPath != "None")
 	{
-		USkeletalMesh* Loaded = FFBXManager::LoadSkeletalMesh(SkeletalMeshPath);
+		const bool bFbxSceneSkeletalMeshReference = SkeletalMeshPath.find("#Skeleton_") != FString::npos;
+		USkeletalMesh* Loaded = bFbxSceneSkeletalMeshReference
+			? FFBXManager::LoadSkeletalMeshFromFbxSceneReference(SkeletalMeshPath)
+			: nullptr;
+		if (!Loaded && !bFbxSceneSkeletalMeshReference)
+		{
+			Loaded = FFBXManager::LoadSkeletalMesh(SkeletalMeshPath);
+		}
 		if (Loaded)
 		{
 			TArray<FMaterialSlot> SavedSlots = MaterialSlots;
@@ -150,7 +157,14 @@ void USkinnedMeshComponent::PostEditProperty(const char* PropertyName)
 		}
 		else
 		{
-			USkeletalMesh* Loaded = FFBXManager::LoadSkeletalMesh(SkeletalMeshPath);
+			const bool bFbxSceneSkeletalMeshReference = SkeletalMeshPath.find("#Skeleton_") != FString::npos;
+			USkeletalMesh* Loaded = bFbxSceneSkeletalMeshReference
+				? FFBXManager::LoadSkeletalMeshFromFbxSceneReference(SkeletalMeshPath)
+				: nullptr;
+			if (!Loaded && !bFbxSceneSkeletalMeshReference)
+			{
+				Loaded = FFBXManager::LoadSkeletalMesh(SkeletalMeshPath);
+			}
 			SetSkeletalMesh(Loaded);
 		}
 		CacheLocalBounds();
@@ -247,8 +261,8 @@ void USkinnedMeshComponent::BuildReferencePoseMatrices()
 	{
 		const int32 ParentIndex = Bones[i].ParentIndex;
 		ReferenceBoneMatrices[i] = (ParentIndex >= 0 && ParentIndex < i)
-			? Bones[i].BoneSpaceToMeshSpace * ReferenceBoneMatrices[ParentIndex]
-			: Bones[i].BoneSpaceToMeshSpace;
+			? Bones[i].LocalBindPose * ReferenceBoneMatrices[ParentIndex]
+			: Bones[i].LocalBindPose;
 	}
 }
 
@@ -282,7 +296,7 @@ void USkinnedMeshComponent::SkinVerticesToReferencePose()
 			}
 
 			const FMatrix SkinMatrix =
-				Asset->Bones[BoneIndex].MeshSpaceToBoneSpace * ReferenceBoneMatrices[BoneIndex];
+				Asset->Bones[BoneIndex].InverseBindPose * ReferenceBoneMatrices[BoneIndex];
 			SkinnedPos += SkinMatrix.TransformPositionWithW(Source.pos) * Weight;
 			SkinnedNormal += SkinMatrix.TransformVector(Source.normal) * Weight;
 			TotalWeight += Weight;

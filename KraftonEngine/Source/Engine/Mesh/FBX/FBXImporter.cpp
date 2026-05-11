@@ -299,7 +299,7 @@ void FBXImporter::PreprocessScene()
 	// Engine convention: +X forward, +Y right, +Z up, left-handed.
 	// ConvertScene() only rotates roots and cannot faithfully represent handedness changes.
 	// DeepConvertScene() converts transforms, geometry, animation curves, and clusters consistently.
-	EngineAxisSystem.ConvertScene(Scene);
+	EngineAxisSystem.DeepConvertScene(Scene);
 
 	FbxSystemUnit::ConversionOptions UnitOptions = {};
 	UnitOptions.mConvertRrsNodes = true;

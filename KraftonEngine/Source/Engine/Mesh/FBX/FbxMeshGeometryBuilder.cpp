@@ -1,4 +1,4 @@
-#include "FbxMeshGeometryBuilder.h"
+﻿#include "FbxMeshGeometryBuilder.h"
 
 #include "Core/Log.h"
 #include "FBXUtil.h"
@@ -304,9 +304,12 @@ namespace FbxMeshGeometryBuilder
 			TArray<uint32>& SectionIndices = IndicesByMaterial[MaterialSlotIndex];
 			for (int32 i = 1; i + 1 < static_cast<int32>(PolygonVertexIndices.size()); ++i)
 			{
+				//SectionIndices.push_back(PolygonVertexIndices[0]);
+				//SectionIndices.push_back(PolygonVertexIndices[i + 1]);
+				//SectionIndices.push_back(PolygonVertexIndices[i]);
 				SectionIndices.push_back(PolygonVertexIndices[0]);
-				SectionIndices.push_back(PolygonVertexIndices[i + 1]);
 				SectionIndices.push_back(PolygonVertexIndices[i]);
+				SectionIndices.push_back(PolygonVertexIndices[i + 1]);
 			}
 		}
 
@@ -433,8 +436,8 @@ namespace FbxMeshGeometryBuilder
 			for (int32 i = 1; i + 1 < static_cast<int32>(PolygonVertexIndices.size()); ++i)
 			{
 				SectionIndices.push_back(PolygonVertexIndices[0]);
-				SectionIndices.push_back(PolygonVertexIndices[i + 1]);
 				SectionIndices.push_back(PolygonVertexIndices[i]);
+				SectionIndices.push_back(PolygonVertexIndices[i + 1]);
 			}
 		}
 

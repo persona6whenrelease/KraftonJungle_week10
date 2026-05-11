@@ -4,6 +4,7 @@
 #include "Object/ObjectFactory.h"
 #include "Core/PropertyTypes.h"
 #include "Collision/RayUtils.h"
+#include "Mesh/FBX/FBXManager.h"
 #include "Mesh/StaticMeshAsset.h"
 #include "Engine/Runtime/Engine.h"
 #include "Render/Shader/ShaderManager.h"
@@ -183,8 +184,15 @@ void UStaticMeshComponent::PostDuplicate()
 	// 메시 에셋 재로딩
 	if (!StaticMeshPath.empty() && StaticMeshPath != "None")
 	{
-		ID3D11Device* Device = GEngine->GetRenderer().GetFD3DDevice().GetDevice();
-		UStaticMesh* Loaded = FObjManager::LoadObjStaticMesh(StaticMeshPath, Device);
+		const bool bFbxSceneMeshReference = StaticMeshPath.find("#Mesh_") != FString::npos;
+		UStaticMesh* Loaded = bFbxSceneMeshReference
+			? FFBXManager::LoadStaticMeshFromFbxSceneReference(StaticMeshPath)
+			: nullptr;
+		if (!Loaded && !bFbxSceneMeshReference)
+		{
+			ID3D11Device* Device = GEngine->GetRenderer().GetFD3DDevice().GetDevice();
+			Loaded = FObjManager::LoadObjStaticMesh(StaticMeshPath, Device);
+		}
 		if (Loaded)
 		{
 			// SetStaticMesh는 MaterialSlots를 덮어쓰므로, 직렬화된 슬롯 정보를 백업·복원한다.
@@ -221,8 +229,15 @@ void UStaticMeshComponent::PostEditProperty(const char* PropertyName)
 		}
 		else
 		{
-			ID3D11Device* Device = GEngine->GetRenderer().GetFD3DDevice().GetDevice();
-			UStaticMesh* Loaded = FObjManager::LoadObjStaticMesh(StaticMeshPath, Device);
+			const bool bFbxSceneMeshReference = StaticMeshPath.find("#Mesh_") != FString::npos;
+			UStaticMesh* Loaded = bFbxSceneMeshReference
+				? FFBXManager::LoadStaticMeshFromFbxSceneReference(StaticMeshPath)
+				: nullptr;
+			if (!Loaded && !bFbxSceneMeshReference)
+			{
+				ID3D11Device* Device = GEngine->GetRenderer().GetFD3DDevice().GetDevice();
+				Loaded = FObjManager::LoadObjStaticMesh(StaticMeshPath, Device);
+			}
 			SetStaticMesh(Loaded);
 		}
 		CacheLocalBounds();

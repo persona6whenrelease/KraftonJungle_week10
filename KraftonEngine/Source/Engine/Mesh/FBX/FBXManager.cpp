@@ -12,6 +12,9 @@
 #include "Serialization/WindowsArchive.h"
 
 #include <algorithm>
+#include <climits>
+#include <cstdlib>
+#include <cstring>
 #include <cwctype>
 #include <filesystem>
 
@@ -88,6 +91,36 @@ namespace
 	{
 		std::filesystem::path FsPath(FPaths::ToWide(Path));
 		return ToLower(FsPath.extension().wstring()) == L".bin";
+	}
+
+	static bool ParseFbxSceneReference(
+		const FString& Path,
+		const char* Marker,
+		FString& OutSourcePath,
+		int32& OutSourceId)
+	{
+		const size_t MarkerPos = Path.find(Marker);
+		if (MarkerPos == FString::npos)
+		{
+			return false;
+		}
+
+		OutSourcePath = Path.substr(0, MarkerPos);
+		const FString IdText = Path.substr(MarkerPos + std::strlen(Marker));
+		if (OutSourcePath.empty() || IdText.empty())
+		{
+			return false;
+		}
+
+		char* End = nullptr;
+		const long ParsedId = std::strtol(IdText.c_str(), &End, 10);
+		if (!End || *End != '\0' || ParsedId < 0 || ParsedId > INT32_MAX)
+		{
+			return false;
+		}
+
+		OutSourceId = static_cast<int32>(ParsedId);
+		return true;
 	}
 
 	static void SerializeCacheHeader(FArchive& Ar, FFBXCacheHeader& Header)
@@ -399,6 +432,8 @@ UFBXSceneAsset* FFBXManager::LoadFbxScene(const FString& PathFileName)
 		SceneAsset->AddSkeletalMesh(SkeletalMesh);
 	}
 
+	SceneAsset->SetMeshIdToStaticMeshAssetIndex(std::move(ImportedAsset.MeshIdToStaticMeshAssetIndex));
+	SceneAsset->SetSkeletonIdToSkeletalMeshAssetIndex(std::move(ImportedAsset.SkeletonIdToSkeletalMeshAssetIndex));
 	SceneAsset->SetSceneComponents(std::move(ImportedAsset.SceneComponents));
 	FbxSceneCache[CacheKey] = SceneAsset;
 
@@ -409,6 +444,58 @@ UFBXSceneAsset* FFBXManager::LoadFbxScene(const FString& PathFileName)
 		static_cast<uint32>(SceneAsset->GetSceneComponents().size()));
 
 	return SceneAsset;
+}
+
+UStaticMesh* FFBXManager::LoadStaticMeshFromFbxSceneReference(const FString& PathFileName)
+{
+	FString SourcePath;
+	int32 SourceMeshId = -1;
+	if (!ParseFbxSceneReference(PathFileName, "#Mesh_", SourcePath, SourceMeshId))
+	{
+		return nullptr;
+	}
+
+	UFBXSceneAsset* SceneAsset = LoadFbxScene(SourcePath);
+	if (!SceneAsset)
+	{
+		UE_LOG("[FBXManager] Failed to load FBX scene for static mesh reference: %s", PathFileName.c_str());
+		return nullptr;
+	}
+
+	UStaticMesh* StaticMesh = SceneAsset->FindStaticMeshBySourceMeshId(SourceMeshId);
+	if (!StaticMesh)
+	{
+		UE_LOG("[FBXManager] Static mesh reference not found in FBX scene. Ref=%s MeshId=%d",
+			PathFileName.c_str(),
+			SourceMeshId);
+	}
+	return StaticMesh;
+}
+
+USkeletalMesh* FFBXManager::LoadSkeletalMeshFromFbxSceneReference(const FString& PathFileName)
+{
+	FString SourcePath;
+	int32 SourceSkeletonId = -1;
+	if (!ParseFbxSceneReference(PathFileName, "#Skeleton_", SourcePath, SourceSkeletonId))
+	{
+		return nullptr;
+	}
+
+	UFBXSceneAsset* SceneAsset = LoadFbxScene(SourcePath);
+	if (!SceneAsset)
+	{
+		UE_LOG("[FBXManager] Failed to load FBX scene for skeletal mesh reference: %s", PathFileName.c_str());
+		return nullptr;
+	}
+
+	USkeletalMesh* SkeletalMesh = SceneAsset->FindSkeletalMeshBySourceSkeletonId(SourceSkeletonId);
+	if (!SkeletalMesh)
+	{
+		UE_LOG("[FBXManager] Skeletal mesh reference not found in FBX scene. Ref=%s SkeletonId=%d",
+			PathFileName.c_str(),
+			SourceSkeletonId);
+	}
+	return SkeletalMesh;
 }
 
 void FFBXManager::ScanSkeletalMeshAssets()

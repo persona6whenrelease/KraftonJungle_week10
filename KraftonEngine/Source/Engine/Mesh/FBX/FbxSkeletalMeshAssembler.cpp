@@ -1,4 +1,4 @@
-#include "FbxSkeletalMeshAssembler.h"
+﻿#include "FbxSkeletalMeshAssembler.h"
 
 #include "Core/Log.h"
 #include "FbxMaterialImportUtils.h"
@@ -143,7 +143,7 @@ bool FFbxSkeletalMeshAssembler::BuildSkeletalMeshFromParts(
 		}
 
 		BoneBindInSkeletonSpace[SkeletonBoneIndex] = BoneMeta.BindGlobalMatrix * InvSkeletonRootBindGlobal;
-		BoneInfo.MeshSpaceToBoneSpace = BoneBindInSkeletonSpace[SkeletonBoneIndex].GetInverse();
+		BoneInfo.InverseBindPose = BoneBindInSkeletonSpace[SkeletonBoneIndex].GetInverse();
 	}
 
 	for (int32 SkeletonBoneIndex = 0; SkeletonBoneIndex < static_cast<int32>(OutMesh.Bones.size()); ++SkeletonBoneIndex)
@@ -155,12 +155,12 @@ bool FFbxSkeletalMeshAssembler::BuildSkeletalMeshFromParts(
 		// The field name is misleading here: store parent-local bind, not global bind.
 		if (BoneInfo.ParentIndex >= 0)
 		{
-			BoneInfo.BoneSpaceToMeshSpace =
+			BoneInfo.LocalBindPose =
 				BoneGlobalInSkeletonSpace * BoneBindInSkeletonSpace[BoneInfo.ParentIndex].GetInverse();
 		}
 		else
 		{
-			BoneInfo.BoneSpaceToMeshSpace = BoneGlobalInSkeletonSpace;
+			BoneInfo.LocalBindPose = BoneGlobalInSkeletonSpace;
 		}
 	}
 

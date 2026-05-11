@@ -329,7 +329,6 @@
     <ClCompile Include="Source\Engine\Mesh\FBX\FBXSceneAsset.cpp" />
     <ClCompile Include="Source\Engine\Mesh\FBX\FBXUtil.cpp" />
     <ClCompile Include="Source\Engine\Mesh\FBX\FBXImporter.cpp" />
-    <ClCompile Include="Source\Engine\Mesh\FBX\FBXImporterLegacy.cpp" />
     <ClCompile Include="Source\Engine\Mesh\FBX\FBXManager.cpp" />
     <ClCompile Include="Source\Editor\EditorEngine.cpp" />
     <ClCompile Include="Source\Editor\EditorRenderPipeline.cpp" />
@@ -595,7 +594,6 @@
     <ClInclude Include="Source\Engine\Mesh\FBX\FBXImportMeta.h" />
     <ClInclude Include="Source\Engine\Mesh\FBX\FBXUtil.h" />
     <ClInclude Include="Source\Engine\Mesh\FBX\FBXImporter.h" />
-    <ClInclude Include="Source\Engine\Mesh\FBX\FBXImporterLegacy.h" />
     <ClInclude Include="Source\Engine\Mesh\FBX\FBXManager.h" />
     <ClInclude Include="Source\Editor\EditorEngine.h" />
     <ClInclude Include="Source\Editor\EditorRenderPipeline.h" />

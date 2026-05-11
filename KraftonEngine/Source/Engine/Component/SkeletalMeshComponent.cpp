@@ -1,4 +1,4 @@
-#include "Component/SkeletalMeshComponent.h"
+﻿#include "Component/SkeletalMeshComponent.h"
 
 #include <cmath>
 
@@ -36,7 +36,7 @@ void USkeletalMeshComponent::ApplyDebugRandomBoneAnimation(float DeltaTime)
 	for (int32 BoneIndex = 0; BoneIndex < static_cast<int32>(Bones.size()); ++BoneIndex)
 	{
 		const FBoneInfo& Bone = Bones[BoneIndex];
-		FMatrix AnimatedLocal = Bone.BoneSpaceToMeshSpace;
+		FMatrix AnimatedLocal = Bone.LocalBindPose;
 
 		if (Bone.ParentIndex >= 0)
 		{
@@ -48,7 +48,7 @@ void USkeletalMeshComponent::ApplyDebugRandomBoneAnimation(float DeltaTime)
 				static_cast<float>((BoneIndex % 3) == 0),
 				static_cast<float>((BoneIndex % 3) == 1),
 				static_cast<float>((BoneIndex % 3) == 2));
-			AnimatedLocal = FMatrix::MakeRotationAxis(Axis, Angle) * Bone.BoneSpaceToMeshSpace;
+			AnimatedLocal = FMatrix::MakeRotationAxis(Axis, Angle) * Bone.LocalBindPose;
 		}
 
 		if (Bone.ParentIndex >= 0 && Bone.ParentIndex < BoneIndex)

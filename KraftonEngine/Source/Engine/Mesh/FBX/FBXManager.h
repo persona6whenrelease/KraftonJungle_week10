@@ -4,6 +4,7 @@
 #include "Mesh/MeshCommonTypes.h"
 
 class USkeletalMesh;
+class UStaticMesh;
 class UFBXSceneAsset;
 
 class FFBXManager
@@ -17,6 +18,8 @@ public:
 	static FString GetBinaryFilePath(const FString& OriginalPath);
 	static USkeletalMesh* LoadSkeletalMesh(const FString& PathFileName);
 	static UFBXSceneAsset* LoadFbxScene(const FString& PathFileName);
+	static UStaticMesh* LoadStaticMeshFromFbxSceneReference(const FString& PathFileName);
+	static USkeletalMesh* LoadSkeletalMeshFromFbxSceneReference(const FString& PathFileName);
 	static void ScanSkeletalMeshAssets();
 	static const TArray<FMeshAssetListItem>& GetAvailableSkeletalMeshFiles();
 	static void ScanFbxSourceFiles();
