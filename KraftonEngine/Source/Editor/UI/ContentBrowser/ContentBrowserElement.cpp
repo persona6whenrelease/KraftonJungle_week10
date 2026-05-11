@@ -165,6 +165,16 @@ void SceneElement::OnDoubleLeftClicked(ContentBrowserContext& Context)
 	EditorEngine->LoadSceneFromPath(FilePath);
 }
 
+void FBXElement::OnDoubleLeftClicked(ContentBrowserContext& Context)
+{
+	if (!Context.EditorEngine)
+	{
+		return;
+	}
+
+	Context.EditorEngine->OpenSkeletalMeshViewerAsset(FPaths::ToUtf8(ContentItem.Path.wstring()));
+}
+
 void MaterialElement::OnLeftClicked(ContentBrowserContext& Context)
 {
 	MaterialInspector = { ContentItem.Path };

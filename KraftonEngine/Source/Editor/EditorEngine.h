@@ -54,6 +54,7 @@ public:
 	void SetContentBrowserIconSize(float Size) { MainPanel.SetContentBrowserIconSize(Size); }
 	float GetContentBrowserIconSize() const { return MainPanel.GetContentBrowserIconSize(); }
 	bool OpenCurveAsset(const FString& CurvePath) { return MainPanel.OpenCurveAsset(CurvePath); }
+	bool OpenSkeletalMeshViewerAsset(const FString& FbxPath) { return MainPanel.OpenSkeletalMeshViewerAsset(FbxPath); }
 	void HideEditorWindows() { MainPanel.HideEditorWindows(); }
 	void ShowEditorWindows() { MainPanel.ShowEditorWindows(); }
 	void SetShowEditorOnlyComponents(bool bEnable) { MainPanel.SetShowEditorOnlyComponents(bEnable); }

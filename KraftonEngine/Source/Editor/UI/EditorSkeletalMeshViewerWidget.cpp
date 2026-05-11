@@ -1,7 +1,92 @@
 #include "Editor/UI/EditorSkeletalMeshViewerWidget.h"
 
 #include "Editor/Settings/EditorSettings.h"
+#include "Mesh/FBX/FBXManager.h"
+#include "Mesh/FBX/FBXSceneAsset.h"
+#include "Mesh/SkeletalMesh.h"
+#include "Mesh/SkeletalMeshAsset.h"
 #include "ImGui/imgui.h"
+
+#include <cstdint>
+
+namespace
+{
+void RenderBoneTreeNode(const TArray<FBoneInfo>& Bones, int32 BoneIndex, int32& SelectedBoneIndex)
+{
+	if (BoneIndex < 0 || BoneIndex >= static_cast<int32>(Bones.size()))
+	{
+		return;
+	}
+
+	ImGuiTreeNodeFlags Flags = ImGuiTreeNodeFlags_OpenOnArrow;
+	if (SelectedBoneIndex == BoneIndex)
+	{
+		Flags |= ImGuiTreeNodeFlags_Selected;
+	}
+
+	bool bHasChild = false;
+	for (int32 ChildIndex = 0; ChildIndex < static_cast<int32>(Bones.size()); ++ChildIndex)
+	{
+		if (Bones[ChildIndex].ParentIndex == BoneIndex)
+		{
+			bHasChild = true;
+			break;
+		}
+	}
+	if (!bHasChild)
+	{
+		Flags |= ImGuiTreeNodeFlags_Leaf;
+	}
+
+	const bool bOpen = ImGui::TreeNodeEx(
+		reinterpret_cast<void*>(static_cast<intptr_t>(BoneIndex)),
+		Flags,
+		"%s",
+		Bones[BoneIndex].Name.c_str());
+
+	if (ImGui::IsItemClicked())
+	{
+		SelectedBoneIndex = BoneIndex;
+	}
+
+	if (bOpen)
+	{
+		for (int32 ChildIndex = 0; ChildIndex < static_cast<int32>(Bones.size()); ++ChildIndex)
+		{
+			if (Bones[ChildIndex].ParentIndex == BoneIndex)
+			{
+				RenderBoneTreeNode(Bones, ChildIndex, SelectedBoneIndex);
+			}
+		}
+		ImGui::TreePop();
+	}
+}
+}
+
+bool FEditorSkeletalMeshViewerWidget::OpenFbxAsset(const FString& FbxPath)
+{
+	CurrentFbxPath = FbxPath;
+	CurrentSceneAsset = FFBXManager::LoadFbxScene(FbxPath);
+	SelectedResourceIndex = -1;
+	SelectedBoneIndex = -1;
+
+	if (!CurrentSceneAsset)
+	{
+		StatusMessage = "Failed to load FBX scene";
+		return false;
+	}
+
+	const TArray<USkeletalMesh*>& SkeletalMeshes = CurrentSceneAsset->GetSkeletalMeshes();
+	if (SkeletalMeshes.empty())
+	{
+		StatusMessage = "FBX loaded, but no SkeletalMesh was found";
+		return false;
+	}
+
+	SelectedResourceIndex = 0;
+	StatusMessage = "FBX loaded";
+	return true;
+}
 
 void FEditorSkeletalMeshViewerWidget::Render(float DeltaTime)
 {
@@ -65,11 +150,35 @@ void FEditorSkeletalMeshViewerWidget::RenderResourcePanel()
 		ImGui::TextUnformatted("Resources");
 		ImGui::Separator();
 
-		const bool bSelected = SelectedResourceIndex == 0;
-		if (ImGui::Selectable("Empty Preview Slot", bSelected))
+		if (!CurrentSceneAsset)
 		{
-			SelectedResourceIndex = 0;
-			SelectedBoneIndex = -1;
+			ImGui::TextDisabled("%s", StatusMessage.c_str());
+		}
+		else
+		{
+			const TArray<USkeletalMesh*>& SkeletalMeshes = CurrentSceneAsset->GetSkeletalMeshes();
+			if (SkeletalMeshes.empty())
+			{
+				ImGui::TextDisabled("No SkeletalMesh in this FBX");
+			}
+
+			for (int32 MeshIndex = 0; MeshIndex < static_cast<int32>(SkeletalMeshes.size()); ++MeshIndex)
+			{
+				const USkeletalMesh* Mesh = SkeletalMeshes[MeshIndex];
+				const FSkeletalMesh* MeshAsset = Mesh ? Mesh->GetSkeletalMeshAsset() : nullptr;
+				FString Label = "SkeletalMesh " + std::to_string(MeshIndex);
+				if (MeshAsset && !MeshAsset->PathFileName.empty())
+				{
+					Label = MeshAsset->PathFileName;
+				}
+
+				const bool bSelected = SelectedResourceIndex == MeshIndex;
+				if (ImGui::Selectable(Label.c_str(), bSelected))
+				{
+					SelectedResourceIndex = MeshIndex;
+					SelectedBoneIndex = -1;
+				}
+			}
 		}
 	}
 	ImGui::EndChild();
@@ -101,7 +210,7 @@ void FEditorSkeletalMeshViewerWidget::RenderViewportPanel()
 	DrawList->AddLine(ImVec2(ViewportMin.x + 20.0f, Center.y), ImVec2(ViewportMax.x - 20.0f, Center.y), IM_COL32(70, 120, 70, 255));
 	DrawList->AddLine(ImVec2(Center.x, ViewportMin.y + 20.0f), ImVec2(Center.x, ViewportMax.y - 20.0f), IM_COL32(90, 90, 150, 255));
 
-	const char* Message = "No SkeletalMesh loaded";
+	const char* Message = GetSelectedSkeletalMesh() ? "SkeletalMesh preview viewport placeholder" : "No SkeletalMesh loaded";
 	const ImVec2 TextSize = ImGui::CalcTextSize(Message);
 	DrawList->AddText(
 		ImVec2(Center.x - TextSize.x * 0.5f, Center.y - TextSize.y * 0.5f),
@@ -119,21 +228,25 @@ void FEditorSkeletalMeshViewerWidget::RenderBonePanel()
 		ImGui::TextUnformatted("Bone Hierarchy");
 		ImGui::Separator();
 
-		const bool bRootSelected = SelectedBoneIndex == 0;
-		if (ImGui::TreeNodeEx("root", ImGuiTreeNodeFlags_DefaultOpen | (bRootSelected ? ImGuiTreeNodeFlags_Selected : 0)))
+		USkeletalMesh* SelectedMesh = GetSelectedSkeletalMesh();
+		const FSkeletalMesh* MeshAsset = SelectedMesh ? SelectedMesh->GetSkeletalMeshAsset() : nullptr;
+		if (!MeshAsset)
 		{
-			if (ImGui::IsItemClicked())
+			ImGui::TextDisabled("No SkeletalMesh selected");
+		}
+		else if (MeshAsset->Bones.empty())
+		{
+			ImGui::TextDisabled("No bones found");
+		}
+		else
+		{
+			for (int32 BoneIndex = 0; BoneIndex < static_cast<int32>(MeshAsset->Bones.size()); ++BoneIndex)
 			{
-				SelectedBoneIndex = 0;
+				if (MeshAsset->Bones[BoneIndex].ParentIndex < 0)
+				{
+					RenderBoneTreeNode(MeshAsset->Bones, BoneIndex, SelectedBoneIndex);
+				}
 			}
-
-			const bool bPreviewSelected = SelectedBoneIndex == 1;
-			if (ImGui::Selectable("preview_bone", bPreviewSelected))
-			{
-				SelectedBoneIndex = 1;
-			}
-
-			ImGui::TreePop();
 		}
 	}
 	ImGui::EndChild();
@@ -146,20 +259,44 @@ void FEditorSkeletalMeshViewerWidget::RenderTransformPanel()
 		ImGui::TextUnformatted("Transform");
 		ImGui::Separator();
 
-		if (SelectedBoneIndex < 0)
+		USkeletalMesh* SelectedMesh = GetSelectedSkeletalMesh();
+		const FSkeletalMesh* MeshAsset = SelectedMesh ? SelectedMesh->GetSkeletalMeshAsset() : nullptr;
+		if (!MeshAsset || SelectedBoneIndex < 0 || SelectedBoneIndex >= static_cast<int32>(MeshAsset->Bones.size()))
 		{
 			ImGui::TextDisabled("No bone selected");
 		}
 		else
 		{
-			float Location[3] = { 0.0f, 0.0f, 0.0f };
-			float Rotation[3] = { 0.0f, 0.0f, 0.0f };
-			float Scale[3] = { 1.0f, 1.0f, 1.0f };
+			const FBoneInfo& Bone = MeshAsset->Bones[SelectedBoneIndex];
+			const FVector LocationVector = Bone.LocalBindPose.GetLocation();
+			const FVector RotationVector = Bone.LocalBindPose.GetEuler();
+			const FVector ScaleVector = Bone.LocalBindPose.GetScale();
+			float Location[3] = { LocationVector.X, LocationVector.Y, LocationVector.Z };
+			float Rotation[3] = { RotationVector.X, RotationVector.Y, RotationVector.Z };
+			float Scale[3] = { ScaleVector.X, ScaleVector.Y, ScaleVector.Z };
 
+			ImGui::TextUnformatted(Bone.Name.c_str());
+			ImGui::Separator();
 			ImGui::InputFloat3("Location", Location, "%.3f", ImGuiInputTextFlags_ReadOnly);
 			ImGui::InputFloat3("Rotation", Rotation, "%.3f", ImGuiInputTextFlags_ReadOnly);
 			ImGui::InputFloat3("Scale", Scale, "%.3f", ImGuiInputTextFlags_ReadOnly);
 		}
 	}
 	ImGui::EndChild();
+}
+
+USkeletalMesh* FEditorSkeletalMeshViewerWidget::GetSelectedSkeletalMesh() const
+{
+	if (!CurrentSceneAsset)
+	{
+		return nullptr;
+	}
+
+	const TArray<USkeletalMesh*>& SkeletalMeshes = CurrentSceneAsset->GetSkeletalMeshes();
+	if (SelectedResourceIndex < 0 || SelectedResourceIndex >= static_cast<int32>(SkeletalMeshes.size()))
+	{
+		return nullptr;
+	}
+
+	return SkeletalMeshes[SelectedResourceIndex];
 }

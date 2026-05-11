@@ -40,6 +40,7 @@ public:
 	void SetContentBrowserIconSize(float Size) { ContentBrowserWidget.SetIconSize(Size); }
 	float GetContentBrowserIconSize() const { return ContentBrowserWidget.GetIconSize(); }
 	bool OpenCurveAsset(const FString& CurvePath);
+	bool OpenSkeletalMeshViewerAsset(const FString& FbxPath);
 
 private:
 	void RenderMainMenuBar();

@@ -115,6 +115,12 @@ bool FEditorMainPanel::OpenCurveAsset(const FString& CurvePath)
 	return CurveWidget.OpenCurveAsset(CurvePath);
 }
 
+bool FEditorMainPanel::OpenSkeletalMeshViewerAsset(const FString& FbxPath)
+{
+	FEditorSettings::Get().UI.bSkeletalMeshViewer = true;
+	return SkeletalMeshViewerWidget.OpenFbxAsset(FbxPath);
+}
+
 void FEditorMainPanel::Render(float DeltaTime)
 {
 	ImGui_ImplDX11_NewFrame();
