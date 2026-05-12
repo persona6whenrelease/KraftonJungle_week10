@@ -131,7 +131,8 @@ private:
 	bool UpdateLayoutTransition(float DeltaTime);
 	bool ConfigureCollapseToSlot(SSplitter* Node, SWindow* TargetWindow, bool bAnimate);
 	bool SubtreeContainsWindow(SWindow* Node, SWindow* TargetWindow) const;
-	void RenderSharedGizmoToolbar(float ToolbarLeft, float ToolbarTop);
+	void RenderSharedGizmoToolbar(float ToolbarLeft, float ToolbarTop, float ToolbarWidth);
+	void RenderViewportToolbarControls(FLevelEditorViewportClient* VC, const char* IdPrefix, float FallbackIconSize, float MaxIconSize);
 	void RenderPaneToolbar(int32 SlotIndex);
 	void HandleViewportContextMenuInput(const FPoint& MousePos);
 	void RenderViewportPlaceActorPopup();

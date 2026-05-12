@@ -77,6 +77,7 @@ enum class EToolbarIcon : int32
 	RotateSnap,
 	ScaleSnap,
 	ShowFlag,
+	Camera,
 	Count
 };
 
@@ -96,6 +97,7 @@ const wchar_t* GetToolbarIconFileName(EToolbarIcon Icon)
 	case EToolbarIcon::RotateSnap: return L"Rotate_Snap.png";
 	case EToolbarIcon::ScaleSnap: return L"Scale_Snap.png";
 	case EToolbarIcon::ShowFlag: return L"Show_Flag.png";
+	case EToolbarIcon::Camera: return L"Camera.png";
 	default: return L"";
 	}
 }
@@ -194,6 +196,116 @@ bool DrawToolbarIconButton(const char* Id, EToolbarIcon Icon, const char* Fallba
 
 	const ImVec2 IconSize = GetToolbarIconRenderSize(Icon, FallbackSize, MaxIconSize);
 	return ImGui::ImageButton(Id, reinterpret_cast<ImTextureID>(IconSRV), IconSize);
+}
+
+float CalcToolbarIconButtonWidth(EToolbarIcon Icon, float FallbackSize, float MaxIconSize)
+{
+	const ImVec2 IconSize = GetToolbarIconRenderSize(Icon, FallbackSize, MaxIconSize);
+	return IconSize.x + ImGui::GetStyle().FramePadding.x * 2.0f;
+}
+
+float CalcToolbarTextButtonWidth(const char* Label)
+{
+	return ImGui::CalcTextSize(Label).x + ImGui::GetStyle().FramePadding.x * 2.0f;
+}
+
+float CalcViewportToolbarControlsWidth(
+	FLevelEditorViewportClient* VC,
+	float FallbackIconSize,
+	float MaxIconSize)
+{
+	if (!VC)
+	{
+		return 0.0f;
+	}
+
+	const FViewportRenderOptions& Opts = VC->GetRenderOptions();
+	static const char* ViewportTypeNames[] = {
+		"Perspective", "Top", "Bottom", "Left", "Right", "Front", "Back", "Free Orthographic"
+	};
+	constexpr int32 ViewportTypeCount = sizeof(ViewportTypeNames) / sizeof(ViewportTypeNames[0]);
+	const int32 CurrentTypeIdx = static_cast<int32>(Opts.ViewportType);
+	const char* CurrentTypeName =
+		(CurrentTypeIdx >= 0 && CurrentTypeIdx < ViewportTypeCount)
+		? ViewportTypeNames[CurrentTypeIdx]
+		: ViewportTypeNames[0];
+
+	static const char* ViewModeNames[] = { "Phong", "Unlit", "Gouraud", "Lambert", "Wireframe", "SceneDepth", "WorldNormal", "LightCulling" };
+	const int32 ViewModeIndex = static_cast<int32>(Opts.ViewMode);
+	const char* CurrentViewModeName = (ViewModeIndex >= 0 && ViewModeIndex < static_cast<int32>(EViewMode::Count))
+		? ViewModeNames[ViewModeIndex]
+		: ViewModeNames[static_cast<int32>(EViewMode::Lit_Phong)];
+
+	const float Spacing = ImGui::GetStyle().ItemSpacing.x;
+	float Width =
+		CalcToolbarTextButtonWidth(CurrentTypeName) +
+		Spacing +
+		CalcToolbarTextButtonWidth(CurrentViewModeName) +
+		Spacing +
+		CalcToolbarIconButtonWidth(EToolbarIcon::ShowFlag, FallbackIconSize, MaxIconSize) +
+		Spacing +
+		CalcToolbarIconButtonWidth(EToolbarIcon::Setting, FallbackIconSize, MaxIconSize);
+
+	if (VC->IsViewingFromLight())
+	{
+		Width += Spacing + CalcToolbarTextButtonWidth("Reset Camera");
+		if (ULightComponentBase* ActiveLight = VC->GetLightViewOverride())
+		{
+			if (ActiveLight->GetLightType() == ELightComponentType::Point)
+			{
+				Width += Spacing + 50.0f;
+			}
+		}
+	}
+
+	return Width;
+}
+
+void DrawShowFlagsControls(FViewportRenderOptions& Opts, const char* TableId)
+{
+	ImGui::Text("Show");
+	if (ImGui::BeginTable(TableId, 5, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchSame))
+	{
+		ImGui::TableNextRow();
+		ImGui::TableNextColumn();
+		ImGui::Checkbox("Primitives", &Opts.ShowFlags.bPrimitives);
+		ImGui::TableNextColumn();
+		ImGui::Checkbox("BillboardText", &Opts.ShowFlags.bBillboardText);
+		ImGui::TableNextColumn();
+		ImGui::Checkbox("Grid", &Opts.ShowFlags.bGrid);
+		ImGui::TableNextColumn();
+		ImGui::Checkbox("World Axis", &Opts.ShowFlags.bWorldAxis);
+		ImGui::TableNextColumn();
+		ImGui::Checkbox("Gizmo", &Opts.ShowFlags.bGizmo);
+
+		ImGui::TableNextRow();
+		ImGui::TableNextColumn();
+		ImGui::Checkbox("Bounding Volume", &Opts.ShowFlags.bBoundingVolume);
+		ImGui::TableNextColumn();
+		ImGui::Checkbox("Collision", &Opts.ShowFlags.bCollisionShapes);
+		ImGui::TableNextColumn();
+		ImGui::Checkbox("Debug Draw", &Opts.ShowFlags.bDebugDraw);
+		ImGui::TableNextColumn();
+		ImGui::Checkbox("Octree", &Opts.ShowFlags.bOctree);
+		ImGui::TableNextColumn();
+		ImGui::Checkbox("Fog", &Opts.ShowFlags.bFog);
+		ImGui::TableNextColumn();
+
+		ImGui::TableNextRow();
+		ImGui::TableNextColumn();
+		ImGui::Checkbox("FXAA", &Opts.ShowFlags.bFXAA);
+		ImGui::TableNextColumn();
+		ImGui::Checkbox("Visualize2.5D", &Opts.ShowFlags.bVisualize25DCulling);
+		ImGui::TableNextColumn();
+		ImGui::Checkbox("Shadows", &FProjectSettings::Get().Shadow.bEnabled);
+		ImGui::TableNextColumn();
+		ImGui::Checkbox("Shadow Frustum", &Opts.ShowFlags.bShowShadowFrustum);
+		ImGui::TableNextColumn();
+		ImGui::Checkbox("Picking BVH", &Opts.ShowFlags.bPickingBVH);
+		ImGui::Checkbox("Collision BVH", &Opts.ShowFlags.bCollisionBVH);
+
+		ImGui::EndTable();
+	}
 }
 }
 
@@ -1171,7 +1283,7 @@ void FLevelViewportLayout::RenderViewportUI(float DeltaTime)
 			ToolbarHeight = PlayToolbar.GetDesiredHeight();
 			ImGui::SetCursorScreenPos(ContentPos);
 			PlayToolbar.Render(ContentSize.x);
-			RenderSharedGizmoToolbar(ContentPos.x, ContentPos.y);
+			RenderSharedGizmoToolbar(ContentPos.x, ContentPos.y, ContentSize.x);
 		}
 
 		FRect ContentRect = {
@@ -1352,7 +1464,7 @@ void FLevelViewportLayout::RenderViewportUI(float DeltaTime)
 
 // ─── 각 뷰포트 패인 툴바 오버레이 ──────────────────────────
 
-void FLevelViewportLayout::RenderSharedGizmoToolbar(float ToolbarLeft, float ToolbarTop)
+void FLevelViewportLayout::RenderSharedGizmoToolbar(float ToolbarLeft, float ToolbarTop, float ToolbarWidth)
 {
 	if (!Editor)
 	{
@@ -1498,7 +1610,202 @@ void FLevelViewportLayout::RenderSharedGizmoToolbar(float ToolbarLeft, float Too
 	DrawSnapControl("RotateSnap", EToolbarIcon::RotateSnap, "R", Settings.bEnableRotationSnap, Settings.RotationSnapSize, 0.001f);
 	DrawSnapControl("ScaleSnap", EToolbarIcon::ScaleSnap, "S", Settings.bEnableScaleSnap, Settings.ScaleSnapSize, 0.001f);
 
+	const float RightControlsWidth = CalcViewportToolbarControlsWidth(ActiveViewportClient, ToolbarFallbackIconSize, ToolbarMaxIconSize);
+	const float RightControlsX = ToolbarLeft + ToolbarWidth - ButtonPadding - RightControlsWidth;
+	const float CurrentX = ImGui::GetCursorScreenPos().x;
+	ImGui::SetCursorScreenPos(ImVec2(
+		(std::max)(CurrentX + GroupSpacing, RightControlsX),
+		ToolbarTop + ButtonPadding));
+	RenderViewportToolbarControls(ActiveViewportClient, "Shared", ToolbarFallbackIconSize, ToolbarMaxIconSize);
+
 	Editor->ApplyTransformSettingsToGizmo();
+}
+
+void FLevelViewportLayout::RenderViewportToolbarControls(FLevelEditorViewportClient* VC, const char* IdPrefix, float FallbackIconSize, float MaxIconSize)
+{
+	if (!VC)
+	{
+		return;
+	}
+
+	FViewportRenderOptions& Opts = VC->GetRenderOptions();
+
+	char VTPopupID[64];
+	char ViewModePopupID[64];
+	char ShowFlagsPopupID[64];
+	char SettingsPopupID[64];
+	char FaceComboID[64];
+	snprintf(VTPopupID, sizeof(VTPopupID), "%sViewportTypePopup", IdPrefix);
+	snprintf(ViewModePopupID, sizeof(ViewModePopupID), "%sViewModePopup", IdPrefix);
+	snprintf(ShowFlagsPopupID, sizeof(ShowFlagsPopupID), "%sShowFlagsPopup", IdPrefix);
+	snprintf(SettingsPopupID, sizeof(SettingsPopupID), "%sSettingsPopup", IdPrefix);
+	snprintf(FaceComboID, sizeof(FaceComboID), "##%sPointLightFace", IdPrefix);
+
+	static const char* ViewportTypeNames[] = {
+		"Perspective", "Top", "Bottom", "Left", "Right", "Front", "Back", "Free Orthographic"
+	};
+	constexpr int32 ViewportTypeCount = sizeof(ViewportTypeNames) / sizeof(ViewportTypeNames[0]);
+	int32 CurrentTypeIdx = static_cast<int32>(Opts.ViewportType);
+	const char* CurrentTypeName =
+		(CurrentTypeIdx >= 0 && CurrentTypeIdx < ViewportTypeCount)
+		? ViewportTypeNames[CurrentTypeIdx]
+		: ViewportTypeNames[0];
+
+	if (ImGui::Button(CurrentTypeName))
+	{
+		ImGui::OpenPopup(VTPopupID);
+	}
+
+	if (ImGui::BeginPopup(VTPopupID))
+	{
+		for (int32 t = 0; t < ViewportTypeCount; ++t)
+		{
+			const bool bSelected = (t == CurrentTypeIdx);
+			if (ImGui::Selectable(ViewportTypeNames[t], bSelected))
+			{
+				VC->SetViewportType(static_cast<ELevelViewportType>(t));
+			}
+		}
+		ImGui::EndPopup();
+	}
+
+	ImGui::SameLine();
+	static const char* ViewModeNames[] = { "Phong", "Unlit", "Gouraud", "Lambert", "Wireframe", "SceneDepth", "WorldNormal", "LightCulling" };
+	const int32 ViewModeIndex = static_cast<int32>(Opts.ViewMode);
+	const char* CurrentViewModeName = (ViewModeIndex >= 0 && ViewModeIndex < static_cast<int32>(EViewMode::Count))
+		? ViewModeNames[ViewModeIndex]
+		: ViewModeNames[static_cast<int32>(EViewMode::Lit_Phong)];
+
+	if (ImGui::Button(CurrentViewModeName))
+	{
+		ImGui::OpenPopup(ViewModePopupID);
+	}
+
+	if (ImGui::BeginPopup(ViewModePopupID))
+	{
+		ImGui::Text("View Mode");
+		int32 CurrentMode = (ViewModeIndex >= 0 && ViewModeIndex < static_cast<int32>(EViewMode::Count))
+			? ViewModeIndex
+			: static_cast<int32>(EViewMode::Lit_Phong);
+
+		if (ImGui::BeginTable("ViewModeTable", 3, ImGuiTableFlags_SizingStretchSame))
+		{
+			ImGui::TableNextRow();
+			ImGui::TableNextColumn();
+			ImGui::RadioButton("Unlit", &CurrentMode, static_cast<int32>(EViewMode::Unlit));
+			ImGui::TableNextColumn();
+			ImGui::RadioButton("Phong", &CurrentMode, static_cast<int32>(EViewMode::Lit_Phong));
+			ImGui::TableNextColumn();
+			ImGui::RadioButton("Gouraud", &CurrentMode, static_cast<int32>(EViewMode::Lit_Gouraud));
+
+			ImGui::TableNextRow();
+			ImGui::TableNextColumn();
+			ImGui::RadioButton("Lambert", &CurrentMode, static_cast<int32>(EViewMode::Lit_Lambert));
+			ImGui::TableNextColumn();
+			ImGui::RadioButton("Wireframe", &CurrentMode, static_cast<int32>(EViewMode::Wireframe));
+			ImGui::TableNextColumn();
+			ImGui::RadioButton("SceneDepth", &CurrentMode, static_cast<int32>(EViewMode::SceneDepth));
+			ImGui::TableNextColumn();
+			ImGui::RadioButton("WorldNormal", &CurrentMode, static_cast<int32>(EViewMode::WorldNormal));
+
+			ImGui::TableNextRow();
+			ImGui::TableNextColumn();
+			ImGui::RadioButton("LightCulling", &CurrentMode, static_cast<int32>(EViewMode::LightCulling));
+			ImGui::TableNextColumn();
+			ImGui::Dummy(ImVec2(0.0f, 0.0f));
+			ImGui::TableNextColumn();
+			ImGui::Dummy(ImVec2(0.0f, 0.0f));
+
+			ImGui::EndTable();
+		}
+
+		Opts.ViewMode = static_cast<EViewMode>(CurrentMode);
+		ImGui::EndPopup();
+	}
+
+	ImGui::SameLine();
+	if (DrawToolbarIconButton("##ShowFlagsIcon", EToolbarIcon::ShowFlag, "Show", FallbackIconSize, MaxIconSize))
+	{
+		ImGui::OpenPopup(ShowFlagsPopupID);
+	}
+
+	if (ImGui::BeginPopup(ShowFlagsPopupID))
+	{
+		DrawShowFlagsControls(Opts, "ShowFlagsTable");
+		ImGui::EndPopup();
+	}
+
+	ImGui::SameLine();
+	if (DrawToolbarIconButton("##SettingsIcon", EToolbarIcon::Setting, "Settings", FallbackIconSize, MaxIconSize))
+	{
+		ImGui::OpenPopup(SettingsPopupID);
+	}
+
+	if (ImGui::BeginPopup(SettingsPopupID))
+	{
+		if (ImGui::CollapsingHeader("Viewport Utility Settings (Grid , Camera , SceneDepth , FXAA)"))
+		{
+			ImGui::Text("Grid");
+			ImGui::SliderFloat("Spacing", &Opts.GridSpacing, 0.1f, 10.0f, "%.1f");
+			ImGui::SliderInt("Half Line Count", &Opts.GridHalfLineCount, 10, 500);
+
+			ImGui::Separator();
+
+			ImGui::Text("Camera");
+			ImGui::SliderFloat("Move Sensitivity", &Opts.CameraMoveSensitivity, 0.1f, 5.0f, "%.1f");
+			ImGui::SliderFloat("Rotate Sensitivity", &Opts.CameraRotateSensitivity, 0.1f, 5.0f, "%.1f");
+
+			ImGui::Separator();
+
+			ImGui::Text("SceneDepth");
+			ImGui::SliderFloat("Exponent", &Opts.Exponent, 1.0f, 512.0f, "%.0f");
+			ImGui::Combo("Mode", &Opts.SceneDepthVisMode, "Power\0Linear\0");
+
+			ImGui::Text("FXAA");
+			ImGui::SliderFloat("EdgeThreshold", &Opts.EdgeThreshold, 0.06f, 0.333f, "%.3f");
+			ImGui::SliderFloat("EdgeThresholdMin", &Opts.EdgeThresholdMin, 0.0312f, 0.0833f, "%.4f");
+		}
+
+		ImGui::Separator();
+
+		if (ImGui::CollapsingHeader("Light Culling Settings"))
+		{
+			int32 CullingMode = static_cast<int32>(Opts.LightCullingMode);
+			ImGui::RadioButton("Off", &CullingMode, static_cast<int32>(ELightCullingMode::Off));
+			ImGui::SameLine();
+			ImGui::RadioButton("Tile", &CullingMode, static_cast<int32>(ELightCullingMode::Tile));
+			ImGui::SameLine();
+			ImGui::RadioButton("Cluster", &CullingMode, static_cast<int32>(ELightCullingMode::Cluster));
+			Opts.LightCullingMode = static_cast<ELightCullingMode>(CullingMode);
+			ImGui::SliderFloat("HeatMapMax", &Opts.HeatMapMax, 1.0f, 100.0f, "%.0f");
+			ImGui::Checkbox("Enable2.5DCulling", &Opts.Enable25DCulling);
+			ImGui::Checkbox("Visualize2.5DCulling", &Opts.ShowFlags.bVisualize25DCulling);
+		}
+
+		ImGui::EndPopup();
+	}
+
+	ImGui::SameLine();
+	if (VC->IsViewingFromLight())
+	{
+		if (ImGui::Button("Reset Camera"))
+		{
+			VC->ClearLightViewOverride();
+		}
+
+		ULightComponentBase* ActiveLight = VC->GetLightViewOverride();
+		if (ActiveLight && ActiveLight->GetLightType() == ELightComponentType::Point)
+		{
+			ImGui::SameLine();
+			static const char* FaceNames[] = { "+X", "-X", "+Y", "-Y", "+Z", "-Z" };
+			int32 FaceIdx = VC->GetPointLightFaceIndex();
+			ImGui::SetNextItemWidth(50.0f);
+			if (ImGui::Combo(FaceComboID, &FaceIdx, FaceNames, 6))
+			{
+				VC->SetPointLightFaceIndex(FaceIdx);
+			}
+		}
+	}
 }
 
 void FLevelViewportLayout::RenderPaneToolbar(int32 SlotIndex)
@@ -1732,53 +2039,6 @@ void FLevelViewportLayout::RenderPaneToolbar(int32 SlotIndex)
 
 			if (ImGui::BeginPopup(SettingsPopupID))
 			{
-				// Show Flags
-				ImGui::Text("Show");
-				if (ImGui::BeginTable("ShowFlagsTable", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchSame))
-				{
-					ImGui::TableNextRow();
-					ImGui::TableNextColumn();
-					ImGui::Checkbox("Primitives", &Opts.ShowFlags.bPrimitives);
-					ImGui::TableNextColumn();
-					ImGui::Checkbox("BillboardText", &Opts.ShowFlags.bBillboardText);
-					ImGui::TableNextColumn();
-					ImGui::Checkbox("Grid", &Opts.ShowFlags.bGrid);
-					ImGui::TableNextColumn();
-					ImGui::Checkbox("World Axis", &Opts.ShowFlags.bWorldAxis);
-					ImGui::TableNextColumn();
-					ImGui::Checkbox("Gizmo", &Opts.ShowFlags.bGizmo);
-
-					ImGui::TableNextRow();
-					ImGui::TableNextColumn();
-					ImGui::Checkbox("Bounding Volume", &Opts.ShowFlags.bBoundingVolume);
-					ImGui::TableNextColumn();
-					ImGui::Checkbox("Collision", &Opts.ShowFlags.bCollisionShapes);
-					ImGui::TableNextColumn();
-					ImGui::Checkbox("Debug Draw", &Opts.ShowFlags.bDebugDraw);
-					ImGui::TableNextColumn();
-					ImGui::Checkbox("Octree", &Opts.ShowFlags.bOctree);
-					ImGui::TableNextColumn();
-					ImGui::Checkbox("Fog", &Opts.ShowFlags.bFog);
-					ImGui::TableNextColumn();
-
-					ImGui::TableNextRow();
-					ImGui::TableNextColumn();
-					ImGui::Checkbox("FXAA", &Opts.ShowFlags.bFXAA);
-					ImGui::TableNextColumn();
-					ImGui::Checkbox("Visualize2.5D", &Opts.ShowFlags.bVisualize25DCulling);
-					ImGui::TableNextColumn();
-					ImGui::Checkbox("Shadows", &FProjectSettings::Get().Shadow.bEnabled);
-					ImGui::TableNextColumn();
-					ImGui::Checkbox("Shadow Frustum", &Opts.ShowFlags.bShowShadowFrustum);
-					ImGui::TableNextColumn();
-					ImGui::Checkbox("Picking BVH", &Opts.ShowFlags.bPickingBVH);
-					ImGui::Checkbox("Collision BVH", &Opts.ShowFlags.bCollisionBVH);
-
-					ImGui::EndTable();
-				}
-
-				ImGui::Separator();
-
 				if (ImGui::CollapsingHeader("Viewport Utility Settings (Grid , Camera , SceneDepth , FXAA)"))
 				{
 					// Grid Settings
@@ -1824,7 +2084,7 @@ void FLevelViewportLayout::RenderPaneToolbar(int32 SlotIndex)
 
 				ImGui::EndPopup();
 			}
-			// ── View Light / Reset Camera 버튼 ──
+			// ── Reset Camera 버튼 ──
 			ImGui::SameLine();
 
 			if (VC->IsViewingFromLight())
@@ -1847,34 +2107,6 @@ void FLevelViewportLayout::RenderPaneToolbar(int32 SlotIndex)
 						VC->SetPointLightFaceIndex(FaceIdx);
 					}
 				}
-			}
-			else
-			{
-				ULightComponentBase* FoundLight = nullptr;
-				if (SelectionManager)
-				{
-					if (AActor* Selected = SelectionManager->GetPrimarySelection())
-					{
-						for (UActorComponent* Comp : Selected->GetComponents())
-						{
-							if (ULightComponentBase* LC = Cast<ULightComponentBase>(Comp))
-							{
-								if (LC->GetLightType() != ELightComponentType::Ambient)
-								{
-									FoundLight = LC;
-									break;
-								}
-							}
-						}
-					}
-				}
-
-				if (!FoundLight) ImGui::BeginDisabled();
-				if (ImGui::Button("View Light"))
-				{
-					VC->SetLightViewOverride(FoundLight);
-				}
-				if (!FoundLight) ImGui::EndDisabled();
 			}
 		} // SlotIndex guard
 
