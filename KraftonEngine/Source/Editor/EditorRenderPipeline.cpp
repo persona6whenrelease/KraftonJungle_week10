@@ -184,14 +184,15 @@ void FEditorRenderPipeline::RenderPreviewViewport(
 	const float ClearColor[4] = {0.18f, 0.18f, 0.18f, 1.0f};
 	PreviewViewport->BeginRender(Ctx, ClearColor);
 
-	Frame.ClearViewportResources();
-	Frame.SetCameraInfo(Camera);
-	Frame.SetRenderOptions(PreviewClient->GetRenderOptions());
-	Frame.SetViewportInfo(PreviewViewport);
-	Frame.OcclusionCulling = nullptr;
-	Frame.LODContext = PreviewWorld->PrepareLODContext(Camera);
-	Frame.CursorViewportX = UINT32_MAX;
-	Frame.CursorViewportY = UINT32_MAX;
+	FFrameContext PreviewFrame;
+	PreviewFrame.ClearViewportResources();
+	PreviewFrame.SetCameraInfo(Camera);
+	PreviewFrame.SetRenderOptions(PreviewClient->GetRenderOptions());
+	PreviewFrame.SetViewportInfo(PreviewViewport);
+	PreviewFrame.OcclusionCulling = nullptr;
+	PreviewFrame.LODContext = PreviewWorld->PrepareLODContext(Camera);
+	PreviewFrame.CursorViewportX = UINT32_MAX;
+	PreviewFrame.CursorViewportY = UINT32_MAX;
 
 	FScene& Scene = PreviewWorld->GetScene();
 	Scene.ClearFrameData();
@@ -217,7 +218,7 @@ void FEditorRenderPipeline::RenderPreviewViewport(
 
 		if (Proxy->HasProxyFlag(EPrimitiveProxyFlags::PerViewportUpdate))
 		{
-			Proxy->UpdatePerViewport(Frame);
+			Proxy->UpdatePerViewport(PreviewFrame);
 		}
 
 		Output.FrustumVisibleProxies.push_back(Proxy);
@@ -225,17 +226,17 @@ void FEditorRenderPipeline::RenderPreviewViewport(
 		Output.VisibleProxySet.insert(Proxy);
 	}
 
-	const FShowFlags& Flags = Frame.RenderOptions.ShowFlags;
-	Collector.CollectGrid(Frame.RenderOptions.GridSpacing, Frame.RenderOptions.GridHalfLineCount, Scene);
+	const FShowFlags& Flags = PreviewFrame.RenderOptions.ShowFlags;
+	Collector.CollectGrid(PreviewFrame.RenderOptions.GridSpacing, PreviewFrame.RenderOptions.GridHalfLineCount, Scene);
 
 	if (Flags.bDebugDraw)
 	{
-		Collector.CollectDebugDraw(Frame, Scene);
+		Collector.CollectDebugDraw(PreviewFrame, Scene);
 	}
 
-	Builder.BuildCommands(Frame, &Scene, Output);
+	Builder.BuildCommands(PreviewFrame, &Scene, Output);
 
-	Renderer.Render(Frame, Scene);
+	Renderer.Render(PreviewFrame, Scene);
 }
 
 

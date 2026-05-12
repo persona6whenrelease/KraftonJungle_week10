@@ -5,6 +5,7 @@
 #include "Render/Geometry/LineGeometry.h"
 #include "Render/Geometry/FontGeometry.h"
 #include "Render/Proxy/PrimitiveSceneProxy.h"
+#include <memory>
 
 class FPassRenderStateTable;
 class FTextRenderSceneProxy;
@@ -62,7 +63,6 @@ private:
 	FShader* SelectEffectiveShader(FShader* ProxyShader, EViewMode ViewMode);
 
 	FConstantBuffer* GetPerObjectCBForProxy(const FPrimitiveSceneProxy& Proxy);
-	void EnsurePerObjectCBPoolCapacity(uint32 RequiredCount);
 
 	// 커맨드 버퍼
 	FDrawCommandList DrawCommandList;
@@ -78,7 +78,9 @@ private:
 	FFontGeometry  FontGeometry;
 
 	// PerObject CB 풀
-	TArray<FConstantBuffer> PerObjectCBPool;
+	// ProxyId는 FScene마다 0부터 다시 시작하므로, 여러 World를 같은 Renderer로 그릴 때 충돌한다.
+	// Proxy 포인터를 키로 써서 EditorWorld와 preview World의 상수버퍼를 분리한다.
+	TMap<const FPrimitiveSceneProxy*, std::unique_ptr<FConstantBuffer>> PerObjectCBPool;
 
 	// PostProcess CBs (Fog, Outline, SceneDepth, FXAA, Vignette, Fade)
 	FConstantBuffer FogCB;
