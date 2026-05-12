@@ -332,12 +332,12 @@ void DrawViewerShowFlagsControls(FViewportRenderOptions& Opts, const char* Table
 	}
 }
 
-void RenderViewerTransformToolbar(UEditorEngine* EditorEngine)
+void RenderViewerTransformToolbar(FSkeletalMeshViewerViewportClient* PreviewClient, UEditorEngine* EditorEngine)
 {
 	constexpr float ButtonSpacing = 4.0f;
 	constexpr float GroupSpacing = 12.0f;
 
-	UGizmoComponent* Gizmo = EditorEngine ? EditorEngine->GetGizmo() : nullptr;
+	UGizmoComponent* Gizmo = PreviewClient ? PreviewClient->GetBoneSelectionManager().GetGizmo() : nullptr;
 
 	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
 	ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1.0f, 1.0f, 1.0f, 0.15f));
@@ -404,6 +404,10 @@ void RenderViewerTransformToolbar(UEditorEngine* EditorEngine)
 		{
 			Settings.CoordSystem = bWorldCoord ? EEditorCoordSystem::Local : EEditorCoordSystem::World;
 		}
+		if (EditorEngine)
+		{
+			EditorEngine->ApplyTransformSettingsToGizmo(Gizmo);
+		}
 	}
 	if (bWorldCoord)
 	{
@@ -450,7 +454,7 @@ void RenderViewerTransformToolbar(UEditorEngine* EditorEngine)
 
 	if (EditorEngine && (bSnapChanged || Gizmo))
 	{
-		EditorEngine->ApplyTransformSettingsToGizmo();
+		EditorEngine->ApplyTransformSettingsToGizmo(Gizmo);
 	}
 }
 
@@ -482,7 +486,7 @@ void RenderViewerViewportToolbar(FSkeletalMeshViewerViewportClient* PreviewClien
 
 	const float RowStartX = ImGui::GetCursorPosX();
 	const float RowRightX = RowStartX + ImGui::GetContentRegionAvail().x;
-	RenderViewerTransformToolbar(Cast<UEditorEngine>(GEngine));
+	RenderViewerTransformToolbar(PreviewClient, Cast<UEditorEngine>(GEngine));
 
 	const float RightToolbarWidth =
 		CalcViewerTextButtonWidth(CurrentTypeName) +

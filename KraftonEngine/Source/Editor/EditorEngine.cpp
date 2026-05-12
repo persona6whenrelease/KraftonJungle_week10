@@ -220,7 +220,11 @@ void UEditorEngine::ToggleCoordSystem()
 
 void UEditorEngine::ApplyTransformSettingsToGizmo()
 {
-	UGizmoComponent* Gizmo = GetGizmo();
+	ApplyTransformSettingsToGizmo(GetGizmo());
+}
+
+void UEditorEngine::ApplyTransformSettingsToGizmo(UGizmoComponent* Gizmo)
+{
 	if (!Gizmo)
 	{
 		return;
