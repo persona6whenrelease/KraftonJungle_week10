@@ -39,8 +39,10 @@ private:
 
 private:
 	// skeleton grouping과 rigid attached mesh 연결을 보조합니다.
+	int32 FindOrCreateSkeletonForRoot(int32 RootBoneId, bool bBuiltFromSkinClusters, bool bHasSingleRoot, TMap<int32, int32>& RootBoneIdToSkeletonId);
 	void AddBoneDfs(int32 CurrentBoneId, FFbxSkeletonMeta& SkeletonMeta, uint32 SkeletonId);
 	int32 FindSkeletonRootBoneForSkin(const TArray<int32>& BoneIds) const;
+	bool ShouldBuildRigidSkeletonForRoot(int32 RootBoneId) const;
 	int32 FindSkeletonIdForBone(int32 BoneId) const;
 	int32 FindNearestParentBoneIdForNode(FbxNode* Node) const;
 

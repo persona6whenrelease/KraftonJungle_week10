@@ -462,6 +462,3 @@ CMakeLists.txt
 
 # Vcpkg installed
 /vcpkg_installed
-
-# Local Autodesk FBX SDK junction
-/KraftonEngine/ThirdParty/FBXSDK/

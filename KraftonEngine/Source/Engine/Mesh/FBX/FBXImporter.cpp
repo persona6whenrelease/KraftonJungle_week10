@@ -60,9 +60,12 @@ namespace
 			Desc.Name = SkeletonMeta.Name.empty()
 				? "Skeleton_" + std::to_string(SkeletonMeta.SkeletonId)
 				: SkeletonMeta.Name;
+			Desc.SourceNodeId = SkeletonMeta.RootNodeId;
 			Desc.SourceSkeletonId = SkeletonMeta.SkeletonId;
 			Desc.SkeletalMeshAssetIndex = AssetIndexIt->second;
-			Desc.RelativeTransform = FMatrix::Identity;
+			Desc.RelativeTransform = IsValidIndex(ImportMeta.Nodes, SkeletonMeta.RootNodeId)
+				? ImportMeta.Nodes[SkeletonMeta.RootNodeId].LocalTransform
+				: FMatrix::Identity;
 			Asset.SceneComponents.push_back(std::move(Desc));
 		}
 
@@ -87,7 +90,9 @@ namespace
 			Desc.SourceNodeId = MeshMeta.NodeId;
 			Desc.SourceMeshId = MeshMeta.MeshId;
 			Desc.StaticMeshAssetIndex = AssetIndexIt->second;
-			Desc.RelativeTransform = FMatrix::Identity;
+			Desc.RelativeTransform = IsValidIndex(ImportMeta.Nodes, MeshMeta.NodeId)
+				? ImportMeta.Nodes[MeshMeta.NodeId].LocalTransform
+				: FMatrix::Identity;
 			Asset.SceneComponents.push_back(std::move(Desc));
 		}
 	}

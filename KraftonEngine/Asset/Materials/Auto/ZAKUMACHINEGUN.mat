@@ -1,18 +1,19 @@
 {
-    "BlendState": "",
-    "DepthStencilState": "",
-    "Origin": "FbxImport",
-    "Parameters": {
-        "HasNormalMap": 0.000000,
-        "SectionColor": [ 1.000000, 1.000000, 1.000000, 1.000000 ],
-        "_pad": [ 0.000000, 0.000000, 0.000000 ]
-    },
-    "PathFileName": "Asset/Materials/Auto/ZAKUMACHINEGUN.mat",
-    "RasterizerState": "",
-    "RenderPass": "Opaque",
-    "ShaderPath": "Shaders/Geometry/UberLit.hlsl",
-    "Textures": {
-        "DiffuseTexture": "Asset/FBX/ZAKU/textures/ZAKUMACHINEGUN.png",
-        "NormalTexture": "Asset/FBX/ZAKU/textures/ZAKUMACHINEGUN-N.png"
-    }
+  "BlendState" : "",
+  "DepthStencilState" : "",
+  "Origin" : "FbxImport",
+  "Parameters" : {
+    "HasNormalMap" : 0.000000,
+    "SectionColor" : [1.000000, 1.000000, 1.000000, 1.000000],
+    "_pad" : [0.000000, 0.000000, 0.000000]
+  },
+  "PathFileName" : "Asset/Materials/Auto/ZAKUMACHINEGUN.mat",
+  "RasterizerState" : "",
+  "RenderPass" : "Opaque",
+  "ShaderPath" : "Shaders/Geometry/UberLit.hlsl",
+  "Textures" : {
+    "DiffuseTexture" : "Asset/FBX/Zaku/textures/ZAKUMACHINEGUN.png",
+    "EmissiveTexture" : "Asset/FBX/Zaku/textures/ZAKUMACHINEGUN-E.png",
+    "NormalTexture" : "Asset/FBX/Zaku/textures/ZAKUMACHINEGUN-N.png"
+  }
 }
