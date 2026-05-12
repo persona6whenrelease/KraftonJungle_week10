@@ -2,9 +2,6 @@
 
 #include "ContentBrowserElement.h"
 #include "Editor/Settings/EditorSettings.h"
-#include "WICTextureLoader.h"
-#include "Resource/ResourceManager.h"
-
 #include <algorithm>
 #include <fstream>
 
@@ -159,15 +156,6 @@ void FEditorContentBrowserWidget::Initialize(UEditorEngine* InEditor, ID3D11Devi
 	FEditorWidget::Initialize(InEditor);
 	if (!InDevice) return;
 
-	const std::wstring IconDir = L"Asset/Editor/Icons/";
-
-	ICons["Default"] = FResourceManager::Get().FindLoadedTexture(FPaths::ToUtf8(IconDir + L"StartMerge_42x.png"));
-	ICons["Directory"] = FResourceManager::Get().FindLoadedTexture(FPaths::ToUtf8(IconDir + L"Folder_Base_256x.png"));
-	ICons[".Scene"] = FResourceManager::Get().FindLoadedTexture(FPaths::ToUtf8(IconDir + L"World_64x.png"));
-	ICons[".Prefab"] = FResourceManager::Get().FindLoadedTexture(FPaths::ToUtf8(IconDir + L"World_64x.png"));
-	ICons[".obj"] = FResourceManager::Get().FindLoadedTexture(FPaths::ToUtf8(IconDir + L"icon_MatEd_Mesh_40x.png"));
-	ICons[".mat"] = FResourceManager::Get().FindLoadedTexture(FPaths::ToUtf8(IconDir + L"Sphere_64x.png"));
-
 	ContentBrowserContext Context;
 	Context.ContentSize = ImVec2(50, 50);
 	Context.EditorEngine = InEditor;
@@ -191,19 +179,19 @@ void FEditorContentBrowserWidget::Render(float DeltaTime)
 		BrowserContext.bIsNeedRefresh = false;
 	}
 
-	//if (ImGui::Button("Refresh") || BrowserContext.bIsNeedRefresh)
-	//	Refresh();
+	if (ImGui::Button("Refresh") || BrowserContext.bIsNeedRefresh)
+		Refresh();
 
 	ImGui::SameLine();
 	std::wstring PathText = BrowserContext.CurrentPath;
 	if(BrowserContext.SelectedElement)
 		PathText += L"/" + BrowserContext.SelectedElement->GetFileName();
 
-	//ImGui::Text(FPaths::ToUtf8(PathText).c_str());
+	ImGui::Text(FPaths::ToUtf8(PathText).c_str());
 
 	ImGui::SameLine();
 	int size = static_cast<int>(BrowserContext.ContentSize.x);
-	//ImGui::SliderInt("##slider", &size, 20, 100);
+	ImGui::SliderInt("##slider", &size, 20, 100);
 	BrowserContext.ContentSize = ImVec2(static_cast<float>(size), static_cast<float>(size));
 
 	if (!ImGui::BeginTable("ContentBrowserLayout", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersInnerV))
@@ -269,58 +257,46 @@ void FEditorContentBrowserWidget::RefreshContent()
 	for (const auto& Content : CurrentContents)
 	{
 		std::shared_ptr<ContentBrowserElement> element;
-		FString Extension = FPaths::ToUtf8(Content.Path.extension());
 
 		if (Content.bIsDirectory)
 		{
 			element = std::make_shared<DirectoryElement>();
-			element.get()->SetIcon(ICons["Directory"].Get());
-
 		}
 		else if (Content.Path.extension() == ".Scene")
 		{
 			element = std::make_shared<SceneElement>();
-			element.get()->SetIcon(ICons[Extension].Get());
 		}
 		else if (Content.Path.extension() == ".Prefab")
 		{
 			element = std::make_shared<PrefabElement>();
-			element.get()->SetIcon(ICons[Extension].Get());
 		}
 		else if (Content.Path.extension() == ".obj")
 		{
 			element = std::make_shared<ObjectElement>();
-			element.get()->SetIcon(ICons[Extension].Get());
 		}
 		else if (Content.Path.extension() == ".mat")
 		{
 			element = std::make_shared<MaterialElement>();
-			element.get()->SetIcon(ICons[Extension].Get());
 		}
 		else if (Content.Path.extension() == ".lua")
 		{
 			element = std::make_shared<LuaScriptElement>();
-			element.get()->SetIcon(ICons["Default"].Get());
 		}
 		else if (Content.Path.extension() == ".curve")
 		{
 			element = std::make_shared<CurveElement>();
-			element.get()->SetIcon(ICons["Default"].Get());
 		}
 		else if (Content.Path.extension() == ".fbx")
 		{
 			element = std::make_shared<FBXElement>();
-			element.get()->SetIcon(ICons["Default"].Get());
 		}
 		else if (Content.Path.extension() == ".png" || Content.Path.extension() == ".PNG")
 		{
 			element = std::make_shared<PNGElement>();
-			element.get()->SetIcon(FResourceManager::Get().FindLoadedTexture(FPaths::ToUtf8(Content.Path.lexically_relative(FPaths::RootDir()).generic_wstring())).Get());
 		}
 		else
 		{
 			element = std::make_shared<ContentBrowserElement>();
-			element.get()->SetIcon(ICons["Default"].Get());
 		}
 		
 		element.get()->SetContent(Content);

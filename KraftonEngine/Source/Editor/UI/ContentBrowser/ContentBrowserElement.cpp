@@ -1,10 +1,28 @@
 ﻿#include "ContentBrowserElement.h"
+#include "Component/SkeletalMeshComponent.h"
+#include "Component/StaticMeshComponent.h"
+#include "Editor/EditorEngine.h"
+#include "GameFramework/AActor.h"
+#include "Materials/MaterialManager.h"
 #include "Mesh/FBX/FBXSceneAsset.h"
 #include "Mesh/MeshManager.h"
+#include "Object/Object.h"
 #include "Platform/Paths.h"
+#include "Render/Device/D3DDevice.h"
+#include "Render/Snapshot/SnapShotRenderer.h"
+#include "Resource/ResourceManager.h"
+#include "Runtime/Engine.h"
 
 namespace
 {
+	constexpr uint32 ContentBrowserSnapshotSize = 128;
+	const char* DefaultIconPath = "Asset/Editor/Icons/StartMerge_42x.png";
+	const char* DirectoryIconPath = "Asset/Editor/Icons/Folder_Base_256x.png";
+	const char* WorldIconPath = "Asset/Editor/Icons/World_64x.png";
+	const char* MeshIconPath = "Asset/Editor/Icons/icon_MatEd_Mesh_40x.png";
+	const char* MaterialIconPath = "Asset/Editor/Icons/Sphere_64x.png";
+	const char* MaterialPreviewSpherePath = "Data/BasicShape/Sphere.OBJ";
+
 	std::filesystem::path ToProjectAssetPath(const FString& AssetPath)
 	{
 		std::filesystem::path Path(FPaths::ToWide(AssetPath));
@@ -13,6 +31,211 @@ namespace
 			return Path;
 		}
 		return std::filesystem::path(FPaths::RootDir()) / Path;
+	}
+
+	FString ToContentPath(const std::filesystem::path& Path)
+	{
+		const std::filesystem::path NormalizedPath = Path.lexically_normal();
+		const std::filesystem::path RootPath = std::filesystem::path(FPaths::RootDir()).lexically_normal();
+		const std::filesystem::path RelativePath = NormalizedPath.lexically_relative(RootPath);
+
+		if (!RelativePath.empty())
+		{
+			bool bParentReference = false;
+			for (const std::filesystem::path& Part : RelativePath)
+			{
+				if (Part == L"..")
+				{
+					bParentReference = true;
+					break;
+				}
+			}
+
+			if (!bParentReference)
+			{
+				return FPaths::ToUtf8(RelativePath.generic_wstring());
+			}
+		}
+
+		return FPaths::ToUtf8(NormalizedPath.generic_wstring());
+	}
+
+	FD3DDevice* GetContentBrowserD3DDevice(ContentBrowserContext& Context)
+	{
+		if (Context.EditorEngine)
+		{
+			return &Context.EditorEngine->GetRenderer().GetFD3DDevice();
+		}
+
+		if (GEngine)
+		{
+			return &GEngine->GetRenderer().GetFD3DDevice();
+		}
+
+		return nullptr;
+	}
+
+	bool EnsureSnapshotRenderer(FD3DDevice& Device)
+	{
+		FSnapShotRenderer& Renderer = FSnapShotRenderer::Get();
+		if (!Renderer.IsInitialized())
+		{
+			return Renderer.Initialize(Device, ContentBrowserSnapshotSize, ContentBrowserSnapshotSize);
+		}
+
+		if (Renderer.GetWidth() != ContentBrowserSnapshotSize || Renderer.GetHeight() != ContentBrowserSnapshotSize)
+		{
+			Renderer.Resize(ContentBrowserSnapshotSize, ContentBrowserSnapshotSize);
+		}
+		return true;
+	}
+
+	ID3D11ShaderResourceView* SnapshotActor(ContentBrowserContext& Context, AActor* Actor)
+	{
+		if (!Actor)
+		{
+			return nullptr;
+		}
+
+		FD3DDevice* Device = GetContentBrowserD3DDevice(Context);
+		if (!Device || !EnsureSnapshotRenderer(*Device))
+		{
+			return nullptr;
+		}
+
+		FSnapShotRenderer& Renderer = FSnapShotRenderer::Get();
+		Renderer.DrawActor(Actor);
+		return Renderer.GetSnapShot();
+	}
+
+	ID3D11ShaderResourceView* BuildStaticMeshSnapshot(ContentBrowserContext& Context, UStaticMesh* StaticMesh, UMaterial* Material = nullptr)
+	{
+		if (!StaticMesh)
+		{
+			return nullptr;
+		}
+
+		AActor* Actor = UObjectManager::Get().CreateObject<AActor>();
+		if (!Actor)
+		{
+			return nullptr;
+		}
+
+		UStaticMeshComponent* MeshComponent = Actor->AddComponent<UStaticMeshComponent>();
+		MeshComponent->SetStaticMesh(StaticMesh);
+		if (Material)
+		{
+			MeshComponent->SetMaterial(0, Material);
+		}
+
+		ID3D11ShaderResourceView* Snapshot = SnapshotActor(Context, Actor);
+		UObjectManager::Get().DestroyObject(Actor);
+		return Snapshot;
+	}
+
+	ID3D11ShaderResourceView* BuildStaticMeshSnapshot(ContentBrowserContext& Context, const FString& MeshPath)
+	{
+		FD3DDevice* Device = GetContentBrowserD3DDevice(Context);
+		ID3D11Device* D3DDevice = Device ? Device->GetDevice() : nullptr;
+		UStaticMesh* StaticMesh = FMeshManager::LoadStaticMesh(MeshPath, D3DDevice);
+		return BuildStaticMeshSnapshot(Context, StaticMesh);
+	}
+
+	ID3D11ShaderResourceView* BuildSkeletalMeshSnapshot(ContentBrowserContext& Context, USkeletalMesh* SkeletalMesh)
+	{
+		if (!SkeletalMesh)
+		{
+			return nullptr;
+		}
+
+		AActor* Actor = UObjectManager::Get().CreateObject<AActor>();
+		if (!Actor)
+		{
+			return nullptr;
+		}
+
+		USkeletalMeshComponent* MeshComponent = Actor->AddComponent<USkeletalMeshComponent>();
+		MeshComponent->SetSkeletalMesh(SkeletalMesh);
+
+		ID3D11ShaderResourceView* Snapshot = SnapshotActor(Context, Actor);
+		UObjectManager::Get().DestroyObject(Actor);
+		return Snapshot;
+	}
+
+	ID3D11ShaderResourceView* BuildSkeletalMeshSnapshot(ContentBrowserContext& Context, const FString& MeshPath)
+	{
+		USkeletalMesh* SkeletalMesh = FMeshManager::LoadSkeletalMesh(MeshPath);
+		return BuildSkeletalMeshSnapshot(Context, SkeletalMesh);
+	}
+
+	ID3D11ShaderResourceView* BuildMaterialSnapshot(ContentBrowserContext& Context, const FString& MaterialPath)
+	{
+		FD3DDevice* Device = GetContentBrowserD3DDevice(Context);
+		ID3D11Device* D3DDevice = Device ? Device->GetDevice() : nullptr;
+		UStaticMesh* SphereMesh = FMeshManager::LoadStaticMesh(MaterialPreviewSpherePath, D3DDevice);
+		UMaterial* Material = FMaterialManager::Get().GetOrCreateMaterial(MaterialPath);
+		return BuildStaticMeshSnapshot(Context, SphereMesh, Material);
+	}
+
+	ID3D11ShaderResourceView* BuildFbxSceneSnapshot(ContentBrowserContext& Context, UFBXSceneAsset* SceneAsset)
+	{
+		if (!SceneAsset)
+		{
+			return nullptr;
+		}
+
+		AActor* Actor = UObjectManager::Get().CreateObject<AActor>();
+		if (!Actor)
+		{
+			return nullptr;
+		}
+
+		USceneComponent* RootComponent = Actor->AddComponent<USceneComponent>();
+		Actor->SetRootComponent(RootComponent);
+
+		for (const FFBXSceneComponentDesc& Desc : SceneAsset->GetSceneComponents())
+		{
+			USceneComponent* AddedSceneComponent = nullptr;
+
+			if (Desc.Type == EFBXSceneComponentType::StaticMesh)
+			{
+				UStaticMesh* StaticMesh = SceneAsset->FindStaticMeshBySourceMeshId(Desc.SourceMeshId);
+				if (!StaticMesh)
+				{
+					continue;
+				}
+
+				UStaticMeshComponent* MeshComponent = Actor->AddComponent<UStaticMeshComponent>();
+				MeshComponent->SetStaticMesh(StaticMesh);
+				AddedSceneComponent = MeshComponent;
+			}
+			else if (Desc.Type == EFBXSceneComponentType::SkeletalMesh)
+			{
+				USkeletalMesh* SkeletalMesh = SceneAsset->FindSkeletalMeshBySourceSkeletonId(Desc.SourceSkeletonId);
+				if (!SkeletalMesh)
+				{
+					continue;
+				}
+
+				USkeletalMeshComponent* MeshComponent = Actor->AddComponent<USkeletalMeshComponent>();
+				MeshComponent->SetSkeletalMesh(SkeletalMesh);
+				AddedSceneComponent = MeshComponent;
+			}
+
+			if (!AddedSceneComponent)
+			{
+				continue;
+			}
+
+			AddedSceneComponent->AttachToComponent(RootComponent);
+			//AddedSceneComponent->SetRelativeLocation(Desc.RelativeTransform.GetLocation());
+			//AddedSceneComponent->SetRelativeRotation(Desc.RelativeTransform.ToQuat());
+			//AddedSceneComponent->SetRelativeScale(Desc.RelativeTransform.GetScale());
+		}
+
+		ID3D11ShaderResourceView* Snapshot = SnapshotActor(Context, Actor);
+		UObjectManager::Get().DestroyObject(Actor);
+		return Snapshot;
 	}
 
 	void AddUniqueMaterialPath(
@@ -41,8 +264,7 @@ namespace
 
 	void AddMaterialElement(
 		const FString& MaterialPath,
-		TArray<std::shared_ptr<ContentBrowserElement>>& OutElements,
-		ID3D11ShaderResourceView* Icon)
+		TArray<std::shared_ptr<ContentBrowserElement>>& OutElements)
 	{
 		const std::filesystem::path ProjectMaterialPath = ToProjectAssetPath(MaterialPath);
 
@@ -54,13 +276,53 @@ namespace
 		std::shared_ptr<ContentBrowserElement> Element =
 			std::static_pointer_cast<ContentBrowserElement>(std::make_shared<MaterialElement>());
 		Element->SetContent(std::move(MaterialItem));
-		Element->SetIcon(Icon);
 		OutElements.push_back(std::move(Element));
+	}
+}
+
+void ContentBrowserElement::SetIcon(ID3D11ShaderResourceView* InIcon)
+{
+	Icon = InIcon;
+}
+
+void ContentBrowserElement::AttachIcon(ID3D11ShaderResourceView* InIcon)
+{
+	Icon.Attach(InIcon);
+}
+
+void ContentBrowserElement::BuildIcon(ContentBrowserContext& Context)
+{
+	(void)Context;
+	SetIconFromPackagePath(GetDefaultIconPath());
+}
+
+FString ContentBrowserElement::GetDefaultIconPath() const
+{
+	return DefaultIconPath;
+}
+
+void ContentBrowserElement::SetIconFromPackagePath(const FString& PackagePath)
+{
+	Icon = FResourceManager::Get().FindLoadedTexture(PackagePath);
+}
+
+void ContentBrowserElement::EnsureIcon(ContentBrowserContext& Context)
+{
+	if (!Icon)
+	{
+		BuildIcon(Context);
+	}
+
+	if (!Icon)
+	{
+		SetIconFromPackagePath(DefaultIconPath);
 	}
 }
 
 bool ContentBrowserElement::RenderSelectSpace(ContentBrowserContext& Context)
 {
+	EnsureIcon(Context);
+
 	FString Name = FPaths::ToUtf8(ContentItem.Name);
 	ImGui::PushID(Name.c_str());
 
@@ -77,7 +339,10 @@ bool ContentBrowserElement::RenderSelectSpace(ContentBrowserContext& Context)
 	Max.y -= fontSize;
 	Max.x -= fontSize * 0.5f;
 	Min.x += fontSize * 0.5f;
-	DrawList->AddImage(Icon, Min, Max);
+	if (Icon)
+	{
+		DrawList->AddImage(Icon.Get(), Min, Max);
+	}
 
 	ImVec2 TextPos(Min.x, Max.y);
 
@@ -213,14 +478,55 @@ void DirectoryElement::OnDoubleLeftClicked(ContentBrowserContext& Context)
 	Context.bIsNeedRefresh = true;
 }
 
+FString DirectoryElement::GetDefaultIconPath() const
+{
+	return DirectoryIconPath;
+}
+
 #include "Serialization/SceneSaveManager.h"
-#include "Editor/EditorEngine.h"
 void SceneElement::OnDoubleLeftClicked(ContentBrowserContext& Context)
 {
 	std::filesystem::path ScenePath = ContentItem.Path;
 	FString FilePath = FPaths::ToUtf8(ScenePath.wstring());
 	UEditorEngine* EditorEngine = Context.EditorEngine;
 	EditorEngine->LoadSceneFromPath(FilePath);
+}
+
+FString SceneElement::GetDefaultIconPath() const
+{
+	return WorldIconPath;
+}
+
+void ObjectElement::BuildIcon(ContentBrowserContext& Context)
+{
+	AttachIcon(BuildStaticMeshSnapshot(Context, FPaths::ToUtf8(ContentItem.Path.wstring())));
+	if (!Icon)
+	{
+		SetIconFromPackagePath(GetDefaultIconPath());
+	}
+}
+
+FString ObjectElement::GetDefaultIconPath() const
+{
+	return MeshIconPath;
+}
+
+void ImportedStaticMeshElement::BuildIcon(ContentBrowserContext& Context)
+{
+	AttachIcon(BuildStaticMeshSnapshot(Context, FPaths::ToUtf8(ContentItem.Path.wstring())));
+	if (!Icon)
+	{
+		SetIconFromPackagePath(MeshIconPath);
+	}
+}
+
+void ImportedSkeletalMeshElement::BuildIcon(ContentBrowserContext& Context)
+{
+	AttachIcon(BuildSkeletalMeshSnapshot(Context, FPaths::ToUtf8(ContentItem.Path.wstring())));
+	if (!Icon)
+	{
+		SetIconFromPackagePath(MeshIconPath);
+	}
 }
 
 void FBXElement::OnDoubleLeftClicked(ContentBrowserContext& Context)
@@ -233,8 +539,20 @@ void FBXElement::OnDoubleLeftClicked(ContentBrowserContext& Context)
 	Context.EditorEngine->OpenSkeletalMeshViewerAsset(FPaths::ToUtf8(ContentItem.Path.wstring()));
 }
 
-void FBXElement::Import()
+void FBXElement::BuildIcon(ContentBrowserContext& Context)
 {
+	const FString FbxPath = FPaths::ToUtf8(ContentItem.Path.wstring());
+	UFBXSceneAsset* SceneAsset = FMeshManager::LoadFbxScene(FbxPath);
+	AttachIcon(BuildFbxSceneSnapshot(Context, SceneAsset));
+	if (!Icon)
+	{
+		SetIconFromPackagePath(GetDefaultIconPath());
+	}
+}
+
+void FBXElement::Import(ContentBrowserContext& Context)
+{
+	(void)Context;
 	const FString FbxPath = FPaths::ToUtf8(ContentItem.Path.wstring());
 	UFBXSceneAsset* SceneAsset = FMeshManager::LoadFbxScene(FbxPath);
 	if (!SceneAsset)
@@ -275,7 +593,6 @@ void FBXElement::Import()
 			? std::static_pointer_cast<ContentBrowserElement>(std::make_shared<ImportedStaticMeshElement>())
 			: std::static_pointer_cast<ContentBrowserElement>(std::make_shared<ImportedSkeletalMeshElement>());
 		Element->SetContent(std::move(ImportedItem));
-		Element->SetIcon(Icon);
 		InternalElements.push_back(std::move(Element));
 
 		if (bStaticMesh)
@@ -308,10 +625,20 @@ void FBXElement::Import()
 
 	for (const FString& MaterialPath : MaterialPaths)
 	{
-		AddMaterialElement(MaterialPath, InternalElements, Icon);
+		AddMaterialElement(MaterialPath, InternalElements);
 	}
 
 	bExpanded = !InternalElements.empty();
+}
+
+void PNGElement::BuildIcon(ContentBrowserContext& Context)
+{
+	(void)Context;
+	SetIconFromPackagePath(ToContentPath(ContentItem.Path));
+	if (!Icon)
+	{
+		SetIconFromPackagePath(GetDefaultIconPath());
+	}
 }
 
 void MaterialElement::OnLeftClicked(ContentBrowserContext& Context)
@@ -319,9 +646,28 @@ void MaterialElement::OnLeftClicked(ContentBrowserContext& Context)
 	MaterialInspector = { ContentItem.Path };
 }
 
+void MaterialElement::BuildIcon(ContentBrowserContext& Context)
+{
+	AttachIcon(BuildMaterialSnapshot(Context, ToContentPath(ContentItem.Path)));
+	if (!Icon)
+	{
+		SetIconFromPackagePath(GetDefaultIconPath());
+	}
+}
+
+FString MaterialElement::GetDefaultIconPath() const
+{
+	return MaterialIconPath;
+}
+
 void MaterialElement::RenderDetail()
 {
 	MaterialInspector.Render();
+}
+
+FString PrefabElement::GetDefaultIconPath() const
+{
+	return WorldIconPath;
 }
 
 void CurveElement::OnDoubleLeftClicked(ContentBrowserContext& Context)
@@ -408,7 +754,7 @@ void ImportableElement::OnRightClicked(ContentBrowserContext& Context)
 	if (ImGui::MenuItem("Import"))
 	{
 		InternalElements.clear();
-		Import();
+		Import(Context);
 
 		bIsImported = true;
 	}

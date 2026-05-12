@@ -5,7 +5,6 @@
 #include <memory>
 #include "ContentBrowserContext.h"
 #include "ContentBrowserElement.h"
-#include <wrl/client.h>
 
 class FEditorContentBrowserWidget final : public FEditorWidget
 {
@@ -37,5 +36,4 @@ private:
 
 	FDirNode RootNode;
 	TArray<std::shared_ptr<ContentBrowserElement>> CachedBrowserElements;
-	TMap<FString, Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>> ICons;
 };
