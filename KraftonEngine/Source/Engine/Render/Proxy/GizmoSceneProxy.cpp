@@ -70,7 +70,7 @@ void FGizmoSceneProxy::UpdatePerViewport(const FFrameContext& Frame)
 
 	// Per-viewport 스케일 계산
 	const FVector CameraPos = Frame.View.GetInverseFast().GetLocation();
-	float PerViewScale = Gizmo->ComputeScreenSpaceScale(
+	float PerViewScale = Gizmo->GetScreenSpaceScaleForRender(
 		CameraPos, Frame.bIsOrtho, Frame.OrthoWidth);
 
 	FMatrix WorldMatrix = FMatrix::MakeScaleMatrix(FVector(PerViewScale, PerViewScale, PerViewScale))

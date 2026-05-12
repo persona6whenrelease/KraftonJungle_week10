@@ -428,6 +428,13 @@ void FEditorSkeletalMeshViewerWidget::RenderViewportPanel(float DeltaTime)
 		const bool bMiddleMouseDown = ImGui::IsMouseDown(ImGuiMouseButton_Middle);
 		const bool bAnyCaptureButtonDown = bRightMouseDown || bMiddleMouseDown;
 
+
+		const uint32 NewWidth = static_cast<uint32>(ViewportSize.x);
+		const uint32 NewHeight = static_cast<uint32>(ViewportSize.y);
+
+		PreviewViewport->RequestResize(NewWidth, NewHeight);
+		PreviewViewportClient->SetViewportRect(ViewportMin.x, ViewportMin.y, NewWidth, NewHeight);
+
 		if (!bPreviewViewportWantsMouseCapture)
 		{
 			if (bViewportHovered &&
@@ -453,9 +460,6 @@ void FEditorSkeletalMeshViewerWidget::RenderViewportPanel(float DeltaTime)
 			InputFrame);
 		TickPreviewScene(DeltaTime);
 
-		PreviewViewport->RequestResize(
-			static_cast<uint32>(ViewportSize.x),
-			static_cast<uint32>(ViewportSize.y));
 
 		EditorEngine->RenderSkeletalMeshViewerPreview(
 			PreviewWorld,

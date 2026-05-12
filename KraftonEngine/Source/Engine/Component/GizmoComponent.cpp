@@ -561,7 +561,10 @@ void UGizmoComponent::SetTarget(USceneComponent* NewTarget)
 
 	TargetComponent = NewTarget;
 
-	SetWorldLocation(TargetComponent->GetWorldLocation());
+	if (!bPreserveWorldLocationOnUpdate)
+	{
+		SetWorldLocation(TargetComponent->GetWorldLocation());
+	}
 	UpdateGizmoTransform();
 	SetVisibility(true);
 }
@@ -783,7 +786,9 @@ void UGizmoComponent::UpdateGizmoTransform()
 {
 	if (!TargetComponent) return;
 
-	const FVector DesiredLocation = TargetComponent->GetWorldLocation();
+	const FVector DesiredLocation = bPreserveWorldLocationOnUpdate
+		? GetWorldLocation()
+		: TargetComponent->GetWorldLocation();
 	
 	FRotator DesiredRotation = FRotator();
 	if (CurMode == EGizmoMode::Scale || !bIsWorldSpace)
@@ -849,6 +854,27 @@ void UGizmoComponent::ApplyScreenSpaceScaling(const FVector& CameraLocation, boo
 	SetRelativeScale(FVector(NewScale, NewScale, NewScale));
 }
 
+void UGizmoComponent::SetScreenSpaceScaleOverride(float InScale)
+{
+	bUseScreenSpaceScaleOverride = true;
+	ScreenSpaceScaleOverride = FMath::Max(InScale, 0.01f);
+}
+
+void UGizmoComponent::ClearScreenSpaceScaleOverride()
+{
+	bUseScreenSpaceScaleOverride = false;
+}
+
+float UGizmoComponent::GetScreenSpaceScaleForRender(const FVector& CameraLocation, bool bIsOrtho, float OrthoWidth) const
+{
+	if (bUseScreenSpaceScaleOverride)
+	{
+		return ScreenSpaceScaleOverride;
+	}
+
+	return ComputeScreenSpaceScale(CameraLocation, bIsOrtho, OrthoWidth);
+}
+
 void UGizmoComponent::SetWorldSpace(bool bWorldSpace)
 {
 	bIsWorldSpace = bWorldSpace;
@@ -904,6 +930,7 @@ void UGizmoComponent::Deactivate()
 
 	TargetComponent = nullptr;
 	AllSelectedActors = nullptr;
+	ClearScreenSpaceScaleOverride();
 	SetVisibility(false);
 	SelectedAxis = -1;
 }

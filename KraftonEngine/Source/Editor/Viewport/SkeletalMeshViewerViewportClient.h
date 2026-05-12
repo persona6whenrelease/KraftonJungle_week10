@@ -18,6 +18,7 @@ public:
 	void Shutdown();
 
 	void Resize(uint32 Width, uint32 Height);
+	void SetViewportRect(float MinX, float MinY, uint32 Width, uint32 Height);
 	void FrameMesh(const FSkeletalMesh* MeshAsset);
 
 	UCameraComponent* GetCamera() const { return Camera; }
@@ -36,6 +37,8 @@ private:
 	FBoneSelectionManager BoneSelectionManager;
 
 	// Viewport 크기를 저장할 변수 추가 (Ray 계산용)
+	float ViewportMinX = 0.0f;
+	float ViewportMinY = 0.0f;
 	uint32 ViewportWidth = 0;
 	uint32 ViewportHeight = 0;
 };

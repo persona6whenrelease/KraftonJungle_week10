@@ -10,7 +10,7 @@ void USkeletalGizmoComponent::SetTargetBone(USkinnedMeshComponent* NewTarget, in
 {
 	TargetSkelMeshComp = NewTarget;
 	TargetBoneIndex = InBoneIndex;
-	// 부모의 타겟 컴포넌트 변수도 스켈레탈 메시로 설정하여 기즈모 렌더링/업데이트 활성화
+	SetPreserveWorldLocationOnUpdate(true);
 	SetTarget(TargetSkelMeshComp);
 }
 
