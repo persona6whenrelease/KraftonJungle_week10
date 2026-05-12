@@ -3,7 +3,7 @@
 #include <cmath>
 #include <cstring>
 #include "Engine/Runtime/Engine.h"
-#include "Mesh/FBX/FBXManager.h"
+#include "Mesh/MeshManager.h"
 #include "Object/ObjectFactory.h"
 #include "Render/Proxy/SkeletalMeshSceneProxy.h"
 #include "Serialization/Archive.h"
@@ -182,14 +182,7 @@ void USkinnedMeshComponent::PostDuplicate()
 
 	if (!SkeletalMeshPath.empty() && SkeletalMeshPath != "None")
 	{
-		const bool bFbxSceneSkeletalMeshReference = SkeletalMeshPath.find("#Skeleton_") != FString::npos;
-		USkeletalMesh* Loaded = bFbxSceneSkeletalMeshReference
-			? FFBXManager::LoadSkeletalMeshFromFbxSceneReference(SkeletalMeshPath)
-			: nullptr;
-		if (!Loaded && !bFbxSceneSkeletalMeshReference)
-		{
-			Loaded = FFBXManager::LoadSkeletalMesh(SkeletalMeshPath);
-		}
+		USkeletalMesh* Loaded = FMeshManager::LoadSkeletalMesh(SkeletalMeshPath);
 		if (Loaded)
 		{
 			TArray<FMaterialSlot> SavedSlots = MaterialSlots;
@@ -230,14 +223,7 @@ void USkinnedMeshComponent::PostEditProperty(const char* PropertyName)
 		}
 		else
 		{
-			const bool bFbxSceneSkeletalMeshReference = SkeletalMeshPath.find("#Skeleton_") != FString::npos;
-			USkeletalMesh* Loaded = bFbxSceneSkeletalMeshReference
-				? FFBXManager::LoadSkeletalMeshFromFbxSceneReference(SkeletalMeshPath)
-				: nullptr;
-			if (!Loaded && !bFbxSceneSkeletalMeshReference)
-			{
-				Loaded = FFBXManager::LoadSkeletalMesh(SkeletalMeshPath);
-			}
+			USkeletalMesh* Loaded = FMeshManager::LoadSkeletalMesh(SkeletalMeshPath);
 			SetSkeletalMesh(Loaded);
 		}
 		CacheLocalBounds();

@@ -7,6 +7,7 @@
 class UFBXSceneAsset;
 class USkeletalMesh;
 class USkeletalMeshComponent;
+class ADirectionalLightActor;
 class FViewport;
 class FSkeletalMeshViewerViewportClient;
 
@@ -42,6 +43,7 @@ private:
 
 	UWorld* PreviewWorld = nullptr;
 	AActor* PreviewActor = nullptr;
+	ADirectionalLightActor* PreviewDirectionalLightActor = nullptr;
 	USkeletalMeshComponent* PreviewMeshComponent = nullptr;
 	FViewport* PreviewViewport = nullptr;
 	FSkeletalMeshViewerViewportClient* PreviewViewportClient = nullptr;
