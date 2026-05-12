@@ -5,8 +5,11 @@
 #include "FbxMaterialImportUtils.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <cstring>
 #include <fbxsdk.h>
+#include <unordered_map>
 
 namespace
 {
@@ -38,6 +41,163 @@ namespace
 		FVector2 UVMax = FVector2(0.0f, 0.0f);
 		FVector2 FirstNonZeroUV = FVector2(0.0f, 0.0f);
 	};
+
+	uint32 FloatToBitKey(float Value)
+	{
+		uint32 Bits = 0;
+		static_assert(sizeof(Bits) == sizeof(Value));
+		std::memcpy(&Bits, &Value, sizeof(Value));
+		return Bits;
+	}
+
+	void HashCombine(size_t& Seed, uint32 Value)
+	{
+		Seed ^= std::hash<uint32>{}(Value) + 0x9e3779b9u + (Seed << 6) + (Seed >> 2);
+	}
+
+	template <size_t Count>
+	bool EqualArray(const std::array<uint32, Count>& A, const std::array<uint32, Count>& B)
+	{
+		return std::equal(A.begin(), A.end(), B.begin());
+	}
+
+	template <size_t Count>
+	void HashArray(size_t& Seed, const std::array<uint32, Count>& Values)
+	{
+		for (uint32 Value : Values)
+		{
+			HashCombine(Seed, Value);
+		}
+	}
+
+	struct FFbxStaticVertexKey
+	{
+		std::array<uint32, 3> Position = {};
+		std::array<uint32, 3> Normal = {};
+		std::array<uint32, 4> Color = {};
+		std::array<uint32, 2> UV = {};
+		std::array<uint32, 4> Tangent = {};
+
+		bool operator==(const FFbxStaticVertexKey& Other) const
+		{
+			return EqualArray(Position, Other.Position) &&
+				EqualArray(Normal, Other.Normal) &&
+				EqualArray(Color, Other.Color) &&
+				EqualArray(UV, Other.UV) &&
+				EqualArray(Tangent, Other.Tangent);
+		}
+	};
+
+	struct FFbxSkeletalVertexKey
+	{
+		std::array<uint32, 3> Position = {};
+		std::array<uint32, 3> Normal = {};
+		std::array<uint32, 2> UV = {};
+		std::array<uint32, 4> Tangent = {};
+		std::array<uint32, 4> BoneIDs = {};
+		std::array<uint32, 4> BoneWeights = {};
+
+		bool operator==(const FFbxSkeletalVertexKey& Other) const
+		{
+			return EqualArray(Position, Other.Position) &&
+				EqualArray(Normal, Other.Normal) &&
+				EqualArray(UV, Other.UV) &&
+				EqualArray(Tangent, Other.Tangent) &&
+				EqualArray(BoneIDs, Other.BoneIDs) &&
+				EqualArray(BoneWeights, Other.BoneWeights);
+		}
+	};
+
+	struct FFbxStaticVertexKeyHasher
+	{
+		size_t operator()(const FFbxStaticVertexKey& Key) const
+		{
+			size_t Seed = 0;
+			HashArray(Seed, Key.Position);
+			HashArray(Seed, Key.Normal);
+			HashArray(Seed, Key.Color);
+			HashArray(Seed, Key.UV);
+			HashArray(Seed, Key.Tangent);
+			return Seed;
+		}
+	};
+
+	struct FFbxSkeletalVertexKeyHasher
+	{
+		size_t operator()(const FFbxSkeletalVertexKey& Key) const
+		{
+			size_t Seed = 0;
+			HashArray(Seed, Key.Position);
+			HashArray(Seed, Key.Normal);
+			HashArray(Seed, Key.UV);
+			HashArray(Seed, Key.Tangent);
+			HashArray(Seed, Key.BoneIDs);
+			HashArray(Seed, Key.BoneWeights);
+			return Seed;
+		}
+	};
+
+	FFbxStaticVertexKey MakeStaticVertexKey(const FNormalVertex& Vertex)
+	{
+		FFbxStaticVertexKey Key;
+		Key.Position = { FloatToBitKey(Vertex.pos.X), FloatToBitKey(Vertex.pos.Y), FloatToBitKey(Vertex.pos.Z) };
+		Key.Normal = { FloatToBitKey(Vertex.normal.X), FloatToBitKey(Vertex.normal.Y), FloatToBitKey(Vertex.normal.Z) };
+		Key.Color = { FloatToBitKey(Vertex.color.X), FloatToBitKey(Vertex.color.Y), FloatToBitKey(Vertex.color.Z), FloatToBitKey(Vertex.color.W) };
+		Key.UV = { FloatToBitKey(Vertex.tex.X), FloatToBitKey(Vertex.tex.Y) };
+		Key.Tangent = { FloatToBitKey(Vertex.tangent.X), FloatToBitKey(Vertex.tangent.Y), FloatToBitKey(Vertex.tangent.Z), FloatToBitKey(Vertex.tangent.W) };
+		return Key;
+	}
+
+	FFbxSkeletalVertexKey MakeSkeletalVertexKey(const FSkeletalVertex& Vertex)
+	{
+		FFbxSkeletalVertexKey Key;
+		Key.Position = { FloatToBitKey(Vertex.pos.X), FloatToBitKey(Vertex.pos.Y), FloatToBitKey(Vertex.pos.Z) };
+		Key.Normal = { FloatToBitKey(Vertex.normal.X), FloatToBitKey(Vertex.normal.Y), FloatToBitKey(Vertex.normal.Z) };
+		Key.UV = { FloatToBitKey(Vertex.tex.X), FloatToBitKey(Vertex.tex.Y) };
+		Key.Tangent = { FloatToBitKey(Vertex.tangent.X), FloatToBitKey(Vertex.tangent.Y), FloatToBitKey(Vertex.tangent.Z), FloatToBitKey(Vertex.tangent.W) };
+		for (int32 InfluenceIndex = 0; InfluenceIndex < 4; ++InfluenceIndex)
+		{
+			Key.BoneIDs[InfluenceIndex] = Vertex.BoneIDs[InfluenceIndex];
+			Key.BoneWeights[InfluenceIndex] = FloatToBitKey(Vertex.BoneWeights[InfluenceIndex]);
+		}
+		return Key;
+	}
+
+	uint32 FindOrAddStaticVertex(
+		const FNormalVertex& Vertex,
+		TArray<FNormalVertex>& Vertices,
+		std::unordered_map<FFbxStaticVertexKey, uint32, FFbxStaticVertexKeyHasher>& VertexToIndex)
+	{
+		const FFbxStaticVertexKey Key = MakeStaticVertexKey(Vertex);
+		auto ExistingIt = VertexToIndex.find(Key);
+		if (ExistingIt != VertexToIndex.end())
+		{
+			return ExistingIt->second;
+		}
+
+		const uint32 NewIndex = static_cast<uint32>(Vertices.size());
+		Vertices.push_back(Vertex);
+		VertexToIndex.emplace(Key, NewIndex);
+		return NewIndex;
+	}
+
+	uint32 FindOrAddSkeletalVertex(
+		const FSkeletalVertex& Vertex,
+		TArray<FSkeletalVertex>& Vertices,
+		std::unordered_map<FFbxSkeletalVertexKey, uint32, FFbxSkeletalVertexKeyHasher>& VertexToIndex)
+	{
+		const FFbxSkeletalVertexKey Key = MakeSkeletalVertexKey(Vertex);
+		auto ExistingIt = VertexToIndex.find(Key);
+		if (ExistingIt != VertexToIndex.end())
+		{
+			return ExistingIt->second;
+		}
+
+		const uint32 NewIndex = static_cast<uint32>(Vertices.size());
+		Vertices.push_back(Vertex);
+		VertexToIndex.emplace(Key, NewIndex);
+		return NewIndex;
+	}
 
 	FString BuildUVSetNameList(FbxMesh* Mesh)
 	{
@@ -235,9 +395,14 @@ namespace FbxMeshGeometryBuilder
 		FFbxGeometryBuildStats GeometryStats;
 		TMap<int32, TArray<uint32>> IndicesByMaterial;
 		int32 PolygonVertexCounter = 0;
+		int32 SourceVertexCount = 0;
+		int32 ReusedVertexCount = 0;
 		bool bLoggedFanTriangulation = false;
 
 		const int32 PolygonCount = Mesh->GetPolygonCount();
+		std::unordered_map<FFbxSkeletalVertexKey, uint32, FFbxSkeletalVertexKeyHasher> VertexToIndex;
+		VertexToIndex.reserve(static_cast<size_t>(PolygonCount) * 3);
+
 		for (int32 PolyIndex = 0; PolyIndex < PolygonCount; ++PolyIndex)
 		{
 			const int32 PolySize = Mesh->GetPolygonSize(PolyIndex);
@@ -291,8 +456,14 @@ namespace FbxMeshGeometryBuilder
 				TransformSkeletalVertexToAssetSpace(Vertex, MeshToAssetBindMatrix);
 				AssignWeights(ControlPointIndex, Vertex);
 
-				PolygonVertexIndices.push_back(static_cast<uint32>(OutPart.Vertices.size()));
-				OutPart.Vertices.push_back(Vertex);
+				const uint32 VertexCountBefore = static_cast<uint32>(OutPart.Vertices.size());
+				const uint32 VertexIndex = FindOrAddSkeletalVertex(Vertex, OutPart.Vertices, VertexToIndex);
+				if (static_cast<uint32>(OutPart.Vertices.size()) == VertexCountBefore)
+				{
+					++ReusedVertexCount;
+				}
+				++SourceVertexCount;
+				PolygonVertexIndices.push_back(VertexIndex);
 				++PolygonVertexCounter;
 			}
 
@@ -344,6 +515,12 @@ namespace FbxMeshGeometryBuilder
 		}
 
 		LogUVStatsIfEnabled(MeshMeta, Mesh, GeometryStats);
+		UE_LOG("[FBXImporter] Skeletal vertex dedup. MeshId=%d Node=%s SourceCorners=%d UniqueVertices=%u Reused=%d",
+			MeshMeta.MeshId,
+			MeshMeta.SourceNodePath.c_str(),
+			SourceVertexCount,
+			static_cast<uint32>(OutPart.Vertices.size()),
+			ReusedVertexCount);
 
 		return !OutPart.Vertices.empty() && !OutPart.Indices.empty();
 	}
@@ -366,9 +543,14 @@ namespace FbxMeshGeometryBuilder
 		FFbxGeometryBuildStats GeometryStats;
 		TMap<int32, TArray<uint32>> IndicesByMaterial;
 		int32 PolygonVertexCounter = 0;
+		int32 SourceVertexCount = 0;
+		int32 ReusedVertexCount = 0;
 		bool bLoggedFanTriangulation = false;
 
 		const int32 PolygonCount = Mesh->GetPolygonCount();
+		std::unordered_map<FFbxStaticVertexKey, uint32, FFbxStaticVertexKeyHasher> VertexToIndex;
+		VertexToIndex.reserve(static_cast<size_t>(PolygonCount) * 3);
+
 		for (int32 PolyIndex = 0; PolyIndex < PolygonCount; ++PolyIndex)
 		{
 			const int32 PolySize = Mesh->GetPolygonSize(PolyIndex);
@@ -422,8 +604,14 @@ namespace FbxMeshGeometryBuilder
 				UpdateUVStats(GeometryStats, Vertex.tex);
 				TransformStaticVertexToAssetSpace(Vertex, MeshToAssetBindMatrix);
 
-				PolygonVertexIndices.push_back(static_cast<uint32>(OutMesh.Vertices.size()));
-				OutMesh.Vertices.push_back(Vertex);
+				const uint32 VertexCountBefore = static_cast<uint32>(OutMesh.Vertices.size());
+				const uint32 VertexIndex = FindOrAddStaticVertex(Vertex, OutMesh.Vertices, VertexToIndex);
+				if (static_cast<uint32>(OutMesh.Vertices.size()) == VertexCountBefore)
+				{
+					++ReusedVertexCount;
+				}
+				++SourceVertexCount;
+				PolygonVertexIndices.push_back(VertexIndex);
 				++PolygonVertexCounter;
 			}
 
@@ -468,6 +656,12 @@ namespace FbxMeshGeometryBuilder
 		}
 
 		LogUVStatsIfEnabled(MeshMeta, Mesh, GeometryStats);
+		UE_LOG("[FBXImporter] Static vertex dedup. MeshId=%d Node=%s SourceCorners=%d UniqueVertices=%u Reused=%d",
+			MeshMeta.MeshId,
+			MeshMeta.SourceNodePath.c_str(),
+			SourceVertexCount,
+			static_cast<uint32>(OutMesh.Vertices.size()),
+			ReusedVertexCount);
 		OutMesh.CacheBounds();
 
 		return !OutMesh.Vertices.empty() && !OutMesh.Indices.empty();
