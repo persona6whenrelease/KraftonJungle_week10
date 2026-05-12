@@ -198,12 +198,12 @@ void DrawViewerShowFlagsControls(FViewportRenderOptions& Opts, const char* Table
 	}
 }
 
-void RenderViewerTransformToolbar(UEditorEngine* EditorEngine)
+void RenderViewerTransformToolbar(FSkeletalMeshViewerViewportClient* PreviewClient)
 {
 	constexpr float ButtonSpacing = 4.0f;
 	constexpr float GroupSpacing = 12.0f;
 
-	UGizmoComponent* Gizmo = EditorEngine ? EditorEngine->GetGizmo() : nullptr;
+	UGizmoComponent* Gizmo = PreviewClient ? PreviewClient->GetGizmo() : nullptr;
 
 	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
 	ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1.0f, 1.0f, 1.0f, 0.15f));
@@ -249,10 +249,8 @@ void RenderViewerTransformToolbar(UEditorEngine* EditorEngine)
 
 	ImGui::PopStyleColor(3);
 
-	FEditorSettings& Settings = FEditorSettings::Get();
-
 	ImGui::SameLine(0.0f, GroupSpacing);
-	const bool bWorldCoord = Settings.CoordSystem == EEditorCoordSystem::World;
+	const bool bWorldCoord = Gizmo ? Gizmo->IsWorldSpace() : true;
 	if (bWorldCoord)
 	{
 		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.5f, 0.8f, 1.0f));
@@ -262,13 +260,9 @@ void RenderViewerTransformToolbar(UEditorEngine* EditorEngine)
 		bWorldCoord ? EViewerToolbarIcon::WorldSpace : EViewerToolbarIcon::LocalSpace,
 		bWorldCoord ? "World" : "Local"))
 	{
-		if (EditorEngine)
+		if (Gizmo)
 		{
-			EditorEngine->ToggleCoordSystem();
-		}
-		else
-		{
-			Settings.CoordSystem = bWorldCoord ? EEditorCoordSystem::Local : EEditorCoordSystem::World;
+			Gizmo->SetWorldSpace(!bWorldCoord);
 		}
 	}
 	if (bWorldCoord)
@@ -276,6 +270,12 @@ void RenderViewerTransformToolbar(UEditorEngine* EditorEngine)
 		ImGui::PopStyleColor();
 	}
 
+	if (!PreviewClient)
+	{
+		return;
+	}
+
+	FViewerSnapSettings& Snap = PreviewClient->GetSnapSettings();
 	bool bSnapChanged = false;
 	auto DrawSnapControl = [&](const char* Id, EViewerToolbarIcon Icon, const char* FallbackLabel, bool& bEnabled, float& Value, float MinValue)
 	{
@@ -310,14 +310,13 @@ void RenderViewerTransformToolbar(UEditorEngine* EditorEngine)
 		ImGui::PopID();
 	};
 
-	DrawSnapControl("ViewerTranslateSnap", EViewerToolbarIcon::TranslateSnap, "T", Settings.bEnableTranslationSnap, Settings.TranslationSnapSize, 0.001f);
-	DrawSnapControl("ViewerRotateSnap", EViewerToolbarIcon::RotateSnap, "R", Settings.bEnableRotationSnap, Settings.RotationSnapSize, 0.001f);
-	DrawSnapControl("ViewerScaleSnap", EViewerToolbarIcon::ScaleSnap, "S", Settings.bEnableScaleSnap, Settings.ScaleSnapSize, 0.001f);
+	DrawSnapControl("ViewerTranslateSnap", EViewerToolbarIcon::TranslateSnap, "T", Snap.bEnableTranslationSnap, Snap.TranslationSnapSize, 0.001f);
+	DrawSnapControl("ViewerRotateSnap", EViewerToolbarIcon::RotateSnap, "R", Snap.bEnableRotationSnap, Snap.RotationSnapSize, 0.001f);
+	DrawSnapControl("ViewerScaleSnap", EViewerToolbarIcon::ScaleSnap, "S", Snap.bEnableScaleSnap, Snap.ScaleSnapSize, 0.001f);
 
-	if (EditorEngine && (bSnapChanged || Gizmo))
-	{
-		EditorEngine->ApplyTransformSettingsToGizmo();
-	}
+	// 매 프레임 동기화 — UI 변경 즉시 반영 + 다른 경로에서의 변경에도 일관성 유지.
+	PreviewClient->ApplySnapSettingsToGizmo();
+	(void)bSnapChanged;
 }
 
 void RenderViewerViewportToolbar(FSkeletalMeshViewerViewportClient* PreviewClient)
@@ -348,7 +347,7 @@ void RenderViewerViewportToolbar(FSkeletalMeshViewerViewportClient* PreviewClien
 
 	const float RowStartX = ImGui::GetCursorPosX();
 	const float RowRightX = RowStartX + ImGui::GetContentRegionAvail().x;
-	RenderViewerTransformToolbar(Cast<UEditorEngine>(GEngine));
+	RenderViewerTransformToolbar(PreviewClient);
 
 	const float RightToolbarWidth =
 		CalcViewerTextButtonWidth(CurrentTypeName) +
@@ -485,12 +484,17 @@ void RenderViewerViewportToolbar(FSkeletalMeshViewerViewportClient* PreviewClien
 	}
 }
 
-void RenderBoneTreeNode(const TArray<FBoneInfo>& Bones, int32 BoneIndex, int32& SelectedBoneIndex)
+void RenderBoneTreeNode(
+	const TArray<FBoneInfo>& Bones,
+	int32 BoneIndex,
+	FSkeletalMeshViewerViewportClient* PreviewClient)
 {
 	if (BoneIndex < 0 || BoneIndex >= static_cast<int32>(Bones.size()))
 	{
 		return;
 	}
+
+	const int32 SelectedBoneIndex = PreviewClient ? PreviewClient->GetSelectedBoneIndex() : -1;
 
 	ImGuiTreeNodeFlags Flags = ImGuiTreeNodeFlags_OpenOnArrow;
 	if (SelectedBoneIndex == BoneIndex)
@@ -518,9 +522,9 @@ void RenderBoneTreeNode(const TArray<FBoneInfo>& Bones, int32 BoneIndex, int32& 
 		"%s",
 		Bones[BoneIndex].Name.c_str());
 
-	if (ImGui::IsItemClicked())
+	if (ImGui::IsItemClicked() && PreviewClient)
 	{
-		SelectedBoneIndex = BoneIndex;
+		PreviewClient->SelectBone(BoneIndex);
 	}
 
 	if (bOpen)
@@ -529,7 +533,7 @@ void RenderBoneTreeNode(const TArray<FBoneInfo>& Bones, int32 BoneIndex, int32& 
 		{
 			if (Bones[ChildIndex].ParentIndex == BoneIndex)
 			{
-				RenderBoneTreeNode(Bones, ChildIndex, SelectedBoneIndex);
+				RenderBoneTreeNode(Bones, ChildIndex, PreviewClient);
 			}
 		}
 		ImGui::TreePop();
@@ -570,7 +574,8 @@ void FEditorSkeletalMeshViewerWidget::EnsurePreviewScene()
 
 	PreviewViewportClient = new FSkeletalMeshViewerViewportClient();
 	PreviewViewportClient->Initialize();
-	
+	PreviewViewportClient->SetGizmoScene(&PreviewWorld->GetScene());
+
 	PreviewViewport = new FViewport();
 
 	ID3D11Device* Device = GEngine ? GEngine->GetRenderer().GetFD3DDevice().GetDevice() : nullptr;
@@ -633,9 +638,13 @@ void FEditorSkeletalMeshViewerWidget::SetPreviewMesh(USkeletalMesh* InMesh, bool
 		PreviewMeshComponent->SetRelativeLocation(FVector(-Center.X, -Center.Y, -Center.Z));
 	}
 
-	if (bResetCamera && PreviewViewportClient)
+	if (PreviewViewportClient)
 	{
-		PreviewViewportClient->FrameMesh(MeshAsset);
+		PreviewViewportClient->SetTrackedMesh(PreviewMeshComponent);
+		if (bResetCamera)
+		{
+			PreviewViewportClient->FrameMesh(MeshAsset);
+		}
 	}
 }
 
@@ -692,7 +701,10 @@ bool FEditorSkeletalMeshViewerWidget::OpenFbxAsset(const FString& FbxPath)
 	CurrentFbxPath = FbxPath;
 	CurrentSceneAsset = FMeshManager::LoadFbxScene(FbxPath);
 	SelectedResourceIndex = -1;
-	SelectedBoneIndex = -1;
+	if (PreviewViewportClient)
+	{
+		PreviewViewportClient->SelectBone(-1);
+	}
 
 	if (!CurrentSceneAsset)
 	{
@@ -805,7 +817,10 @@ void FEditorSkeletalMeshViewerWidget::RenderResourcePanel()
 				if (ImGui::Selectable(Label.c_str(), bSelected))
 				{
 					SelectedResourceIndex = MeshIndex;
-					SelectedBoneIndex = -1;
+					if (PreviewViewportClient)
+					{
+						PreviewViewportClient->SelectBone(-1);
+					}
 					SetPreviewMesh(GetSelectedSkeletalMesh());
 				}
 			}
@@ -913,6 +928,9 @@ void FEditorSkeletalMeshViewerWidget::RenderViewportPanel(float DeltaTime)
 			bPreviewViewportWantsMouseCapture && bRightMouseDown;
 
 		FInputFrame InputFrame(InputSystem::Get().MakeSnapshot());
+		PreviewViewportClient->SetViewportRect(
+			PreviewViewportMin.x, PreviewViewportMin.y,
+			ViewportSize.x, ViewportSize.y);
 		PreviewViewportClient->Tick(
 			DeltaTime,
 			bViewportHovered || bPreviewViewportWantsMouseCapture,
@@ -976,7 +994,7 @@ void FEditorSkeletalMeshViewerWidget::RenderBonePanel()
 			{
 				if (MeshAsset->Bones[BoneIndex].ParentIndex < 0)
 				{
-					RenderBoneTreeNode(MeshAsset->Bones, BoneIndex, SelectedBoneIndex);
+					RenderBoneTreeNode(MeshAsset->Bones, BoneIndex, PreviewViewportClient);
 				}
 			}
 		}
@@ -993,13 +1011,14 @@ void FEditorSkeletalMeshViewerWidget::RenderTransformPanel()
 
 		USkeletalMesh* SelectedMesh = GetSelectedSkeletalMesh();
 		const FSkeletalMesh* MeshAsset = SelectedMesh ? SelectedMesh->GetSkeletalMeshAsset() : nullptr;
-		if (!MeshAsset || SelectedBoneIndex < 0 || SelectedBoneIndex >= static_cast<int32>(MeshAsset->Bones.size()))
+		const int32 BoneIdx = PreviewViewportClient ? PreviewViewportClient->GetSelectedBoneIndex() : -1;
+		if (!MeshAsset || BoneIdx < 0 || BoneIdx >= static_cast<int32>(MeshAsset->Bones.size()))
 		{
 			ImGui::TextDisabled("No bone selected");
 		}
 		else
 		{
-			const FBoneInfo& Bone = MeshAsset->Bones[SelectedBoneIndex];
+			const FBoneInfo& Bone = MeshAsset->Bones[BoneIdx];
 			const FVector LocationVector = Bone.LocalBindPose.GetLocation();
 			const FVector RotationVector = Bone.LocalBindPose.GetEuler();
 			const FVector ScaleVector = Bone.LocalBindPose.GetScale();
