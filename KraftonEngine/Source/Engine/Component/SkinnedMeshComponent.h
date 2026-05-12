@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Component/MeshComponent.h"
 #include "Mesh/SkeletalMesh.h"
@@ -22,6 +22,7 @@ public:
 
 	void SetSkeletalMesh(USkeletalMesh* InMesh);
 	USkeletalMesh* GetSkeletalMesh() const { return SkeletalMesh; }
+	const TArray<FMatrix>& GetLocalBonePoseMatrices() const { return LocalBonePoseMatrices; }
 
 	int32 FindBoneIndexByName(const FString& BoneName) const;
 	void ResetBonePoseToBindPose();

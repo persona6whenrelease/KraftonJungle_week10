@@ -1,4 +1,4 @@
-#include "Editor/UI/EditorSkeletalMeshViewerWidget.h"
+﻿#include "Editor/UI/EditorSkeletalMeshViewerWidget.h"
 
 #include "Editor/Settings/EditorSettings.h"
 #include "Mesh/FBX/FBXManager.h"
@@ -95,7 +95,8 @@ void FEditorSkeletalMeshViewerWidget::EnsurePreviewScene()
 
 	PreviewViewportClient = new FSkeletalMeshViewerViewportClient();
 	PreviewViewportClient->Initialize();
-	
+	PreviewViewportClient->SetPreviewWorld(PreviewWorld);
+
 	PreviewViewport = new FViewport();
 
 	ID3D11Device* Device = GEngine ? GEngine->GetRenderer().GetFD3DDevice().GetDevice() : nullptr;
@@ -144,6 +145,12 @@ void FEditorSkeletalMeshViewerWidget::SetPreviewMesh(USkeletalMesh* InMesh, bool
 	}
 
 	PreviewMeshComponent->SetSkeletalMesh(InMesh);
+
+	// [추가] 뷰포트 클라이언트의 본 셀렉션 매니저에 타겟 컴포넌트 전달
+	if (PreviewViewportClient)
+	{
+		PreviewViewportClient->GetBoneSelectionManager().SetTargetSkeletalMesh(PreviewMeshComponent);
+	}
 
 	FSkeletalMesh* MeshAsset = InMesh ? InMesh->GetSkeletalMeshAsset() : nullptr;
 	if (MeshAsset)
@@ -329,7 +336,14 @@ void FEditorSkeletalMeshViewerWidget::RenderResourcePanel()
 				if (ImGui::Selectable(Label.c_str(), bSelected))
 				{
 					SelectedResourceIndex = MeshIndex;
-					SelectedBoneIndex = -1;
+					SelectedBoneIndex = -1; // UI 선택 초기화
+
+					// [추가] 매니저의 선택 상태도 초기화 (기즈모 숨김 처리 등)
+					if (PreviewViewportClient)
+					{
+						PreviewViewportClient->GetBoneSelectionManager().ClearSelection();
+					}
+
 					SetPreviewMesh(GetSelectedSkeletalMesh());
 				}
 			}
@@ -488,6 +502,9 @@ void FEditorSkeletalMeshViewerWidget::RenderBonePanel()
 		}
 		else
 		{
+			// [추가] 렌더링 전 기존 선택 인덱스 캐싱
+			int32 PrevSelectedBoneIndex = SelectedBoneIndex;
+
 			for (int32 BoneIndex = 0; BoneIndex < static_cast<int32>(MeshAsset->Bones.size()); ++BoneIndex)
 			{
 				if (MeshAsset->Bones[BoneIndex].ParentIndex < 0)
@@ -495,6 +512,13 @@ void FEditorSkeletalMeshViewerWidget::RenderBonePanel()
 					RenderBoneTreeNode(MeshAsset->Bones, BoneIndex, SelectedBoneIndex);
 				}
 			}
+
+			// [추가] 클릭으로 인해 인덱스가 변했다면 매니저에 선택 명령 전달
+			if (PrevSelectedBoneIndex != SelectedBoneIndex && PreviewViewportClient)
+			{
+				PreviewViewportClient->GetBoneSelectionManager().SelectBone(SelectedBoneIndex);
+			}
+
 		}
 	}
 	ImGui::EndChild();

@@ -199,7 +199,7 @@ void FEditorRenderPipeline::RenderPreviewViewport(
 
 	FCollectOutput Output;
 	FDrawCommandBuilder& Builder = Renderer.GetBuilder();
-	Builder.BeginCollect(Frame, Scene.GetProxyCount());
+	Builder.BeginCollect(PreviewFrame, Scene.GetProxyCount());
 
 	Scene.UpdateDirtyProxies();
 	PreviewWorld->GetPartition().FlushPrimitive();
@@ -211,7 +211,7 @@ void FEditorRenderPipeline::RenderPreviewViewport(
 	Output.RenderableProxies.reserve(PreviewProxies.size());
 	for (FPrimitiveSceneProxy* Proxy : PreviewProxies)
 	{
-		if (!Proxy || !Proxy->IsVisible())
+		if (!Proxy)
 		{
 			continue;
 		}
@@ -219,6 +219,11 @@ void FEditorRenderPipeline::RenderPreviewViewport(
 		if (Proxy->HasProxyFlag(EPrimitiveProxyFlags::PerViewportUpdate))
 		{
 			Proxy->UpdatePerViewport(PreviewFrame);
+		}
+
+		if (!Proxy->IsVisible())
+		{
+			continue;
 		}
 
 		Output.FrustumVisibleProxies.push_back(Proxy);

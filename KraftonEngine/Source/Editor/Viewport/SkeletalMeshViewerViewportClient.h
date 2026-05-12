@@ -2,10 +2,11 @@
 
 #include "Viewport/ViewportClient.h"
 #include "Render/Types/ViewTypes.h"
-
+#include "Selection/BoneSelectionManager.h"
 class UCameraComponent;
 struct FInputFrame;
 struct FSkeletalMesh;
+class UWorld;
 
 class FSkeletalMeshViewerViewportClient : public FViewportClient
 {
@@ -26,7 +27,15 @@ public:
 
 	void Tick(float DeltaTime, bool bViewportHovered, bool bIsCapturing, FInputFrame& InputFrame);
 
+	FBoneSelectionManager& GetBoneSelectionManager() { return BoneSelectionManager; }
+
+	void SetPreviewWorld(UWorld* InWorld);
 private:
 	UCameraComponent* Camera = nullptr;
 	FViewportRenderOptions RenderOptions;
+	FBoneSelectionManager BoneSelectionManager;
+
+	// Viewport 크기를 저장할 변수 추가 (Ray 계산용)
+	uint32 ViewportWidth = 0;
+	uint32 ViewportHeight = 0;
 };

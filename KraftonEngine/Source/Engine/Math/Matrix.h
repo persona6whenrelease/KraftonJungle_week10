@@ -109,6 +109,13 @@ struct FMatrix {
 	FVector GetLocation() const;
 	FVector GetScale() const;
 
+	inline void SetLocation(const FVector& NewLocation)
+	{
+		M[3][0] = NewLocation.X;
+		M[3][1] = NewLocation.Y;
+		M[3][2] = NewLocation.Z;
+	}
+
 	// FQuat/FRotator 변환 (구현은 Quat.cpp/Rotator.cpp)
 	struct FQuat ToQuat() const;
 	struct FRotator ToRotator() const;

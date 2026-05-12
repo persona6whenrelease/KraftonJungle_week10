@@ -84,6 +84,10 @@ public:
 	void SetTarget(USceneComponent* NewTarget);
 	void SetTarget(AActor* NewTargetActor);
 
+protected:
+	virtual void TranslateTarget(float DragAmount);
+	virtual void RotateTarget(float DragAmount);
+	virtual void ScaleTarget(float DragAmount);
 private:
 	bool IntersectRayAxis(const FRay& Ray, FVector AxisEnd, float AxisScale, float& OutRayT);
 	bool IntersectRayRotationHandle(const FRay& Ray, int32 Axis, float& OutRayT) const;
@@ -94,9 +98,7 @@ private:
 	float ApplySnapToDragAmount(float DragAmount);
 	void ResetSnapAccumulation();
 	void ApplyWorldTranslationDelta(const FVector& WorldDelta);
-	void TranslateTarget(float DragAmount);
-	void RotateTarget(float DragAmount);
-	void ScaleTarget(float DragAmount);
+
 
 	void UpdateLinearDrag(const FRay& Ray);
 	void UpdateAngularDrag(const FRay& Ray);
