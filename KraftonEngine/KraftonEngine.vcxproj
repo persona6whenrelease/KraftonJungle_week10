@@ -200,7 +200,7 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_DEBUG;_CONSOLE;WITH_EDITOR=1;IS_OBJ_VIEWER=0;IS_GAME_CLIENT=0;WITH_CROSSY_GAME_MODULE=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_DEBUG;_CONSOLE;WITH_EDITOR=1;IS_OBJ_VIEWER=0;IS_GAME_CLIENT=0;WITH_CROSSY_GAME_MODULE=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalOptions>/bigobj /utf-8 %(AdditionalOptions)</AdditionalOptions>
       <ExceptionHandling>Async</ExceptionHandling>
@@ -224,7 +224,7 @@ xcopy /Y /D /I "$(ProjectDir)ThirdParty\FBX\lib\debug\*.dll" "$(OutDir)"</Comman
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;_CONSOLE;WITH_EDITOR=1;IS_OBJ_VIEWER=0;IS_GAME_CLIENT=0;WITH_CROSSY_GAME_MODULE=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NDEBUG;_CONSOLE;WITH_EDITOR=1;IS_OBJ_VIEWER=0;IS_GAME_CLIENT=0;WITH_CROSSY_GAME_MODULE=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalOptions>/bigobj /utf-8 %(AdditionalOptions)</AdditionalOptions>
       <ExceptionHandling>Async</ExceptionHandling>
@@ -296,7 +296,7 @@ xcopy /Y /D /I "$(ProjectDir)ThirdParty\FBX\lib\release\*.dll" "$(OutDir)"</Comm
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;_CONSOLE;WITH_EDITOR=0;IS_OBJ_VIEWER=0;IS_GAME_CLIENT=1;WITH_CROSSY_GAME_MODULE=1;STATS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NDEBUG;_CONSOLE;WITH_EDITOR=0;IS_OBJ_VIEWER=0;IS_GAME_CLIENT=1;WITH_CROSSY_GAME_MODULE=0;STATS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalOptions>/bigobj /utf-8 %(AdditionalOptions)</AdditionalOptions>
       <ExceptionHandling>Async</ExceptionHandling>
@@ -1525,7 +1525,7 @@ xcopy /Y /D /I "$(ProjectDir)ThirdParty\FBX\lib\release\*.dll" "$(OutDir)"</Comm
     <None Include="VcpkgLua.props" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="CrossyGame.vcxproj" Condition="'$(Configuration)|$(Platform)'=='Debug|x64' Or '$(Configuration)|$(Platform)'=='GameClient|x64' Or '$(Configuration)|$(Platform)'=='Release|x64'">
+    <ProjectReference Include="CrossyGame.vcxproj" Condition="false">
       <Project>{a6df3d49-15ce-49c6-b594-d9b89de3c83b}</Project>
       <LinkLibraryDependencies>true</LinkLibraryDependencies>
       <UseLibraryDependencyInputs>false</UseLibraryDependencyInputs>

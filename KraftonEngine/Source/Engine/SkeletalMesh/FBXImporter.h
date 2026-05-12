@@ -20,6 +20,8 @@ class USkeletalMesh;
 class UStaticMesh;
 struct FSkeletalMesh;
 struct FStaticMesh;
+struct FStaticMaterial;
+struct FFbxImportContext;
 
 /**
  * FFbxImporter
@@ -54,13 +56,15 @@ private:
 	// 재귀 traversal. 각 mesh node를 skin 여부에 따라 분기한다.
 	static void ProcessNode(FbxNode* Node,
 	                        USkeletalMesh* OutSkeletal, FSkeletalMesh* RawSkel,
-	                        UStaticMesh*   OutStatic,   FStaticMesh*   RawStatic);
+	                        UStaticMesh*   OutStatic,   FStaticMesh*   RawStatic,
+	                        FFbxImportContext& Ctx);
 
 	// Skinned mesh: cluster를 직접 추출하여 FSkeletalMesh::Clusters에 보존.
-	static void ExtractSkeletalMesh(FbxMesh* Mesh, FSkeletalMesh* RawMesh, USkeletalMesh* OutMesh);
+	static void ExtractSkeletalMesh(FbxMesh* Mesh, FSkeletalMesh* RawMesh, USkeletalMesh* OutMesh,
+	                                FFbxImportContext& Ctx);
 
 	// Unskinned mesh: mesh node global transform을 baking하여 FStaticMesh에 누적.
-	static void ExtractStaticMesh(FbxMesh* Mesh, FStaticMesh* RawMesh);
+	static void ExtractStaticMesh(FbxMesh* Mesh, FStaticMesh* RawMesh, FFbxImportContext& Ctx);
 
 	// 스켈레톤 계층(parent + SRT) 추출. IBP는 cluster에 저장되므로 여기서는 다루지 않음.
 	static void ExtractSkeleton(FbxScene* Scene, USkeletalMesh* OutMesh, FSkeletalMesh* RawMesh);

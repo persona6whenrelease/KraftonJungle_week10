@@ -3,6 +3,10 @@
 #include "SkeletalMeshAsset.h"
 #include "Mesh/StaticMesh.h"
 #include "Mesh/StaticMeshAsset.h"
+#include "Materials/Material.h"
+#include "Materials/MaterialManager.h"
+#include "Engine/Platform/Paths.h"
+#include "SimpleJSON/json.hpp"
 #include "Core/Log.h"
 
 // FBX SDK Header
@@ -10,6 +14,397 @@
 #define FBXSDK_SHARED
 #endif
 #include <fbxsdk.h>
+
+#include <filesystem>
+#include <fstream>
+#include <sstream>
+#include <cctype>
+
+// ---------------------------------------------------------------------------
+// Import 컨텍스트: 하나의 FBX 임포트 동안 공유되는 부수 데이터.
+// ---------------------------------------------------------------------------
+struct FFbxImportContext
+{
+	FString FbxFilePath;
+	FString FbxStem;                            // 확장자 제거된 FBX 파일 이름 (slot key prefix용)
+	TMap<FString, FString> TextureIndex;        // lowercase basename → 프로젝트 루트 상대 경로
+
+	TArray<FStaticMaterial> SkeletalMaterials;  // ExtractSkeletalMesh 누적
+	TArray<FStaticMaterial> StaticMaterials;    // ExtractStaticMesh 누적
+};
+
+// ---------------------------------------------------------------------------
+// Material / Texture helpers (anonymous)
+// ---------------------------------------------------------------------------
+namespace
+{
+	// lowercase basename
+	static std::string ToLowerBasename(const std::filesystem::path& P)
+	{
+		std::string Base = FPaths::ToUtf8(P.filename().wstring());
+		std::transform(Base.begin(), Base.end(), Base.begin(),
+			[](unsigned char c) { return (char)std::tolower(c); });
+		return Base;
+	}
+
+	// 파일명에서 안전하지 않은 문자를 '_'로 치환 (Windows 파일 시스템 호환)
+	static FString SanitizeForFilename(const FString& In)
+	{
+		FString Out = In;
+		for (auto& c : Out)
+		{
+			if (c == '/' || c == '\\' || c == ':' || c == '*' || c == '?' ||
+			    c == '"' || c == '<' || c == '>' || c == '|')
+			{
+				c = '_';
+			}
+		}
+		return Out;
+	}
+
+	static bool IsImageExtension(const std::wstring& Ext)
+	{
+		std::wstring E = Ext;
+		std::transform(E.begin(), E.end(), E.begin(), ::towlower);
+		return E == L".png" || E == L".jpg" || E == L".jpeg" || E == L".tga" ||
+		       E == L".bmp" || E == L".dds"  || E == L".tif"  || E == L".tiff" ||
+		       E == L".gif" || E == L".hdr"  || E == L".exr"  || E == L".webp";
+	}
+
+	// FBX 파일이 위치한 디렉토리(D)를 root로 recursive_directory_iterator 순회 후
+	// lowercase basename + lowercase stem(확장자 제거) → 프로젝트 루트 상대 경로 맵 구축.
+	// 디렉토리 이름은 가정하지 않음 (사용자 요구).
+	// 이미지 파일만 인덱싱 — .meta / .txt 등은 노이즈로 무시.
+	static TMap<FString, FString> BuildFbxTextureSearchIndex(const FString& FbxFilePath)
+	{
+		TMap<FString, FString> Out;
+
+		std::wstring FbxDisk;
+		FString ResolveError;
+		if (!FPaths::TryResolvePackagePath(FbxFilePath, FbxDisk, &ResolveError))
+		{
+			FbxDisk = FPaths::ToWide(FbxFilePath);
+		}
+
+		std::filesystem::path FbxPath(FbxDisk);
+		std::filesystem::path Dir = FbxPath.parent_path();
+		if (Dir.empty() || !std::filesystem::exists(Dir))
+		{
+			UE_LOG("[TextureIndex] FBX folder not found: %s", FbxFilePath.c_str());
+			return Out;
+		}
+
+		const std::filesystem::path ProjectRoot(FPaths::RootDir());
+
+		int IndexedCount = 0;
+		try
+		{
+			for (const auto& Entry : std::filesystem::recursive_directory_iterator(Dir))
+			{
+				if (!Entry.is_regular_file()) continue;
+				const std::filesystem::path& P = Entry.path();
+				if (!IsImageExtension(P.extension().wstring())) continue;
+
+				FString Rel = FPaths::ToUtf8(P.lexically_relative(ProjectRoot).generic_wstring());
+
+				// basename (확장자 포함) 키
+				FString BaseKey = ToLowerBasename(P);
+				if (Out.find(BaseKey) == Out.end()) Out[BaseKey] = Rel;
+
+				// stem (확장자 제외) 키 — material/section 이름 fallback 매칭용
+				std::string StemKey = FPaths::ToUtf8(P.stem().wstring());
+				std::transform(StemKey.begin(), StemKey.end(), StemKey.begin(),
+					[](unsigned char c) { return (char)std::tolower(c); });
+				if (Out.find(StemKey) == Out.end()) Out[StemKey] = Rel;
+
+				++IndexedCount;
+			}
+		}
+		catch (...) { /* ignore filesystem errors */ }
+
+		UE_LOG("[TextureIndex] FBX folder '%s': %d image files indexed.",
+			FPaths::ToUtf8(Dir.wstring()).c_str(), IndexedCount);
+		return Out;
+	}
+
+	// Tex의 GetFileName / GetRelativeFileName 에서 basename만 떼서 인덱스에 매칭.
+	//
+	// FBX SDK 의 char* 경로는 UTF-8 이지만, Windows 에서
+	//   std::filesystem::path(const char*)
+	// 는 입력을 system ACP (한국 Windows = CP-949) 로 해석한다 (C++17 표준).
+	// → 한자/한글 byte sequence 가 ACP 로 잘못 디코딩되어 mojibake wstring 이 만들어지고,
+	//   인덱스(UTF-8 기반)와 매칭 실패.
+	// 프로젝트 convention 인 FPaths 변환 헬퍼 (CP_UTF8 기반) 로 wstring 화한 뒤 path 를 만든다.
+	static FString ResolveFbxTexturePath(const fbxsdk::FbxFileTexture* Tex,
+	                                     const TMap<FString, FString>& Index)
+	{
+		if (!Tex) return FString();
+
+		auto TryFind = [&](const char* RawPath) -> FString {
+			if (!RawPath || !*RawPath) return FString();
+			std::filesystem::path P(FPaths::ToWide(std::string(RawPath)));
+			FString Key = ToLowerBasename(P);
+			auto It = Index.find(Key);
+			if (It != Index.end()) return It->second;
+			return FString();
+		};
+
+		FString R = TryFind(Tex->GetFileName());
+		if (!R.empty()) return R;
+		R = TryFind(Tex->GetRelativeFileName());
+		return R;
+	}
+
+	// FbxSurfaceMaterial의 Diffuse 속성에 연결된 첫 번째 FbxFileTexture 경로 추출.
+	static FString ExtractDiffuseTexturePath(const fbxsdk::FbxSurfaceMaterial* Mat,
+	                                        const TMap<FString, FString>& Index)
+	{
+		if (!Mat) return FString();
+		fbxsdk::FbxProperty Prop = Mat->FindProperty(fbxsdk::FbxSurfaceMaterial::sDiffuse);
+		if (!Prop.IsValid()) return FString();
+
+		int TexCount = Prop.GetSrcObjectCount<fbxsdk::FbxFileTexture>();
+		for (int i = 0; i < TexCount; ++i)
+		{
+			fbxsdk::FbxFileTexture* Tex = Prop.GetSrcObject<fbxsdk::FbxFileTexture>(i);
+			FString Resolved = ResolveFbxTexturePath(Tex, Index);
+			if (!Resolved.empty()) return Resolved;
+			if (Tex)
+			{
+				// 진단: FBX 가 보고한 경로 + 우리가 인덱스에서 찾은 lookup key 를 함께 출력.
+				// 인덱스에 등록된 키 목록과 비교 가능 (encoding mismatch 등 잔존 케이스 디버깅용).
+				const char* RawPath = Tex->GetFileName();
+				std::filesystem::path P(FPaths::ToWide(std::string(RawPath ? RawPath : "")));
+				std::string LookupKey = ToLowerBasename(P);
+				UE_LOG("[Tex] FBX-reported texture not found in folder: %s  (lookup key='%s')",
+					RawPath ? RawPath : "", LookupKey.c_str());
+			}
+		}
+		return FString();
+	}
+
+	// Fallback: material/section 이름과 lowercase 매칭되는 텍스처를 인덱스에서 검색.
+	// FBX 가 sDiffuse 슬롯에 텍스처를 들지 않은 경우(흔함)에 사용한다.
+	// 인덱스는 basename + stem 두 키를 모두 등록해 두므로 확장자 무관 매칭.
+	static FString ResolveTextureByMaterialName(const FString& MatName,
+	                                            const TMap<FString, FString>& Index)
+	{
+		if (MatName.empty()) return FString();
+		FString Key = MatName;
+		std::transform(Key.begin(), Key.end(), Key.begin(),
+			[](unsigned char c) { return (char)std::tolower(c); });
+		auto It = Index.find(Key);
+		if (It != Index.end()) return It->second;
+		return FString();
+	}
+
+	// Lambert/Phong의 Diffuse RGB. 없으면 (1, 0, 1) 마젠타 폴백.
+	static FVector ExtractDiffuseColor(const fbxsdk::FbxSurfaceMaterial* Mat)
+	{
+		if (!Mat) return FVector(1.f, 0.f, 1.f);
+
+		if (Mat->GetClassId().Is(fbxsdk::FbxSurfaceLambert::ClassId) ||
+		    Mat->GetClassId().Is(fbxsdk::FbxSurfacePhong::ClassId))
+		{
+			const fbxsdk::FbxSurfaceLambert* Lambert = (const fbxsdk::FbxSurfaceLambert*)Mat;
+			fbxsdk::FbxDouble3 D = Lambert->Diffuse.Get();
+			return FVector((float)D[0], (float)D[1], (float)D[2]);
+		}
+		return FVector(1.f, 0.f, 1.f);
+	}
+
+	static FString MakeMatSlotKey(const FString& FbxStem, const FString& MaterialName)
+	{
+		return SanitizeForFilename(FbxStem) + "__" + SanitizeForFilename(MaterialName);
+	}
+
+	// .mat JSON 파일 생성.
+	// 정책:
+	//   - 파일이 없으면 새로 생성.
+	//   - 이미 있고 Origin이 "FbxImport" 면 자동 생성된 파일이므로 갱신 (텍스처 자동 매핑 결과 반영).
+	//   - 이미 있고 Origin이 다르면(사용자 편집 등) 보존하고 그 경로만 반환.
+	static FString ConvertFbxMaterialToMat(const FString& MatSlotKey,
+	                                      const FString& DiffusePath,
+	                                      const FVector& DiffuseColor)
+	{
+		FString MatPath = "Asset/Materials/Auto/" + MatSlotKey + ".mat";
+
+		std::wstring MatDiskPath;
+		FString Error;
+		if (!FPaths::TryResolvePackagePath(MatPath, MatDiskPath, &Error))
+		{
+			return "";
+		}
+
+		std::filesystem::path DiskPath(MatDiskPath);
+		if (std::filesystem::exists(DiskPath))
+		{
+			// Origin 검사 — SimpleJSON 으로 정확히 파싱 (dump 시 공백/줄바꿈 형식 차이에 견고).
+			// SimpleJSON 의 기본 dump 는 `"Origin" : "FbxImport"` (콜론 양쪽 공백) 이라 단순
+			// substring 매칭은 부정확.
+			std::ifstream Probe(DiskPath, std::ios::binary);
+			std::stringstream Buf;
+			Buf << Probe.rdbuf();
+			json::JSON Existing = json::JSON::Load(Buf.str());
+
+			const bool bAutoGenerated =
+				!Existing.IsNull()
+				&& Existing.hasKey("Origin")
+				&& Existing["Origin"].ToString() == "FbxImport";
+
+			if (!bAutoGenerated)
+			{
+				return MatPath; // 사용자가 편집한 머티리얼 — 보존
+			}
+			// auto-generated → 아래에서 다시 쓴다.
+		}
+
+		std::filesystem::create_directories(DiskPath.parent_path());
+
+		json::JSON JsonData;
+		JsonData["PathFileName"] = MatPath;
+		JsonData["Origin"]       = "FbxImport";
+		JsonData["ShaderPath"]   = "Shaders/Geometry/UberLit.hlsl";
+		JsonData["RenderPass"]   = "Opaque";
+
+		if (!DiffusePath.empty())
+		{
+			JsonData["Textures"]["DiffuseTexture"] = DiffusePath;
+			JsonData["Parameters"]["SectionColor"][0] = 1.0f;
+			JsonData["Parameters"]["SectionColor"][1] = 1.0f;
+			JsonData["Parameters"]["SectionColor"][2] = 1.0f;
+			JsonData["Parameters"]["SectionColor"][3] = 1.0f;
+		}
+		else
+		{
+			JsonData["Parameters"]["SectionColor"][0] = DiffuseColor.X;
+			JsonData["Parameters"]["SectionColor"][1] = DiffuseColor.Y;
+			JsonData["Parameters"]["SectionColor"][2] = DiffuseColor.Z;
+			JsonData["Parameters"]["SectionColor"][3] = 1.0f;
+		}
+
+#if IS_GAME_CLIENT
+		return MatPath;
+#else
+		std::ofstream File(std::filesystem::path(MatDiskPath), std::ios::binary);
+		File << JsonData.dump();
+		return MatPath;
+#endif
+	}
+
+	// mesh node가 가진 FBX 머티리얼들을 OutMaterials 슬롯 배열에 등록(중복 없이).
+	// FbxMat 로컬 인덱스 → OutMaterials 인덱스로 매핑된 배열을 반환.
+	static TArray<int32> CollectNodeMaterials(fbxsdk::FbxNode* Owner,
+	                                          TArray<FStaticMaterial>& OutMaterials,
+	                                          const FString& FbxStem,
+	                                          const TMap<FString, FString>& TextureIndex)
+	{
+		const int FbxMatCount = Owner ? Owner->GetMaterialCount() : 0;
+		TArray<int32> NodeMatToOut;
+		NodeMatToOut.assign(FbxMatCount, -1);
+
+		for (int i = 0; i < FbxMatCount; ++i)
+		{
+			fbxsdk::FbxSurfaceMaterial* FbxMat = Owner->GetMaterial(i);
+			if (!FbxMat) continue;
+
+			FString MatName = FbxMat->GetName();
+			FString SlotKey = MakeMatSlotKey(FbxStem, MatName);
+
+			int32 ExistingIdx = -1;
+			for (size_t s = 0; s < OutMaterials.size(); ++s)
+			{
+				if (OutMaterials[s].MaterialSlotName == SlotKey)
+				{
+					ExistingIdx = (int32)s;
+					break;
+				}
+			}
+			if (ExistingIdx >= 0)
+			{
+				NodeMatToOut[i] = ExistingIdx;
+				continue;
+			}
+
+			// 1차: FBX 의 sDiffuse 슬롯에서 텍스처 경로 추출.
+			FString TexPath = ExtractDiffuseTexturePath(FbxMat, TextureIndex);
+			const char* ResolveSource = "from FBX sDiffuse";
+
+			// 2차 fallback: material 이름과 텍스처 이름이 일치하는 경우 자동 매핑.
+			// (Furina.fbx 처럼 sDiffuse 가 비어 있고 폴더에 '体.png' 같은 동명 파일이 있을 때 핵심.)
+			if (TexPath.empty())
+			{
+				TexPath = ResolveTextureByMaterialName(MatName, TextureIndex);
+				if (!TexPath.empty()) ResolveSource = "by material-name auto-map";
+			}
+
+			FVector DiffCol = ExtractDiffuseColor(FbxMat);
+			FString MatPath = ConvertFbxMaterialToMat(SlotKey, TexPath, DiffCol);
+
+			FStaticMaterial NewSlot;
+			NewSlot.MaterialInterface = FMaterialManager::Get().GetOrCreateMaterial(MatPath);
+			NewSlot.MaterialSlotName  = SlotKey;
+			OutMaterials.push_back(NewSlot);
+			NodeMatToOut[i] = (int32)(OutMaterials.size() - 1);
+
+			if (TexPath.empty())
+			{
+				UE_LOG("[Tex] slot '%s' (mat='%s') → COLOR ONLY (no texture matched)",
+					SlotKey.c_str(), MatName.c_str());
+			}
+			else
+			{
+				UE_LOG("[Tex] slot '%s' (mat='%s') → '%s' (%s)",
+					SlotKey.c_str(), MatName.c_str(), TexPath.c_str(), ResolveSource);
+			}
+		}
+
+		return NodeMatToOut;
+	}
+
+	// "Default" 슬롯이 OutMaterials에 없으면 추가하고 그 인덱스를 반환.
+	static int32 EnsureDefaultMaterialSlot(TArray<FStaticMaterial>& OutMaterials)
+	{
+		for (size_t i = 0; i < OutMaterials.size(); ++i)
+		{
+			if (OutMaterials[i].MaterialSlotName == "Default") return (int32)i;
+		}
+		FStaticMaterial Slot;
+		Slot.MaterialInterface = FMaterialManager::Get().GetOrCreateMaterial("None");
+		Slot.MaterialSlotName  = "Default";
+		OutMaterials.push_back(Slot);
+		return (int32)(OutMaterials.size() - 1);
+	}
+
+	// mesh의 polygon별 (node-local) material 인덱스 추출.
+	// FbxMatCount==0 또는 element-material 미존재 시 -1로 채움.
+	static TArray<int32> ExtractPolygonMaterialIndices(fbxsdk::FbxMesh* Mesh, int FbxMatCount)
+	{
+		const int PolygonCount = Mesh->GetPolygonCount();
+		TArray<int32> PolyMatIdx;
+		PolyMatIdx.assign(PolygonCount, -1);
+
+		if (FbxMatCount <= 0) return PolyMatIdx;
+
+		fbxsdk::FbxLayerElementMaterial* MatElem = Mesh->GetElementMaterial(0);
+		if (!MatElem) return PolyMatIdx;
+
+		auto MappingMode = MatElem->GetMappingMode();
+		auto& IdxArray   = MatElem->GetIndexArray();
+
+		if (MappingMode == fbxsdk::FbxLayerElement::eAllSame)
+		{
+			int32 Single = (IdxArray.GetCount() > 0) ? IdxArray.GetAt(0) : 0;
+			for (int p = 0; p < PolygonCount; ++p) PolyMatIdx[p] = Single;
+		}
+		else if (MappingMode == fbxsdk::FbxLayerElement::eByPolygon)
+		{
+			for (int p = 0; p < PolygonCount && p < IdxArray.GetCount(); ++p)
+				PolyMatIdx[p] = IdxArray.GetAt(p);
+		}
+		return PolyMatIdx;
+	}
+} // anonymous namespace
 
 /**
  * FBX 전용 행렬(FbxAMatrix)을 엔진의 FMatrix로 변환.
@@ -136,6 +531,15 @@ bool FFbxImporter::ImportFbx(const FString& FilePath,
 	if (RawSkel)   RawSkel->PathFileName   = FilePath;
 	if (RawStatic) RawStatic->PathFileName = FilePath;
 
+	// 6-b. Import 컨텍스트 셋업 — FBX 파일 폴더 기준 텍스처 인덱스 1회 빌드.
+	FFbxImportContext Ctx;
+	Ctx.FbxFilePath = FilePath;
+	{
+		std::filesystem::path P(FPaths::ToWide(FilePath));
+		Ctx.FbxStem = FPaths::ToUtf8(P.stem().wstring());
+	}
+	Ctx.TextureIndex = BuildFbxTextureSearchIndex(FilePath);
+
 	// 7. 스켈레톤 먼저 추출 (본 인덱스 매핑을 위해)
 	if (OutSkeletal)
 	{
@@ -146,7 +550,7 @@ bool FFbxImporter::ImportFbx(const FString& FilePath,
 	FbxNode* RootNode = Scene->GetRootNode();
 	if (RootNode)
 	{
-		ProcessNode(RootNode, OutSkeletal, RawSkel, OutStatic, RawStatic);
+		ProcessNode(RootNode, OutSkeletal, RawSkel, OutStatic, RawStatic, Ctx);
 	}
 
 	// 9. cluster weight 정규화 (per-vertex sum = 1.0)
@@ -163,11 +567,21 @@ bool FFbxImporter::ImportFbx(const FString& FilePath,
 	{
 		if (bHaveSkel) OutSkeletal->SetSkeletalMeshAsset(RawSkel);
 		else           { delete RawSkel; }
+
+		if (!Ctx.SkeletalMaterials.empty())
+		{
+			OutSkeletal->SetStaticMaterials(std::move(Ctx.SkeletalMaterials));
+		}
 	}
 	if (OutStatic)
 	{
 		if (bHaveStatic) OutStatic->SetStaticMeshAsset(RawStatic);
 		else             { delete RawStatic; }
+
+		if (!Ctx.StaticMaterials.empty())
+		{
+			OutStatic->SetStaticMaterials(std::move(Ctx.StaticMaterials));
+		}
 	}
 
 	// 11. SDK 자원 해제
@@ -207,7 +621,8 @@ bool FFbxImporter::HasValidSkinDeformer(FbxMesh* Mesh, USkeletalMesh* OutMesh)
 
 void FFbxImporter::ProcessNode(FbxNode* Node,
                                USkeletalMesh* OutSkeletal, FSkeletalMesh* RawSkel,
-                               UStaticMesh*   OutStatic,   FStaticMesh*   RawStatic)
+                               UStaticMesh*   OutStatic,   FStaticMesh*   RawStatic,
+                               FFbxImportContext& Ctx)
 {
 	if (!Node) return;
 
@@ -221,7 +636,7 @@ void FFbxImporter::ProcessNode(FbxNode* Node,
 		{
 			if (RawSkel && OutSkeletal)
 			{
-				ExtractSkeletalMesh(Mesh, RawSkel, OutSkeletal);
+				ExtractSkeletalMesh(Mesh, RawSkel, OutSkeletal, Ctx);
 			}
 			else
 			{
@@ -232,7 +647,7 @@ void FFbxImporter::ProcessNode(FbxNode* Node,
 		{
 			if (RawStatic)
 			{
-				ExtractStaticMesh(Mesh, RawStatic);
+				ExtractStaticMesh(Mesh, RawStatic, Ctx);
 			}
 			else
 			{
@@ -243,11 +658,12 @@ void FFbxImporter::ProcessNode(FbxNode* Node,
 
 	for (int i = 0; i < Node->GetChildCount(); ++i)
 	{
-		ProcessNode(Node->GetChild(i), OutSkeletal, RawSkel, OutStatic, RawStatic);
+		ProcessNode(Node->GetChild(i), OutSkeletal, RawSkel, OutStatic, RawStatic, Ctx);
 	}
 }
 
-void FFbxImporter::ExtractSkeletalMesh(FbxMesh* Mesh, FSkeletalMesh* RawMesh, USkeletalMesh* OutMesh)
+void FFbxImporter::ExtractSkeletalMesh(FbxMesh* Mesh, FSkeletalMesh* RawMesh, USkeletalMesh* OutMesh,
+                                       FFbxImportContext& Ctx)
 {
 	if (!Mesh || !RawMesh || !OutMesh) return;
 
@@ -256,19 +672,52 @@ void FFbxImporter::ExtractSkeletalMesh(FbxMesh* Mesh, FSkeletalMesh* RawMesh, US
 	int ControlPointsCount = Mesh->GetControlPointsCount();
 	FbxVector4* ControlPoints = Mesh->GetControlPoints();
 
-	// 1. 정점/인덱스 버퍼 구축 (bind-pose FNormalVertex, bone 정보 없음).
+	// Phase A: mesh node가 가진 머티리얼들을 Ctx.SkeletalMaterials 슬롯 배열에 등록.
+	FbxNode* Owner = Mesh->GetNode();
+	const int FbxMatCount = Owner ? Owner->GetMaterialCount() : 0;
+	TArray<int32> NodeMatToOut = CollectNodeMaterials(Owner, Ctx.SkeletalMaterials,
+	                                                  Ctx.FbxStem, Ctx.TextureIndex);
+	const int32 DefaultOutIdx = (FbxMatCount > 0) ? -1
+	                                              : EnsureDefaultMaterialSlot(Ctx.SkeletalMaterials);
+
+	// Phase B: polygon별 머티리얼 인덱스(node-local) 추출.
+	TArray<int32> PolyMatIdx = ExtractPolygonMaterialIndices(Mesh, FbxMatCount);
+
+	// 1. 정점 추출 + 머티리얼별 임시 index buffer에 누적.
 	//    동시에 control-point index → expanded vertex index 매핑을 만든다.
 	TArray<TArray<uint32>> CPToExpanded;
 	CPToExpanded.resize(ControlPointsCount);
 
-	const uint32 IndexBase   = (uint32)RawMesh->Indices.size();
-	const uint32 VertexBase  = (uint32)RawMesh->Vertices.size();
+	TArray<TArray<uint32>> PerMatIndices;
+	PerMatIndices.resize(Ctx.SkeletalMaterials.size());
 
 	int PolygonCount = Mesh->GetPolygonCount();
 	for (int i = 0; i < PolygonCount; ++i)
 	{
 		int PolygonSize = Mesh->GetPolygonSize(i);
 		if (PolygonSize != 3) continue; // 삼각형만 처리 (삼각형화 가정)
+
+		// polygon → OutMaterials 인덱스 결정
+		int32 OutMatIdx;
+		if (FbxMatCount > 0)
+		{
+			int32 LocalMatIdx = PolyMatIdx[i];
+			OutMatIdx = (LocalMatIdx >= 0 && LocalMatIdx < FbxMatCount)
+			            ? NodeMatToOut[LocalMatIdx]
+			            : -1;
+			if (OutMatIdx < 0)
+			{
+				// node에 머티리얼이 있어도 polygon이 가리키는 슬롯이 비정상이면 Default 폴백
+				int32 FbxFallback = EnsureDefaultMaterialSlot(Ctx.SkeletalMaterials);
+				if (PerMatIndices.size() <= (size_t)FbxFallback) PerMatIndices.resize(FbxFallback + 1);
+				OutMatIdx = FbxFallback;
+			}
+		}
+		else
+		{
+			OutMatIdx = DefaultOutIdx;
+			if (PerMatIndices.size() <= (size_t)OutMatIdx) PerMatIndices.resize(OutMatIdx + 1);
+		}
 
 		for (int j = 0; j < 3; ++j)
 		{
@@ -296,21 +745,26 @@ void FFbxImporter::ExtractSkeletalMesh(FbxMesh* Mesh, FSkeletalMesh* RawMesh, US
 
 			uint32 ExpandedIndex = (uint32)RawMesh->Vertices.size();
 			RawMesh->Vertices.push_back(Vertex);
-			RawMesh->Indices.push_back(ExpandedIndex);
+			PerMatIndices[OutMatIdx].push_back(ExpandedIndex);
 			CPToExpanded[CPIndex].push_back(ExpandedIndex);
 		}
 	}
 
-	// 2. Section 등록 (전체 메시를 단일 섹션으로 — 머티리얼 분할은 후속 작업)
+	// 2. 머티리얼별로 OutMesh.Indices에 flush + Section 등록.
+	//    (vertex 순서는 그대로 — cluster.VertexIndices 보존)
+	for (size_t mi = 0; mi < PerMatIndices.size(); ++mi)
 	{
+		const auto& MatIndices = PerMatIndices[mi];
+		if (MatIndices.empty()) continue;
+
 		FStaticMeshSection Section;
-		Section.MaterialSlotName = "Default";
-		Section.FirstIndex   = IndexBase;
-		Section.NumTriangles = (uint32)(RawMesh->Indices.size() - IndexBase) / 3;
-		if (Section.NumTriangles > 0)
-		{
-			RawMesh->Sections.push_back(Section);
-		}
+		Section.MaterialSlotName = Ctx.SkeletalMaterials[mi].MaterialSlotName;
+		Section.MaterialIndex    = (int32)mi;
+		Section.FirstIndex       = (uint32)RawMesh->Indices.size();
+		Section.NumTriangles     = (uint32)(MatIndices.size() / 3);
+
+		for (uint32 idx : MatIndices) RawMesh->Indices.push_back(idx);
+		RawMesh->Sections.push_back(Section);
 	}
 
 	// 3. Cluster 추출 → FBoneCluster 직접 생성
@@ -365,14 +819,15 @@ void FFbxImporter::ExtractSkeletalMesh(FbxMesh* Mesh, FSkeletalMesh* RawMesh, US
 		}
 	}
 
-	UE_LOG("Extracted skel mesh '%s': +%u verts, +%u indices, +%d clusters",
+	UE_LOG("Extracted skel mesh '%s': total verts=%u, indices=%u, clusters=%d, sections=%d",
 		Mesh->GetName(),
-		(uint32)RawMesh->Vertices.size() - VertexBase,
-		(uint32)RawMesh->Indices.size()  - IndexBase,
-		(int)RawMesh->Clusters.size());
+		(uint32)RawMesh->Vertices.size(),
+		(uint32)RawMesh->Indices.size(),
+		(int)RawMesh->Clusters.size(),
+		(int)RawMesh->Sections.size());
 }
 
-void FFbxImporter::ExtractStaticMesh(FbxMesh* Mesh, FStaticMesh* RawMesh)
+void FFbxImporter::ExtractStaticMesh(FbxMesh* Mesh, FStaticMesh* RawMesh, FFbxImportContext& Ctx)
 {
 	if (!Mesh || !RawMesh) return;
 
@@ -392,13 +847,45 @@ void FFbxImporter::ExtractStaticMesh(FbxMesh* Mesh, FStaticMesh* RawMesh)
 	}
 	const FMatrix BakeXform = FbxMatrixToFMatrix(NodeGlobal);
 
-	const uint32 IndexBase = (uint32)RawMesh->Indices.size();
+	// Phase A: 머티리얼 슬롯 등록
+	const int FbxMatCount = Owner ? Owner->GetMaterialCount() : 0;
+	TArray<int32> NodeMatToOut = CollectNodeMaterials(Owner, Ctx.StaticMaterials,
+	                                                  Ctx.FbxStem, Ctx.TextureIndex);
+	const int32 DefaultOutIdx = (FbxMatCount > 0) ? -1
+	                                              : EnsureDefaultMaterialSlot(Ctx.StaticMaterials);
+
+	// Phase B: polygon별 머티리얼 인덱스
+	TArray<int32> PolyMatIdx = ExtractPolygonMaterialIndices(Mesh, FbxMatCount);
+
+	// 1. 머티리얼별 임시 index buffer
+	TArray<TArray<uint32>> PerMatIndices;
+	PerMatIndices.resize(Ctx.StaticMaterials.size());
 
 	int PolygonCount = Mesh->GetPolygonCount();
 	for (int i = 0; i < PolygonCount; ++i)
 	{
 		int PolygonSize = Mesh->GetPolygonSize(i);
 		if (PolygonSize != 3) continue;
+
+		int32 OutMatIdx;
+		if (FbxMatCount > 0)
+		{
+			int32 LocalMatIdx = PolyMatIdx[i];
+			OutMatIdx = (LocalMatIdx >= 0 && LocalMatIdx < FbxMatCount)
+			            ? NodeMatToOut[LocalMatIdx]
+			            : -1;
+			if (OutMatIdx < 0)
+			{
+				int32 FbxFallback = EnsureDefaultMaterialSlot(Ctx.StaticMaterials);
+				if (PerMatIndices.size() <= (size_t)FbxFallback) PerMatIndices.resize(FbxFallback + 1);
+				OutMatIdx = FbxFallback;
+			}
+		}
+		else
+		{
+			OutMatIdx = DefaultOutIdx;
+			if (PerMatIndices.size() <= (size_t)OutMatIdx) PerMatIndices.resize(OutMatIdx + 1);
+		}
 
 		for (int j = 0; j < 3; ++j)
 		{
@@ -428,23 +915,31 @@ void FFbxImporter::ExtractStaticMesh(FbxMesh* Mesh, FStaticMesh* RawMesh)
 
 			uint32 ExpandedIndex = (uint32)RawMesh->Vertices.size();
 			RawMesh->Vertices.push_back(Vertex);
-			RawMesh->Indices.push_back(ExpandedIndex);
+			PerMatIndices[OutMatIdx].push_back(ExpandedIndex);
 		}
 	}
 
-	FStaticMeshSection Section;
-	Section.MaterialSlotName = "Default";
-	Section.FirstIndex   = IndexBase;
-	Section.NumTriangles = (uint32)(RawMesh->Indices.size() - IndexBase) / 3;
-	if (Section.NumTriangles > 0)
+	// 2. 머티리얼별 flush + Section 등록
+	for (size_t mi = 0; mi < PerMatIndices.size(); ++mi)
 	{
+		const auto& MatIndices = PerMatIndices[mi];
+		if (MatIndices.empty()) continue;
+
+		FStaticMeshSection Section;
+		Section.MaterialSlotName = Ctx.StaticMaterials[mi].MaterialSlotName;
+		Section.MaterialIndex    = (int32)mi;
+		Section.FirstIndex       = (uint32)RawMesh->Indices.size();
+		Section.NumTriangles     = (uint32)(MatIndices.size() / 3);
+
+		for (uint32 idx : MatIndices) RawMesh->Indices.push_back(idx);
 		RawMesh->Sections.push_back(Section);
 	}
 
-	UE_LOG("Extracted static mesh '%s': total verts=%u, indices=%u",
+	UE_LOG("Extracted static mesh '%s': total verts=%u, indices=%u, sections=%d",
 		Mesh->GetName(),
 		(uint32)RawMesh->Vertices.size(),
-		(uint32)RawMesh->Indices.size());
+		(uint32)RawMesh->Indices.size(),
+		(int)RawMesh->Sections.size());
 }
 
 void FFbxImporter::NormalizeClusterWeights(FSkeletalMesh* RawMesh)

@@ -49,7 +49,6 @@ struct FVertexPNCTT
 struct FBone
 {
 	int32 ParentIndex;
-
 	FVector Scale;
 	FQuat Rotation;
 	FVector Translation;

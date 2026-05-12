@@ -15,6 +15,24 @@ USkeletalMesh::~USkeletalMesh()
 	}
 }
 
+static void CacheSectionMaterialIndices(FSkeletalMesh* Asset,
+                                        const TArray<FStaticMaterial>& Materials)
+{
+	if (!Asset) return;
+	for (FStaticMeshSection& Section : Asset->Sections)
+	{
+		Section.MaterialIndex = -1;
+		for (int32 i = 0; i < (int32)Materials.size(); ++i)
+		{
+			if (Materials[i].MaterialSlotName == Section.MaterialSlotName)
+			{
+				Section.MaterialIndex = i;
+				break;
+			}
+		}
+	}
+}
+
 void USkeletalMesh::Serialize(FArchive& Ar)
 {
 	Super::Serialize(Ar);
@@ -54,6 +72,8 @@ void USkeletalMesh::Serialize(FArchive& Ar)
 	if (Ar.IsLoading())
 	{
 		RebuildBoneMap();
+		// loading 흐름은 setter 를 거치지 않으므로 직접 호출.
+		CacheSectionMaterialIndices(SkeletalMeshAsset, StaticMaterials);
 	}
 
 	// 3. EmbeddedStaticMesh (hybrid FBX의 static 파트) 직렬화 — 항상 플래그 1바이트 흐름 유지.
@@ -79,11 +99,16 @@ void USkeletalMesh::SetSkeletalMeshAsset(FSkeletalMesh* InMesh)
 		delete SkeletalMeshAsset;
 	}
 	SkeletalMeshAsset = InMesh;
+
+	// Slot 이름 기반으로 Section.MaterialIndex 를 재캐싱한다 (UStaticMesh::SetStaticMeshAsset 와 동일).
+	CacheSectionMaterialIndices(SkeletalMeshAsset, StaticMaterials);
 }
 
 void USkeletalMesh::SetStaticMaterials(TArray<FStaticMaterial>&& InMaterials)
 {
 	StaticMaterials = std::move(InMaterials);
+	// 머티리얼 슬롯이 바뀌었으므로 현 asset 의 section 들 MaterialIndex 도 재캐싱.
+	CacheSectionMaterialIndices(SkeletalMeshAsset, StaticMaterials);
 }
 
 void USkeletalMesh::InitResources(ID3D11Device* InDevice)

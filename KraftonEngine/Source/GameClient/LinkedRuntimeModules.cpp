@@ -1,7 +1,7 @@
-#include "GameClient/LinkedRuntimeModules.h"
+﻿#include "GameClient/LinkedRuntimeModules.h"
 
 #ifndef WITH_CROSSY_GAME_MODULE
-#define WITH_CROSSY_GAME_MODULE IS_GAME_CLIENT
+#define WITH_CROSSY_GAME_MODULE 0
 #endif
 
 #if WITH_CROSSY_GAME_MODULE

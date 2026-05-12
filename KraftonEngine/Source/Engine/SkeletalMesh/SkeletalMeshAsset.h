@@ -42,9 +42,14 @@ struct FBoneCluster
  */
 struct FSkeletalMesh
 {
-	// 직렬화 포맷 버전. cluster 도입으로 v1→v2.
-	// v1은 FSkeletalMeshVertex(boneIndices/boneWeights flatten) 기반이었음 — 호환 불가.
-	static constexpr uint32 SerializeVersion = 2;
+	// 직렬화 포맷 버전.
+	//  v1 → v2: cluster 도입 (FSkeletalMeshVertex flatten 폐기).
+	//  v2 → v3: FBX importer 의 머티리얼 슬롯 / texture 자동 매핑 로직 변경 — 기존 .bin 도 재import.
+	//  v3 → v4: non-ASCII (한자/한글) FBX 텍스처 경로 매칭 encoding fix — 기존 캐시의
+	//           .mat 가 텍스처 정보 없이 저장된 상태일 수 있으므로 강제 재import.
+	//  v4 → v5: ConvertFbxMaterialToMat 의 Origin 검사 (SimpleJSON 파싱) 적용 후 .mat 자동
+	//           갱신을 트리거하기 위한 추가 무효화.
+	static constexpr uint32 SerializeVersion = 5;
 
 	FString PathFileName;
 

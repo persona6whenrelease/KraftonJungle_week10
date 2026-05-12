@@ -39,6 +39,168 @@
       },
       "Tags" : [],
       "bVisible" : true
+    }, {
+      "ActorUUID" : 114,
+      "ClassName" : "ASkeletalMeshActor",
+      "NonSceneComponents" : [],
+      "RootComponent" : {
+        "Children" : [],
+        "ClassName" : "USkeletalMeshComponent",
+        "Properties" : {
+          "Blocks Movement" : true,
+          "Cast Shadow" : true,
+          "Element 0" : {
+            "Path" : "Asset/Materials/Auto/Furina__服饰2.mat"
+          },
+          "Element 1" : {
+            "Path" : "Asset/Materials/Auto/green_mat1.005.mat"
+          },
+          "Element 10" : {
+            "Path" : "Asset/Materials/Auto/Furina__髮.mat"
+          },
+          "Element 11" : {
+            "Path" : "Asset/Materials/Auto/Furina__髮2.mat"
+          },
+          "Element 12" : {
+            "Path" : "Asset/Materials/Auto/Furina__体.mat"
+          },
+          "Element 13" : {
+            "Path" : "Asset/Materials/Auto/Furina__服饰.001.mat"
+          },
+          "Element 14" : {
+            "Path" : "Asset/Materials/Auto/Furina__体2.mat"
+          },
+          "Element 15" : {
+            "Path" : "Asset/Materials/Auto/Furina__蝴蝶结1.mat"
+          },
+          "Element 16" : {
+            "Path" : "Asset/Materials/Auto/Furina__服饰2.mat"
+          },
+          "Element 17" : {
+            "Path" : "Asset/Materials/Auto/Furina__裤.mat"
+          },
+          "Element 18" : {
+            "Path" : "Asset/Materials/Auto/Furina__白目.mat"
+          },
+          "Element 19" : {
+            "Path" : "Asset/Materials/Auto/Furina__流苏.mat"
+          },
+          "Element 2" : {
+            "Path" : "Asset/Materials/Auto/Furina__二重.mat"
+          },
+          "Element 20" : {
+            "Path" : "Asset/Materials/Auto/Furina__肌.mat"
+          },
+          "Element 21" : {
+            "Path" : "Asset/Materials/Auto/Furina__裙.mat"
+          },
+          "Element 22" : {
+            "Path" : "Asset/Materials/Auto/Furina__服饰.mat"
+          },
+          "Element 23" : {
+            "Path" : "Asset/Materials/Auto/Furina__二重.mat"
+          },
+          "Element 24" : {
+            "Path" : "Asset/Materials/Auto/Furina__裙1.mat"
+          },
+          "Element 25" : {
+            "Path" : "Asset/Materials/Auto/Furina__裙2.mat"
+          },
+          "Element 26" : {
+            "Path" : "Asset/Materials/Auto/Furina__裙3.mat"
+          },
+          "Element 27" : {
+            "Path" : "Asset/Materials/Auto/Furina__裙摆+.mat"
+          },
+          "Element 28" : {
+            "Path" : "Asset/Materials/Auto/Furina__裙摆+.mat"
+          },
+          "Element 29" : {
+            "Path" : "Asset/Materials/Auto/Furina__裙1+.mat"
+          },
+          "Element 3" : {
+            "Path" : "Asset/Materials/Auto/Furina__睫.mat"
+          },
+          "Element 30" : {
+            "Path" : "Asset/Materials/Auto/Furina__裙2+.mat"
+          },
+          "Element 31" : {
+            "Path" : "Asset/Materials/Auto/Furina__髮+.mat"
+          },
+          "Element 4" : {
+            "Path" : "Asset/Materials/Auto/Furina__口舌.mat"
+          },
+          "Element 5" : {
+            "Path" : "Asset/Materials/Auto/Furina__齿.mat"
+          },
+          "Element 6" : {
+            "Path" : "Asset/Materials/Auto/Furina__眉.mat"
+          },
+          "Element 7" : {
+            "Path" : "Asset/Materials/Auto/Furina__流苏.mat"
+          },
+          "Element 8" : {
+            "Path" : "Asset/Materials/Auto/Furina__目.mat"
+          },
+          "Element 9" : {
+            "Path" : "Asset/Materials/Auto/Furina__星目.mat"
+          },
+          "Generate Overlap Events" : true,
+          "Location" : [4.426714, 7.956206, 1.317694],
+          "Rotation" : [0.000000, 0.000000, 0.000000],
+          "Scale" : [1.000000, 1.000000, 1.000000],
+          "Skeletal Mesh" : null,
+          "Skinning Mode" : 0,
+          "Two Sided Shadow" : false,
+          "Visible" : true,
+          "bEditorOnly" : false,
+          "bTickEnable" : true
+        }
+      },
+      "Tags" : [],
+      "bVisible" : true
+    }, {
+      "ActorUUID" : 150,
+      "ClassName" : "AActor",
+      "NonSceneComponents" : [],
+      "RootComponent" : {
+        "Children" : [{
+            "Children" : [],
+            "ClassName" : "UStaticMeshComponent",
+            "Properties" : {
+              "Blocks Movement" : true,
+              "Cast Shadow" : true,
+              "Element 0" : {
+                "Path" : "Asset/Materials/Auto/BasicShapeMaterial.mat"
+              },
+              "Generate Overlap Events" : true,
+              "Location" : [0.000000, 0.000000, 0.000000],
+              "Rotation" : [0.000000, 0.000000, 0.000000],
+              "Scale" : [10.000000, 10.000000, 1.000000],
+              "Static Mesh" : "Data/BasicShape/Cube.OBJ",
+              "Two Sided Shadow" : false,
+              "Visible" : true,
+              "bEditorOnly" : false,
+              "bTickEnable" : true
+            }
+          }],
+        "ClassName" : "UStaticMeshComponent",
+        "Properties" : {
+          "Blocks Movement" : true,
+          "Cast Shadow" : true,
+          "Generate Overlap Events" : true,
+          "Location" : [6.546923, 13.297223, -1.156880],
+          "Rotation" : [0.000000, 0.000000, 0.000000],
+          "Scale" : [1.000000, 1.000000, 1.000000],
+          "Static Mesh" : "None",
+          "Two Sided Shadow" : false,
+          "Visible" : true,
+          "bEditorOnly" : false,
+          "bTickEnable" : true
+        }
+      },
+      "Tags" : [],
+      "bVisible" : true
     }],
   "ClassName" : "UWorld",
   "ContextHandle" : "NewScene",
@@ -48,11 +210,11 @@
     "AspectRatio" : 1.637037,
     "FOV" : 1.047198,
     "FarClip" : 1000.000000,
-    "Location" : [0.355010, 1.428656, 2.997620],
+    "Location" : [4.343805, 6.063931, 2.519786],
     "NearClip" : 0.100000,
     "OrthoWidth" : 10.000000,
     "Orthographic" : false,
-    "Rotation" : [0.000000, 37.515438, 61.050995]
+    "Rotation" : [-0.000001, 13.850188, 84.301132]
   },
   "Version" : 2,
   "WorldType" : "Editor"

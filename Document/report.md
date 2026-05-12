@@ -2,7 +2,7 @@
 
 작성일: 2026-05-12
 대상 브랜치: `feature/SkeletonMesh`
-스코프: Step A + Step B + Step C + Step D (Step E는 미진행)
+스코프: Step A + Step B + Step C + Step D + Step F + Step G (Step E는 미진행)
 
 ---
 
@@ -230,6 +230,9 @@ DynamicVB.Update(...);
 | 5 | `.bin` 캐시 v1 로드 | undefined behavior (포맷 mismatch) | `Serialize` false 반환 → FBXManager가 감지 → 강제 재import |
 | 6 | CPU 스키닝 vertex stride | 96B | 48B (대역폭 ~50% 절감) |
 | 7 | FBXManager 의 importer 호출 | 구 API `ImportSkeletalMesh(path, skel)` | `ImportFbx(path, skel, pendingStatic)` — hybrid 결과 수신 |
+| 8 | FBX 머티리얼/텍스처 추출 | 미지원 — 단일 `"Default"` section 만 등록 | FBX surface material → `.mat` JSON → `UMaterial` → 텍스처 binding 자동 |
+| 9 | Section 분할 | 단일 section (mesh 전체) | polygon-material 매핑에 따라 머티리얼별 다중 section |
+| 10 | 한자/한글 FBX 텍스처 경로 매칭 | `path(const char*)` Windows ACP 가정으로 mojibake → 매칭 실패 | `FPaths::ToWide(UTF-8)` → wide path → 매칭 성공 |
 
 ---
 
@@ -312,6 +315,140 @@ USkeletalMeshComponent::SetSkeletalMesh(skel)
 
 ---
 
+## 6.5. Step F — SkeletalMesh 머티리얼/텍스처 적용
+
+### 6.5.1 [`Engine/SkeletalMesh/FBXImporter.h/.cpp`](KraftonEngine/Source/Engine/SkeletalMesh/FBXImporter.cpp)
+
+**신규 import 컨텍스트**:
+```cpp
+struct FFbxImportContext {
+    FString FbxFilePath;
+    FString FbxStem;                            // .mat 슬롯 키 prefix (`<FbxStem>__<MatName>`)
+    TMap<FString, FString> TextureIndex;        // lowercase basename → 프로젝트-루트-상대 경로
+    TArray<FStaticMaterial> SkeletalMaterials;  // ExtractSkeletalMesh 누적 결과
+    TArray<FStaticMaterial> StaticMaterials;    // ExtractStaticMesh 누적 결과
+};
+```
+`ProcessNode` / `ExtractSkeletalMesh` / `ExtractStaticMesh` 모두 컨텍스트를 인자로 받아 동일한 텍스처 인덱스 / 슬롯 배열을 공유.
+
+**신규 헬퍼 (anonymous namespace)**:
+- `BuildFbxTextureSearchIndex(FbxFilePath)` — FBX 파일이 위치한 디렉토리 (D) 를 root 로 `recursive_directory_iterator` 순회 → lowercase basename → 프로젝트-루트-상대 경로 매핑. 디렉토리 이름은 가정하지 않음 (사용자 요구: `tex/`, `.fbm/` 등 하드코딩 X).
+- `ResolveFbxTexturePath(FbxFileTexture*, Index)` — `GetFileName()` → basename → 매칭, 실패 시 `GetRelativeFileName()` 재시도.
+- `ExtractDiffuseTexturePath(FbxSurfaceMaterial*, Index)` — `sDiffuse` 속성에 연결된 첫 `FbxFileTexture` 추출.
+- `ExtractDiffuseColor(FbxSurfaceMaterial*)` — `Lambert/Phong` 의 Diffuse RGB, 없으면 (1,0,1) 마젠타.
+- `MakeMatSlotKey(FbxStem, MaterialName)` — `<FbxStem>__<SanitizedMatName>` 형식 (Windows 파일명 안전 문자만).
+- `ConvertFbxMaterialToMat(SlotKey, DiffusePath, DiffuseColor)` — `Asset/Materials/Auto/<SlotKey>.mat` 생성, 이미 존재하면 덮어쓰지 않음 (사용자 편집 보존, ObjImporter 와 동일 정책).
+- `CollectNodeMaterials(FbxNode*, OutSlots, FbxStem, Index)` — mesh node 의 `FbxMatCount` 만큼 surface material 을 슬롯 배열에 등록(중복 없이), 로컬 인덱스 → 슬롯 배열 인덱스 매핑 반환.
+- `EnsureDefaultMaterialSlot(OutSlots)` — 머티리얼이 하나도 없는 mesh node 폴백.
+- `ExtractPolygonMaterialIndices(FbxMesh*, FbxMatCount)` — `eAllSame` / `eByPolygon` mapping mode 처리하여 polygon 별 node-local material index 반환.
+
+### 6.5.2 `ExtractSkeletalMesh` / `ExtractStaticMesh` 갱신
+
+기존 단일 `"Default"` section 만 만들던 코드가 다음 3-phase 로 변경:
+
+**Phase A** — node 의 머티리얼을 슬롯 배열에 등록 (`CollectNodeMaterials`).
+**Phase B** — polygon 별 material 인덱스 추출 (`ExtractPolygonMaterialIndices`).
+**Phase C** — polygon expansion 루프에서 vertex 는 그대로 `RawMesh->Vertices` 에 push, **index 는 머티리얼별 임시 버퍼** `PerMatIndices[matIdx]` 에 누적. 모든 polygon 처리 후 머티리얼 슬롯 순서로 `RawMesh->Indices` 에 flush + `FStaticMeshSection`(FirstIndex/NumTriangles/MaterialIndex 캐시) 등록.
+
+**Cluster 보존 보장**: vertex array 의 push 순서는 polygon expansion 순서 그대로 — `CPToExpanded` 매핑 / `FBoneCluster::VertexIndices` 영향 없음. 머티리얼 분할은 **index buffer 의 순서만 바꾸는** 변경.
+
+### 6.5.3 [`Engine/SkeletalMesh/SkeletalMesh.cpp`](KraftonEngine/Source/Engine/SkeletalMesh/SkeletalMesh.cpp)
+
+- 신규 `CacheSectionMaterialIndices(Asset, Materials)` — slot name 기반으로 `Section.MaterialIndex` 재계산.
+- `SetSkeletalMeshAsset(...)` / `SetStaticMaterials(...)` 가 setter 호출 시 자동 재캐싱.
+- `Serialize` 로딩 분기 끝에도 `CacheSectionMaterialIndices` 명시 호출 (setter 를 거치지 않으므로).
+
+### 6.5.4 `.mat` JSON 스키마 (ObjImporter 와 동일)
+```json
+{
+  "PathFileName": "Asset/Materials/Auto/Furina__体.mat",
+  "Origin": "FbxImport",
+  "ShaderPath": "Shaders/Geometry/UberLit.hlsl",
+  "RenderPass": "Opaque",
+  "Textures":   { "DiffuseTexture": "Data/FurinaFBX/体.png" },
+  "Parameters": { "SectionColor": [1.0, 1.0, 1.0, 1.0] }
+}
+```
+텍스처 미발견 시 `Textures` 를 비우고 `Parameters.SectionColor` 에 머티리얼의 `Diffuse` 컬러를 작성.
+
+### 6.5.5 동작 흐름
+
+```
+ImportFbx(path, skel, static)
+  ├── Ctx.TextureIndex = BuildFbxTextureSearchIndex(path)        # 폴더 단위 1회 빌드
+  ├── Ctx.FbxStem      = stem(path)
+  ├── ExtractSkeleton(...)
+  ├── ProcessNode(...)
+  │    ├── (skinned)   → ExtractSkeletalMesh → CollectNodeMaterials → 슬롯/section 분할
+  │    └── (unskinned) → ExtractStaticMesh   → 동일
+  └── OutSkeletal/OutStatic ->SetStaticMaterials(Ctx.*Materials)
+
+FBXManager 로드 → SkeletalMesh->Serialize / InitResources
+                → USkeletalMeshComponent::SetSkeletalMesh
+                → OverrideMaterials 가 슬롯에서 초기화 (이미 동작)
+                → FSkeletalSceneProxy 가 Section.MaterialIndex 매칭 → UMaterial 바인딩
+                → UMaterial 의 SRV (텍스처) 가 셰이더로 전달됨 (이미 동작)
+```
+
+### 6.5.6 변경 파일 (Step F)
+- `Engine/SkeletalMesh/FBXImporter.h` — `ProcessNode/Extract*` 시그니처에 컨텍스트 인자 추가.
+- `Engine/SkeletalMesh/FBXImporter.cpp` — 컨텍스트 / 헬퍼 / 머티리얼 분할 로직.
+- `Engine/SkeletalMesh/SkeletalMesh.cpp` — `CacheSectionMaterialIndices` + setter / Serialize 통합.
+
+### 6.5.7 명시적 비범위 (후속 작업 후보)
+- Normal / Specular / AO 텍스처 (현재는 Diffuse 만).
+- PBR 머티리얼 인스턴스 (현재 Lambert/Phong Diffuse 만).
+- 머티리얼 슬롯 GC (`Asset/Materials/Auto/` 에 사용되지 않는 .mat 누적 가능).
+
+---
+
+## 6.6. Step G — 한자/한글 FBX 텍스처 경로 매칭 encoding fix
+
+### 6.6.1 증상
+
+Step F 적용 후 Furina.fbx (중국어 머티리얼/텍스처 이름 사용) 실측:
+- ASCII 텍스처 (`spa_h.png`) → sDiffuse 매칭 성공.
+- 한자 머티리얼 (`颜`, `髮`, `髮2`, `体`) → **material-name fallback** 으로만 매칭 성공 (폴더에 동명 파일 존재).
+- 그 외 한자 머티리얼 다수 (`颜2`, `二重`, `星目`, `白目`, `服饰`, `体2` …) → `[Tex] FBX-reported texture not found in folder` → `COLOR ONLY`.
+
+→ FBX 가 sDiffuse 슬롯에 한자 텍스처 경로 (`Furina.fbm/颜.png` 등) 를 정확히 갖고 있음에도 매칭 실패.
+
+### 6.6.2 원인
+
+`ResolveFbxTexturePath` 내부의 `std::filesystem::path P(RawPath)` 한 줄:
+- C++17 표준상 `path::path(const char*)` 는 Windows 에서 입력을 **system ACP (한국 Windows = CP-949)** 로 해석.
+- 그러나 FBX SDK 의 char* 경로는 **UTF-8**.
+- → UTF-8 multibyte sequence (`颜` = `E9 A2 9C`) 가 ACP 로 잘못 디코딩되어 `P.filename().wstring()` 이 mojibake wide string. 이후 `FPaths::ToUtf8` 로 변환해도 원본 UTF-8 와 다른 byte 시퀀스 → 인덱스 매칭 실패.
+
+`BuildFbxTextureSearchIndex` (directory_iterator 가 native wide path 반환) / `MakeMatSlotKey` (char* UTF-8 → FString 직접 저장) 는 ACP 변환을 거치지 않으므로 정상.
+
+### 6.6.3 변경 — `Engine/SkeletalMesh/FBXImporter.cpp`
+
+`std::filesystem::path` 의 char-ctor 직접 사용을 제거하고, 프로젝트 convention 인 [`FPaths::ToWide`](KraftonEngine/Source/Engine/Platform/Paths.cpp) (CP_UTF8 기반 `MultiByteToWideChar`) 를 거쳐 wstring 으로 변환한 뒤 `path(wstring)` 으로 생성:
+
+```cpp
+// ResolveFbxTexturePath 내부 TryFind:
+std::filesystem::path P(FPaths::ToWide(std::string(RawPath)));   // UTF-8 → wide → path
+```
+
+진단 로그 강화: 매칭 실패 시 우리가 검색한 lowercase basename 키도 함께 출력하여 잔존 케이스 디버깅 가능.
+
+### 6.6.4 캐시 무효화 — `FSkeletalMesh::SerializeVersion` v3 → v4
+
+이전 import 의 `.bin` 캐시에는 텍스처 정보 없이 저장된 `.mat` 경로가 박혀 있으므로, encoding fix 효과를 보려면 importer 재실행이 필요. 버전 bump 한 줄로 자동 처리:
+- v3 .bin 로드 시 `FSkeletalMesh::Serialize` 가 false → `USkeletalMesh::Serialize` 가 `SkeletalMeshAsset = nullptr` → FBXManager 가 재import → 새 fix 적용된 importer 가 .mat 갱신 (`"Origin": "FbxImport"` 라 덮어쓰기 가능).
+
+### 6.6.5 변경 없음 (이미 동작)
+
+- **timestamp 기반 자동 재빌드**: `.fbx` 가 `.bin` 보다 새로우면 자동 재import — 이미 [FBXManager.cpp:177-185](KraftonEngine/Source/Engine/SkeletalMesh/FBXManager.cpp) 에 존재.
+- `BuildFbxTextureSearchIndex`, `MakeMatSlotKey` — 이미 UTF-8 일관성 유지.
+
+### 6.6.6 콘솔 출력 mojibake (별개)
+
+콘솔의 `é¢œ` 같은 출력은 Windows 콘솔이 기본 ACP 출력이라서 발생 — **매칭 동작에는 영향 없음** (raw byte 는 정상 UTF-8). 가독성을 원하면 엔진 시작 시 `SetConsoleOutputCP(CP_UTF8)` 1회 호출이면 해결되지만, 이번 fix 범위 외 (로깅 인프라).
+
+---
+
 ## 7. 미진행 / 후속 작업
 
 ### Step E — 검증 (예정)
@@ -320,6 +457,7 @@ USkeletalMeshComponent::SetSkeletalMesh(skel)
 - Hybrid FBX: 두 sibling component, 둘 다 렌더.
 - Zero-weight vertex .fbx: bind-pose 위치 확인.
 - OBJ regression: `Engine/Mesh/` 미변경 검증.
+- **Furina.fbx** (Step F): `Asset/Materials/Auto/Furina__*.mat` 자동 생성, viewport 에서 텍스처 binding 확인.
 
 ### GPU 스키닝 (이번 PR 스코프 밖)
 - vertex에 bone 정보가 더 이상 없으므로, vertex shader가 cluster index buffer + bone-matrix palette를 SRV로 받도록 파이프라인 확장 필요.
