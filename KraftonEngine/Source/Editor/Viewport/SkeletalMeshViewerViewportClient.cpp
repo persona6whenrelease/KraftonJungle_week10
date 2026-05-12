@@ -26,7 +26,7 @@ void FSkeletalMeshViewerViewportClient::Initialize()
 	RenderOptions.ShowFlags.bBoundingVolume = false;
 	RenderOptions.ShowFlags.bCollisionShapes = false;
 
-	Camera->SetWorldLocation(FVector(-5.0f, -5.0f, 3.0f));
+	Camera->SetWorldLocation(FVector(5.0f, 0.0f, 2.0f));
 	Camera->LookAt(FVector::ZeroVector);
 }
 
@@ -60,9 +60,70 @@ void FSkeletalMeshViewerViewportClient::FrameMesh(const FSkeletalMesh* MeshAsset
 	float Radius = Extent.Length();
 	Radius = (std::max)(Radius, 1.0f);
 
+	const FVector Target = FVector::ZeroVector;
 	const float Distance = Radius * 2.5f;
-	Camera->SetWorldLocation(FVector(-Distance, -Distance, Distance * 0.65f));
-	Camera->LookAt(FVector::ZeroVector);
+	Camera->SetWorldLocation(Target + FVector(Distance, 0.0f, Distance * 0.35f));
+	Camera->LookAt(Target);
+}
+
+void FSkeletalMeshViewerViewportClient::SetViewportType(ELevelViewportType NewType)
+{
+	if (!Camera)
+	{
+		return;
+	}
+
+	RenderOptions.ViewportType = NewType;
+
+	if (NewType == ELevelViewportType::Perspective)
+	{
+		Camera->SetOrthographic(false);
+		return;
+	}
+
+	Camera->SetOrthographic(true);
+
+	if (NewType == ELevelViewportType::FreeOrthographic)
+	{
+		return;
+	}
+
+	constexpr float OrthoDistance = 50.0f;
+	auto Position = FVector(0, 0, 0);
+	auto Rotation = FVector(0, 0, 0);
+
+	switch (NewType)
+	{
+	case ELevelViewportType::Top:
+		Position = FVector(0, 0, OrthoDistance);
+		Rotation = FVector(0, 90.0f, 0);
+		break;
+	case ELevelViewportType::Bottom:
+		Position = FVector(0, 0, -OrthoDistance);
+		Rotation = FVector(0, -90.0f, 0);
+		break;
+	case ELevelViewportType::Front:
+		Position = FVector(OrthoDistance, 0, 0);
+		Rotation = FVector(0, 0, 180.0f);
+		break;
+	case ELevelViewportType::Back:
+		Position = FVector(-OrthoDistance, 0, 0);
+		Rotation = FVector(0, 0, 0.0f);
+		break;
+	case ELevelViewportType::Left:
+		Position = FVector(0, -OrthoDistance, 0);
+		Rotation = FVector(0, 0, 90.0f);
+		break;
+	case ELevelViewportType::Right:
+		Position = FVector(0, OrthoDistance, 0);
+		Rotation = FVector(0, 0, -90.0f);
+		break;
+	default:
+		break;
+	}
+
+	Camera->SetRelativeLocation(Position);
+	Camera->SetRelativeRotation(Rotation);
 }
 
 void FSkeletalMeshViewerViewportClient::Tick(

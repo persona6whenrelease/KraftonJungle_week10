@@ -199,7 +199,7 @@ void FEditorRenderPipeline::RenderPreviewViewport(
 
 	FCollectOutput Output;
 	FDrawCommandBuilder& Builder = Renderer.GetBuilder();
-	Builder.BeginCollect(Frame, Scene.GetProxyCount());
+	Builder.BeginCollect(PreviewFrame, Scene.GetProxyCount());
 
 	Scene.UpdateDirtyProxies();
 	PreviewWorld->GetPartition().FlushPrimitive();
