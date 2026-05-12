@@ -35,6 +35,21 @@ protected:
 	bool bIsSelected = false;
 };
 
+class ExpandableElement : public ContentBrowserElement
+{
+public:
+	virtual void Render(ContentBrowserContext& Context) override;
+	
+private:
+	void DrawExpandButton(ContentBrowserContext& Context);
+	void DrawExpandedPanel(ContentBrowserContext& Context);
+	void DrawInternalElements(ContentBrowserContext& Context, float PanelWidth);
+
+protected:
+	bool bExpanded = false;
+	TArray<std::shared_ptr<ContentBrowserElement>> InternalElements;
+};
+
 class DirectoryElement final : public ContentBrowserElement
 {
 public:
@@ -53,7 +68,7 @@ public:
 	virtual const char* GetDragItemType() override { return "ObjectContentItem"; }
 };
 
-class FBXElement final : public ContentBrowserElement
+class FBXElement final : public ExpandableElement
 {
 public:
 	virtual const char* GetDragItemType() override { return "FBXContentItem"; }
