@@ -94,7 +94,9 @@ bool FFbxSkeletalMeshAssembler::BuildSkeletalMeshFromParts(
 
 	OutMesh.Bones.resize(SkeletonMeta.BoneIds.size());
 	TArray<FMatrix> BoneBindInSkeletonSpace;
+	TArray<FMatrix> BoneModelInSkeletonSpace;
 	BoneBindInSkeletonSpace.resize(SkeletonMeta.BoneIds.size(), FMatrix::Identity);
+	BoneModelInSkeletonSpace.resize(SkeletonMeta.BoneIds.size(), FMatrix::Identity);
 
 	const FMatrix InvSkeletonRootBindGlobal = FMatrix::Identity;
 
@@ -143,20 +145,20 @@ bool FFbxSkeletalMeshAssembler::BuildSkeletalMeshFromParts(
 		}
 
 		BoneBindInSkeletonSpace[SkeletonBoneIndex] = BoneMeta.BindGlobalMatrix * InvSkeletonRootBindGlobal;
+		BoneModelInSkeletonSpace[SkeletonBoneIndex] = BoneMeta.ModelGlobalMatrix * InvSkeletonRootBindGlobal;
 		BoneInfo.InverseBindPose = BoneBindInSkeletonSpace[SkeletonBoneIndex].GetInverse();
 	}
 
 	for (int32 SkeletonBoneIndex = 0; SkeletonBoneIndex < static_cast<int32>(OutMesh.Bones.size()); ++SkeletonBoneIndex)
 	{
 		FBoneInfo& BoneInfo = OutMesh.Bones[SkeletonBoneIndex];
-		const FMatrix& BoneGlobalInSkeletonSpace = BoneBindInSkeletonSpace[SkeletonBoneIndex];
+		const FMatrix& BoneGlobalInSkeletonSpace = BoneModelInSkeletonSpace[SkeletonBoneIndex];
 
-		// Runtime accumulates BoneSpaceToMeshSpace with the parent to build reference globals.
-		// The field name is misleading here: store parent-local bind, not global bind.
+		// Runtime accumulates parent-local model pose to build current bone globals.
 		if (BoneInfo.ParentIndex >= 0)
 		{
 			BoneInfo.LocalBindPose =
-				BoneGlobalInSkeletonSpace * BoneBindInSkeletonSpace[BoneInfo.ParentIndex].GetInverse();
+				BoneGlobalInSkeletonSpace * BoneModelInSkeletonSpace[BoneInfo.ParentIndex].GetInverse();
 		}
 		else
 		{
