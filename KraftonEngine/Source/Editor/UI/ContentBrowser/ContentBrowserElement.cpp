@@ -16,11 +16,6 @@
 namespace
 {
 	constexpr uint32 ContentBrowserSnapshotSize = 128;
-	const char* DefaultIconPath = "Asset/Editor/Icons/StartMerge_42x.png";
-	const char* DirectoryIconPath = "Asset/Editor/Icons/Folder_Base_256x.png";
-	const char* WorldIconPath = "Asset/Editor/Icons/World_64x.png";
-	const char* MeshIconPath = "Asset/Editor/Icons/icon_MatEd_Mesh_40x.png";
-	const char* MaterialIconPath = "Asset/Editor/Icons/Sphere_64x.png";
 	const char* MaterialPreviewSpherePath = "Data/BasicShape/Sphere.OBJ";
 
 	std::filesystem::path ToProjectAssetPath(const FString& AssetPath)
@@ -33,32 +28,12 @@ namespace
 		return std::filesystem::path(FPaths::RootDir()) / Path;
 	}
 
-	FString ToContentPath(const std::filesystem::path& Path)
-	{
-		const std::filesystem::path NormalizedPath = Path.lexically_normal();
-		const std::filesystem::path RootPath = std::filesystem::path(FPaths::RootDir()).lexically_normal();
-		const std::filesystem::path RelativePath = NormalizedPath.lexically_relative(RootPath);
-
-		if (!RelativePath.empty())
-		{
-			bool bParentReference = false;
-			for (const std::filesystem::path& Part : RelativePath)
-			{
-				if (Part == L"..")
-				{
-					bParentReference = true;
-					break;
-				}
-			}
-
-			if (!bParentReference)
-			{
-				return FPaths::ToUtf8(RelativePath.generic_wstring());
-			}
-		}
-
-		return FPaths::ToUtf8(NormalizedPath.generic_wstring());
-	}
+	//Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> TakeOwnedSnapshot(ID3D11ShaderResourceView* Snapshot)
+	//{
+	//	Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> Result;
+	//	Result.Attach(Snapshot);
+	//	return Result;
+	//}
 
 	FD3DDevice* GetContentBrowserD3DDevice(ContentBrowserContext& Context)
 	{
@@ -280,42 +255,22 @@ namespace
 	}
 }
 
-void ContentBrowserElement::SetIcon(ID3D11ShaderResourceView* InIcon)
-{
-	Icon = InIcon;
-}
-
-void ContentBrowserElement::AttachIcon(ID3D11ShaderResourceView* InIcon)
-{
-	Icon.Attach(InIcon);
-}
-
-void ContentBrowserElement::BuildIcon(ContentBrowserContext& Context)
+Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> ContentBrowserElement::GetElementIcon(ContentBrowserContext& Context)
 {
 	(void)Context;
-	SetIconFromPackagePath(GetDefaultIconPath());
-}
-
-FString ContentBrowserElement::GetDefaultIconPath() const
-{
-	return DefaultIconPath;
-}
-
-void ContentBrowserElement::SetIconFromPackagePath(const FString& PackagePath)
-{
-	Icon = FResourceManager::Get().FindLoadedTexture(PackagePath);
+	return FResourceManager::Get().FindLoadedTexture(GetDefaultIconPath());
 }
 
 void ContentBrowserElement::EnsureIcon(ContentBrowserContext& Context)
 {
 	if (!Icon)
 	{
-		BuildIcon(Context);
+		Icon = GetElementIcon(Context);
 	}
 
 	if (!Icon)
 	{
-		SetIconFromPackagePath(DefaultIconPath);
+		Icon = FResourceManager::Get().FindLoadedTexture(FallBackIconPath);
 	}
 }
 
@@ -478,9 +433,31 @@ void DirectoryElement::OnDoubleLeftClicked(ContentBrowserContext& Context)
 	Context.bIsNeedRefresh = true;
 }
 
-FString DirectoryElement::GetDefaultIconPath() const
+FString ContentBrowserElement::ToContentPath(const std::filesystem::path& Path)
 {
-	return DirectoryIconPath;
+	const std::filesystem::path NormalizedPath = Path.lexically_normal();
+	const std::filesystem::path RootPath = std::filesystem::path(FPaths::RootDir()).lexically_normal();
+	const std::filesystem::path RelativePath = NormalizedPath.lexically_relative(RootPath);
+
+	if (!RelativePath.empty())
+	{
+		bool bParentReference = false;
+		for (const std::filesystem::path& Part : RelativePath)
+		{
+			if (Part == L"..")
+			{
+				bParentReference = true;
+				break;
+			}
+		}
+
+		if (!bParentReference)
+		{
+			return FPaths::ToUtf8(RelativePath.generic_wstring());
+		}
+	}
+
+	return FPaths::ToUtf8(NormalizedPath.generic_wstring());
 }
 
 #include "Serialization/SceneSaveManager.h"
@@ -492,41 +469,25 @@ void SceneElement::OnDoubleLeftClicked(ContentBrowserContext& Context)
 	EditorEngine->LoadSceneFromPath(FilePath);
 }
 
-FString SceneElement::GetDefaultIconPath() const
+Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> ObjectElement::GetElementIcon(ContentBrowserContext& Context)
 {
-	return WorldIconPath;
+	Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> Result;
+	Result.Attach(BuildStaticMeshSnapshot(Context, FPaths::ToUtf8(ContentItem.Path.wstring())));
+	return Result;
 }
 
-void ObjectElement::BuildIcon(ContentBrowserContext& Context)
+Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> ImportedStaticMeshElement::GetElementIcon(ContentBrowserContext& Context)
 {
-	AttachIcon(BuildStaticMeshSnapshot(Context, FPaths::ToUtf8(ContentItem.Path.wstring())));
-	if (!Icon)
-	{
-		SetIconFromPackagePath(GetDefaultIconPath());
-	}
+	Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> Result;
+	Result.Attach(BuildStaticMeshSnapshot(Context, FPaths::ToUtf8(ContentItem.Path.wstring())));
+	return Result;
 }
 
-FString ObjectElement::GetDefaultIconPath() const
+Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> ImportedSkeletalMeshElement::GetElementIcon(ContentBrowserContext& Context)
 {
-	return MeshIconPath;
-}
-
-void ImportedStaticMeshElement::BuildIcon(ContentBrowserContext& Context)
-{
-	AttachIcon(BuildStaticMeshSnapshot(Context, FPaths::ToUtf8(ContentItem.Path.wstring())));
-	if (!Icon)
-	{
-		SetIconFromPackagePath(MeshIconPath);
-	}
-}
-
-void ImportedSkeletalMeshElement::BuildIcon(ContentBrowserContext& Context)
-{
-	AttachIcon(BuildSkeletalMeshSnapshot(Context, FPaths::ToUtf8(ContentItem.Path.wstring())));
-	if (!Icon)
-	{
-		SetIconFromPackagePath(MeshIconPath);
-	}
+	Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> Result;
+	Result.Attach(BuildSkeletalMeshSnapshot(Context, FPaths::ToUtf8(ContentItem.Path.wstring())));
+	return Result;
 }
 
 void FBXElement::OnDoubleLeftClicked(ContentBrowserContext& Context)
@@ -539,15 +500,14 @@ void FBXElement::OnDoubleLeftClicked(ContentBrowserContext& Context)
 	Context.EditorEngine->OpenSkeletalMeshViewerAsset(FPaths::ToUtf8(ContentItem.Path.wstring()));
 }
 
-void FBXElement::BuildIcon(ContentBrowserContext& Context)
+Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> FBXElement::GetElementIcon(ContentBrowserContext& Context)
 {
 	const FString FbxPath = FPaths::ToUtf8(ContentItem.Path.wstring());
 	UFBXSceneAsset* SceneAsset = FMeshManager::LoadFbxScene(FbxPath);
-	AttachIcon(BuildFbxSceneSnapshot(Context, SceneAsset));
-	if (!Icon)
-	{
-		SetIconFromPackagePath(GetDefaultIconPath());
-	}
+
+	Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> Result;
+	Result.Attach(BuildFbxSceneSnapshot(Context, SceneAsset));
+	return Result;
 }
 
 void FBXElement::Import(ContentBrowserContext& Context)
@@ -631,43 +591,21 @@ void FBXElement::Import(ContentBrowserContext& Context)
 	bExpanded = !InternalElements.empty();
 }
 
-void PNGElement::BuildIcon(ContentBrowserContext& Context)
-{
-	(void)Context;
-	SetIconFromPackagePath(ToContentPath(ContentItem.Path));
-	if (!Icon)
-	{
-		SetIconFromPackagePath(GetDefaultIconPath());
-	}
-}
-
 void MaterialElement::OnLeftClicked(ContentBrowserContext& Context)
 {
 	MaterialInspector = { ContentItem.Path };
 }
 
-void MaterialElement::BuildIcon(ContentBrowserContext& Context)
+Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> MaterialElement::GetElementIcon(ContentBrowserContext& Context)
 {
-	AttachIcon(BuildMaterialSnapshot(Context, ToContentPath(ContentItem.Path)));
-	if (!Icon)
-	{
-		SetIconFromPackagePath(GetDefaultIconPath());
-	}
-}
-
-FString MaterialElement::GetDefaultIconPath() const
-{
-	return MaterialIconPath;
+	Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> Result;
+	Result.Attach(BuildMaterialSnapshot(Context, ToContentPath(ContentItem.Path)));
+	return Result;
 }
 
 void MaterialElement::RenderDetail()
 {
 	MaterialInspector.Render();
-}
-
-FString PrefabElement::GetDefaultIconPath() const
-{
-	return WorldIconPath;
 }
 
 void CurveElement::OnDoubleLeftClicked(ContentBrowserContext& Context)

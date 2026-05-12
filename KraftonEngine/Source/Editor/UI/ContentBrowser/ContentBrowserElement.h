@@ -11,42 +11,47 @@ class ContentBrowserElement : public std::enable_shared_from_this<ContentBrowser
 {
 public:
 	virtual ~ContentBrowserElement() = default;
+
 	bool RenderSelectSpace(ContentBrowserContext& Context);
 	virtual void Render(ContentBrowserContext& Context);
 	virtual void RenderDetail() {};
 
-	void SetIcon(ID3D11ShaderResourceView* InIcon);
-	void AttachIcon(ID3D11ShaderResourceView* InIcon);
 	void SetContent(FContentItem InContent) { ContentItem = InContent; }
-
 	std::wstring GetFileName() { return ContentItem.Path.filename(); }
-
 	void StartRename(ContentBrowserContext& Context);
 
 protected:
-	FString EllipsisText(const FString& text, float maxWidth);
 	virtual const char* GetDragItemType() { return "ParkSangHyeok"; }
-	virtual void BuildIcon(ContentBrowserContext& Context);
-	virtual FString GetDefaultIconPath() const;
-	void SetIconFromPackagePath(const FString& PackagePath);
+	FString ToContentPath(const std::filesystem::path& Path);
+
+protected:
+	virtual FString GetDefaultIconPath() { return FallBackIconPath; }
+	virtual Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> GetElementIcon(ContentBrowserContext& Context);
 	void EnsureIcon(ContentBrowserContext& Context);
 
+protected:
 	virtual void OnLeftClicked(ContentBrowserContext& Context) { (void)Context; };
 	virtual void OnDoubleLeftClicked(ContentBrowserContext& Context) { ShellExecuteW(nullptr, L"open", ContentItem.Path.c_str(), nullptr, nullptr, SW_SHOWNORMAL); };
 	virtual void OnDrag(ContentBrowserContext& Context) { (void)Context; }
 	virtual void OnRightClicked(ContentBrowserContext& Context);
 
+private:
+	FString EllipsisText(const FString& text, float maxWidth);
+
 protected:
 	Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> Icon;
 	FContentItem ContentItem;
 	bool bIsSelected = false;
+
+private:
+	FString FallBackIconPath = "Asset/Editor/Icons/StartMerge_42x.png";
 };
 
 class ExpandableElement : public ContentBrowserElement
 {
 public:
 	virtual void Render(ContentBrowserContext& Context) override;
-	
+
 private:
 	void DrawExpandButton(ContentBrowserContext& Context);
 	void DrawExpandedPanel(ContentBrowserContext& Context);
@@ -60,14 +65,14 @@ protected:
 class DirectoryElement final : public ContentBrowserElement
 {
 public:
-	FString GetDefaultIconPath() const override;
+	virtual FString GetDefaultIconPath() override { return "Asset/Editor/Icons/Folder_Base_256x.png"; }
 	void OnDoubleLeftClicked(ContentBrowserContext& Context) override;
 };
 
 class SceneElement final : public ContentBrowserElement
 {
 public:
-	FString GetDefaultIconPath() const override;
+	virtual FString GetDefaultIconPath() override { return "Asset/Editor/Icons/World_64x.png"; }
 	void OnDoubleLeftClicked(ContentBrowserContext& Context) override;
 };
 
@@ -75,15 +80,14 @@ class ObjectElement final : public ContentBrowserElement
 {
 public:
 	virtual const char* GetDragItemType() override { return "ObjectContentItem"; }
-	void BuildIcon(ContentBrowserContext& Context) override;
-	FString GetDefaultIconPath() const override;
+	Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> GetElementIcon(ContentBrowserContext& Context) override;
 };
 
 class ImportedStaticMeshElement final : public ContentBrowserElement
 {
 public:
 	virtual const char* GetDragItemType() override { return "StaticMeshContentItem"; }
-	void BuildIcon(ContentBrowserContext& Context) override;
+	Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> GetElementIcon(ContentBrowserContext& Context) override;
 	void OnDoubleLeftClicked(ContentBrowserContext& Context) override { (void)Context; }
 };
 
@@ -91,7 +95,7 @@ class ImportedSkeletalMeshElement final : public ContentBrowserElement
 {
 public:
 	virtual const char* GetDragItemType() override { return "SkeletalMeshContentItem"; }
-	void BuildIcon(ContentBrowserContext& Context) override;
+	Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> GetElementIcon(ContentBrowserContext& Context) override;
 	void OnDoubleLeftClicked(ContentBrowserContext& Context) override { (void)Context; }
 };
 
@@ -112,7 +116,7 @@ class FBXElement final : public ImportableElement
 {
 public:
 	virtual const char* GetDragItemType() override { return "FBXContentItem"; }
-	void BuildIcon(ContentBrowserContext& Context) override;
+	Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> GetElementIcon(ContentBrowserContext& Context) override;
 	void OnDoubleLeftClicked(ContentBrowserContext& Context) override;
 
 protected:
@@ -123,7 +127,7 @@ class PNGElement final : public ContentBrowserElement
 {
 public:
 	virtual const char* GetDragItemType() override { return "PNGElement"; }
-	void BuildIcon(ContentBrowserContext& Context) override;
+	virtual FString GetDefaultIconPath() override { return ToContentPath(ContentItem.Path); }
 };
 
 #include "Editor/UI/EditorMaterialInspector.h"
@@ -132,8 +136,7 @@ class MaterialElement final : public ContentBrowserElement
 public:
 	virtual void OnLeftClicked(ContentBrowserContext& Context) override;
 	virtual const char* GetDragItemType() override { return "MaterialContentItem"; }
-	void BuildIcon(ContentBrowserContext& Context) override;
-	FString GetDefaultIconPath() const override;
+	Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> GetElementIcon(ContentBrowserContext& Context) override;
 	virtual void RenderDetail() override;
 
 private:
@@ -144,7 +147,6 @@ class PrefabElement final : public ContentBrowserElement
 {
 public:
 	virtual const char* GetDragItemType() override { return "PrefabContentItem"; }
-	FString GetDefaultIconPath() const override;
 };
 
 class LuaScriptElement final : public ContentBrowserElement
