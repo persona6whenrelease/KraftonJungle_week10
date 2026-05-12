@@ -18,6 +18,7 @@ public:
 
 	void Resize(uint32 Width, uint32 Height);
 	void FrameMesh(const FSkeletalMesh* MeshAsset);
+	void SetViewportType(ELevelViewportType NewType);
 
 	UCameraComponent* GetCamera() const { return Camera; }
 
