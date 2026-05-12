@@ -607,14 +607,12 @@ void FEditorViewportClient::TickInteraction(float DeltaTime, FInputFrame& InputF
 		InputFrame.ConsumeScroll("EditorViewportCamera", "Viewport zoom");
 	}
 
-	// 마우스 좌표를 뷰포트 슬롯 로컬 좌표로 변환
-	// (ImGui screen space = 윈도우 클라이언트 좌표)
-	POINT FrameMousePos = InputFrame.GetMousePosition();
-	if (Window)
-	{
-		FrameMousePos = Window->ScreenToClientPoint(FrameMousePos);
-	}
-	ImVec2 MousePos(static_cast<float>(FrameMousePos.x), static_cast<float>(FrameMousePos.y));
+	// 마우스 좌표를 뷰포트 슬롯 로컬 좌표로 변환.
+	// ImGuiConfigFlags_ViewportsEnable이 켜져 있어 ImGui screen space는 OS 데스크탑 좌표다.
+	// (ViewportScreenRect도 ImGui::GetCursorScreenPos에서 유래해 같은 데스크탑 좌표계를 쓴다.)
+	// 따라서 Window->ScreenToClient로 클라이언트 좌표로 변환하면 타이틀바 높이만큼 어긋나
+	// 상단 툴바를 뷰포트로 오인하는 picking 버그가 생긴다. GetIO().MousePos를 그대로 쓴다.
+	ImVec2 MousePos = ImGui::GetIO().MousePos;
 	float LocalMouseX = MousePos.x - ViewportScreenRect.X;
 	float LocalMouseY = MousePos.y - ViewportScreenRect.Y;
 
