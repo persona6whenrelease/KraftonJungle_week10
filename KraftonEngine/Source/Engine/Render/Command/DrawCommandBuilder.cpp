@@ -46,9 +46,12 @@ void FDrawCommandBuilder::Release()
 	GridLines.Release();
 	FontGeometry.Release();
 
-	for (FConstantBuffer& CB : PerObjectCBPool)
+	for (auto& Pair : PerObjectCBPool)
 	{
-		CB.Release();
+		if (Pair.second)
+		{
+			Pair.second->Release();
+		}
 	}
 	PerObjectCBPool.clear();
 
@@ -69,10 +72,7 @@ void FDrawCommandBuilder::BeginCollect(const FFrameContext& Frame, uint32 MaxPro
 	CollectViewMode = Frame.RenderOptions.ViewMode;
 	bHasSelectionMaskCommands = false;
 
-	// PerObjectCBPool 미리 할당 — Collect 도중 resize로 FDrawCommand.PerObjectCB
-	// 포인터가 무효화되는 것을 방지
-	if (MaxProxyCount > 0)
-		EnsurePerObjectCBPoolCapacity(MaxProxyCount);
+	(void)MaxProxyCount;
 
 	// 동적 지오메트리 초기화
 	EditorLines.Clear();
@@ -659,32 +659,18 @@ void FDrawCommandBuilder::BuildFontCommands(EViewMode ViewMode)
 	}
 }
 
-// ============================================================
-// PerObjectCB 풀 관리
-// ============================================================
-void FDrawCommandBuilder::EnsurePerObjectCBPoolCapacity(uint32 RequiredCount)
-{
-	if (PerObjectCBPool.size() >= RequiredCount)
-	{
-		return;
-	}
-
-	const size_t OldCount = PerObjectCBPool.size();
-	PerObjectCBPool.resize(RequiredCount);
-
-	for (size_t Index = OldCount; Index < PerObjectCBPool.size(); ++Index)
-	{
-		PerObjectCBPool[Index].Create(CachedDevice, sizeof(FPerObjectConstants));
-	}
-}
-
 FConstantBuffer* FDrawCommandBuilder::GetPerObjectCBForProxy(const FPrimitiveSceneProxy& Proxy)
 {
-	if (Proxy.GetProxyId() == UINT32_MAX)
+	auto It = PerObjectCBPool.find(&Proxy);
+	if (It != PerObjectCBPool.end())
 	{
-		return nullptr;
+		return It->second.get();
 	}
 
-	EnsurePerObjectCBPoolCapacity(Proxy.GetProxyId() + 1);
-	return &PerObjectCBPool[Proxy.GetProxyId()];
+	std::unique_ptr<FConstantBuffer> NewBuffer = std::make_unique<FConstantBuffer>();
+	NewBuffer->Create(CachedDevice, sizeof(FPerObjectConstants));
+	FConstantBuffer* Result = NewBuffer.get();
+	PerObjectCBPool.emplace(&Proxy, std::move(NewBuffer));
+	Proxy.MarkPerObjectCBDirty();
+	return Result;
 }

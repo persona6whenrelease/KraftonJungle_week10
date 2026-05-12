@@ -1,6 +1,7 @@
 ﻿#include "EditorRenderPipeline.h"
 #include "Editor/EditorEngine.h"
 #include "Editor/Viewport/LevelEditorViewportClient.h"
+#include "Editor/Viewport/SkeletalMeshViewerViewportClient.h"
 #include "Render/Pipeline/Renderer.h"
 #include "Render/Scene/FScene.h"
 #include "Viewport/Viewport.h"
@@ -149,6 +150,95 @@ void FEditorRenderPipeline::RenderViewport(FLevelEditorViewportClient* VC, FRend
 			VP->GetWidth(), VP->GetHeight());
 	}
 }
+
+void FEditorRenderPipeline::RenderPreviewViewport(
+	UWorld* PreviewWorld,
+	FViewport* PreviewViewport,
+	FSkeletalMeshViewerViewportClient* PreviewClient,
+	FRenderer& Renderer)
+{
+	if (!PreviewWorld || !PreviewViewport || !PreviewClient)
+	{
+		return;
+	}
+
+	UCameraComponent* Camera = PreviewClient->GetCamera();
+	if (!Camera)
+	{
+		return;
+	}
+
+	ID3D11DeviceContext* Ctx = Renderer.GetFD3DDevice().GetDeviceContext();
+	if (!Ctx)
+	{
+		return;
+	}
+
+	if (PreviewViewport->ApplyPendingResize())
+	{
+		Camera->OnResize(
+			static_cast<int32>(PreviewViewport->GetWidth()),
+			static_cast<int32>(PreviewViewport->GetHeight()));
+	}
+
+	const float ClearColor[4] = {0.18f, 0.18f, 0.18f, 1.0f};
+	PreviewViewport->BeginRender(Ctx, ClearColor);
+
+	FFrameContext PreviewFrame;
+	PreviewFrame.ClearViewportResources();
+	PreviewFrame.SetCameraInfo(Camera);
+	PreviewFrame.SetRenderOptions(PreviewClient->GetRenderOptions());
+	PreviewFrame.SetViewportInfo(PreviewViewport);
+	PreviewFrame.OcclusionCulling = nullptr;
+	PreviewFrame.LODContext = PreviewWorld->PrepareLODContext(Camera);
+	PreviewFrame.CursorViewportX = UINT32_MAX;
+	PreviewFrame.CursorViewportY = UINT32_MAX;
+
+	FScene& Scene = PreviewWorld->GetScene();
+	Scene.ClearFrameData();
+
+	FCollectOutput Output;
+	FDrawCommandBuilder& Builder = Renderer.GetBuilder();
+	Builder.BeginCollect(Frame, Scene.GetProxyCount());
+
+	Scene.UpdateDirtyProxies();
+	PreviewWorld->GetPartition().FlushPrimitive();
+	Output.FrustumVisibleProxies.clear();
+	Output.RenderableProxies.clear();
+	Output.VisibleProxySet.clear();
+	const TArray<FPrimitiveSceneProxy*>& PreviewProxies = Scene.GetAllProxies();
+	Output.FrustumVisibleProxies.reserve(PreviewProxies.size());
+	Output.RenderableProxies.reserve(PreviewProxies.size());
+	for (FPrimitiveSceneProxy* Proxy : PreviewProxies)
+	{
+		if (!Proxy || !Proxy->IsVisible())
+		{
+			continue;
+		}
+
+		if (Proxy->HasProxyFlag(EPrimitiveProxyFlags::PerViewportUpdate))
+		{
+			Proxy->UpdatePerViewport(PreviewFrame);
+		}
+
+		Output.FrustumVisibleProxies.push_back(Proxy);
+		Output.RenderableProxies.push_back(Proxy);
+		Output.VisibleProxySet.insert(Proxy);
+	}
+
+	const FShowFlags& Flags = PreviewFrame.RenderOptions.ShowFlags;
+	Collector.CollectGrid(PreviewFrame.RenderOptions.GridSpacing, PreviewFrame.RenderOptions.GridHalfLineCount, Scene);
+
+	if (Flags.bDebugDraw)
+	{
+		Collector.CollectDebugDraw(PreviewFrame, Scene);
+	}
+
+	Builder.BuildCommands(PreviewFrame, &Scene, Output);
+
+	Renderer.Render(PreviewFrame, Scene);
+}
+
 
 // ============================================================
 // PrepareViewport — 지연 리사이즈 적용 + RT 클리어

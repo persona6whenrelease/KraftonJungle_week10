@@ -57,6 +57,7 @@ class FBXElement final : public ContentBrowserElement
 {
 public:
 	virtual const char* GetDragItemType() override { return "FBXContentItem"; }
+	void OnDoubleLeftClicked(ContentBrowserContext& Context) override;
 };
 
 class PNGElement final : public ContentBrowserElement

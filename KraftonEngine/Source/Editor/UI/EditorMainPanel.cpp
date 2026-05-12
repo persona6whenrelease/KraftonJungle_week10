@@ -116,6 +116,12 @@ bool FEditorMainPanel::OpenCurveAsset(const FString& CurvePath)
 	return CurveWidget.OpenCurveAsset(CurvePath);
 }
 
+bool FEditorMainPanel::OpenSkeletalMeshViewerAsset(const FString& FbxPath)
+{
+	FEditorSettings::Get().UI.bSkeletalMeshViewer = true;
+	return SkeletalMeshViewerWidget.OpenFbxAsset(FbxPath);
+}
+
 void FEditorMainPanel::Render(float DeltaTime)
 {
 	ImGui_ImplDX11_NewFrame();
@@ -1122,8 +1128,13 @@ void FEditorMainPanel::RenderFooterOverlay(float DeltaTime)
 	ImGui::PopStyleVar(2);
 }
 
-void FEditorMainPanel::Update()
+void FEditorMainPanel::Update(float DeltaTime)
 {
+	if (FEditorSettings::Get().UI.bSkeletalMeshViewer)
+	{
+		SkeletalMeshViewerWidget.UpdateInput(DeltaTime);
+	}
+
 	HandleGlobalShortcuts();
 	ProcessPendingDebugActions();
 
@@ -1153,13 +1164,24 @@ void FEditorMainPanel::Update()
 		// 뷰포트 슬롯 위에서는 bUsingMouse를 해제해야 TickInteraction이 동작
 		bool bWantMouse = IO.WantCaptureMouse;
 		bool bWantKeyboard = IO.WantCaptureKeyboard || bShowShortcutOverlay;
-		if (EditorEngine && EditorEngine->IsMouseOverViewport())
+		const bool bMouseOverViewport = EditorEngine && EditorEngine->IsMouseOverViewport();
+		const bool bAnyGuiWindowFocused = ImGui::IsWindowFocused(ImGuiFocusedFlags_AnyWindow);
+		if (bMouseOverViewport)
 		{
 			bWantMouse = false;
 			if (!IO.WantTextInput && !bShowShortcutOverlay)
 			{
 				bWantKeyboard = false;
 			}
+		}
+		else if (bAnyGuiWindowFocused && !IO.WantTextInput)
+		{
+			bWantKeyboard = true;
+		}
+		if (FEditorSettings::Get().UI.bSkeletalMeshViewer)
+		{
+			bWantMouse = bWantMouse || SkeletalMeshViewerWidget.WantsMouseCapture();
+			bWantKeyboard = bWantKeyboard || SkeletalMeshViewerWidget.WantsKeyboardCapture();
 		}
 		InputSystem::Get().SetGuiMouseCapture(bWantMouse);
 		InputSystem::Get().SetGuiKeyboardCapture(bWantKeyboard);
