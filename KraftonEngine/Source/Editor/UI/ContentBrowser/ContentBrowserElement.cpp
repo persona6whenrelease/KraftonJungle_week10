@@ -89,18 +89,8 @@ void ContentBrowserElement::Render(ContentBrowserContext& Context)
 
 	if (ImGui::BeginPopupContextItem())
 	{
-		if (ImGui::MenuItem("Rename"))
-		{
-			Context.SelectedElement = shared_from_this();
-			bIsSelected = true;
-			StartRename(Context);
-		}
+		OnRightClicked(Context);
 		ImGui::EndPopup();
-	}
-
-	if (bIsSelected && ImGui::IsKeyPressed(ImGuiKey_F2) && !Context.bIsRenaming)
-	{
-		StartRename(Context);
 	}
 
 	if (!Context.bIsRenaming && ImGui::BeginDragDropSource())
@@ -148,6 +138,16 @@ FString ContentBrowserElement::EllipsisText(const FString& text, float maxWidth)
 	return result;
 }
 
+void ContentBrowserElement::OnRightClicked(ContentBrowserContext& Context)
+{
+	if (ImGui::MenuItem("Rename"))
+	{
+		Context.SelectedElement = shared_from_this();
+		bIsSelected = true;
+		StartRename(Context);
+	}
+}
+
 void DirectoryElement::OnDoubleLeftClicked(ContentBrowserContext& Context)
 {
 	Context.CurrentPath = ContentItem.Path;
@@ -173,6 +173,12 @@ void FBXElement::OnDoubleLeftClicked(ContentBrowserContext& Context)
 	}
 
 	Context.EditorEngine->OpenSkeletalMeshViewerAsset(FPaths::ToUtf8(ContentItem.Path.wstring()));
+}
+
+#include "Engine/Mesh/FBX/FBXManager.h"
+void FBXElement::Import()
+{
+	auto FBXScene = FFBXManager::LoadFbxScene(FPaths::ToUtf8(ContentItem.Path.wstring()));
 }
 
 void MaterialElement::OnLeftClicked(ContentBrowserContext& Context)
@@ -342,4 +348,16 @@ void ExpandableElement::DrawInternalElements(ContentBrowserContext& Context, flo
 		StartPos.x,
 		StartPos.y + RowCount * (ItemHeight + Gap)
 	));
+}
+
+void ImportableElement::OnRightClicked(ContentBrowserContext& Context)
+{
+	ContentBrowserElement::OnRightClicked(Context);
+	if (ImGui::MenuItem("Import"))
+	{
+		InternalElements.clear();
+		Import();
+
+		bIsImported = true;
+	}
 }

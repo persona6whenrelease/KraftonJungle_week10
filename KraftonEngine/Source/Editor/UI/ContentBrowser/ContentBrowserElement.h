@@ -28,6 +28,7 @@ protected:
 	virtual void OnLeftClicked(ContentBrowserContext& Context) { (void)Context; };
 	virtual void OnDoubleLeftClicked(ContentBrowserContext& Context) { ShellExecuteW(nullptr, L"open", ContentItem.Path.c_str(), nullptr, nullptr, SW_SHOWNORMAL); };
 	virtual void OnDrag(ContentBrowserContext& Context) { (void)Context; }
+	virtual void OnRightClicked(ContentBrowserContext& Context);
 
 protected:
 	ID3D11ShaderResourceView* Icon = nullptr;
@@ -68,11 +69,27 @@ public:
 	virtual const char* GetDragItemType() override { return "ObjectContentItem"; }
 };
 
-class FBXElement final : public ExpandableElement
+class ImportableElement : public ExpandableElement
+{
+public:
+	virtual void OnRightClicked(ContentBrowserContext& Context) override;
+	bool IsImported() const { return bIsImported; }
+
+protected:
+	virtual void Import() = 0;
+
+private:
+	bool bIsImported = false;
+};
+
+class FBXElement final : public ImportableElement
 {
 public:
 	virtual const char* GetDragItemType() override { return "FBXContentItem"; }
 	void OnDoubleLeftClicked(ContentBrowserContext& Context) override;
+
+protected:
+	void Import() override;
 };
 
 class PNGElement final : public ContentBrowserElement
