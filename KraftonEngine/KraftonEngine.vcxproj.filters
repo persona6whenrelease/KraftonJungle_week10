@@ -148,6 +148,9 @@
     <Filter Include="Source\Engine\Render\Shader">
       <UniqueIdentifier>{d6c35911-061e-d10a-e2dc-4d2a8ddb24d9}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source\Engine\Render\Snapshot">
+      <UniqueIdentifier>{b35e981c-cf4e-4324-a2ce-2c763f44cae6}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Source\Engine\Render\Shadow">
       <UniqueIdentifier>{501fd60b-68c2-defd-aae9-3ad93645e778}</UniqueIdentifier>
     </Filter>
@@ -877,6 +880,9 @@
     </ClCompile>
     <ClCompile Include="Source\Engine\Render\Shader\ShaderManager.cpp">
       <Filter>Source\Engine\Render\Shader</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Engine\Render\Snapshot\SnapShotRenderer.cpp">
+      <Filter>Source\Engine\Render\Snapshot</Filter>
     </ClCompile>
     <ClCompile Include="Source\Engine\Render\Shadow\AtlasQuadTreeBase.cpp">
       <Filter>Source\Engine\Render\Shadow</Filter>
@@ -1745,6 +1751,9 @@
     </ClInclude>
     <ClInclude Include="Source\Engine\Render\Shader\ShaderManager.h">
       <Filter>Source\Engine\Render\Shader</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Render\Snapshot\SnapShotRenderer.h">
+      <Filter>Source\Engine\Render\Snapshot</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Render\Shadow\AtlasQuadTreeBase.h">
       <Filter>Source\Engine\Render\Shadow</Filter>
