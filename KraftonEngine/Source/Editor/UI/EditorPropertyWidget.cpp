@@ -1,4 +1,4 @@
-#include "Editor/UI/EditorPropertyWidget.h"
+﻿#include "Editor/UI/EditorPropertyWidget.h"
 
 #include "Editor/EditorEngine.h"
 #include "Editor/UI/EditorFileUtils.h"
@@ -163,7 +163,8 @@ static FString GetStemFromPath(const FString& Path)
 {
 	size_t SlashPos = Path.find_last_of("/\\");
 	FString FileName = (SlashPos == FString::npos) ? Path : Path.substr(SlashPos + 1);
-	return RemoveExtension(FileName);
+	//return RemoveExtension(FileName);
+	return FileName;
 }
 
 FString FEditorPropertyWidget::OpenObjFileDialog()

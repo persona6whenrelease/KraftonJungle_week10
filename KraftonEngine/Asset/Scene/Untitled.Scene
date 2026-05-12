@@ -1,0 +1,274 @@
+{
+  "Actors" : [{
+      "ActorUUID" : 132,
+      "ClassName" : "AActor",
+      "NonSceneComponents" : [],
+      "RootComponent" : {
+        "Children" : [{
+            "Children" : [],
+            "ClassName" : "UStaticMeshComponent",
+            "Properties" : {
+              "Blocks Movement" : true,
+              "Cast Shadow" : true,
+              "Element 0" : {
+                "Path" : "Asset/Materials/Auto/New_Material_Variant_Variant.mat"
+              },
+              "Generate Overlap Events" : true,
+              "Location" : [0.000000, 0.000000, 0.000000],
+              "Rotation" : [-0.000000, 0.000000, 0.000000],
+              "Scale" : [1.000000, 1.000000, 1.000000],
+              "Static Mesh" : "C:\\Users\\jungle\\Desktop\\cpp_project\\한글_汉字_漢字_ひらがな_カタカナ\\KraftonJungle_week10\\KraftonEngine\\Asset\\FBX\\Lumi.fbx#Mesh_0",
+              "Two Sided Shadow" : false,
+              "Visible" : true,
+              "bEditorOnly" : false,
+              "bTickEnable" : true
+            }
+          }, {
+            "Children" : [],
+            "ClassName" : "UStaticMeshComponent",
+            "Properties" : {
+              "Blocks Movement" : true,
+              "Cast Shadow" : true,
+              "Element 0" : {
+                "Path" : "Asset/Materials/Auto/New_Material_Variant_Variant_Variant.mat"
+              },
+              "Generate Overlap Events" : true,
+              "Location" : [0.000000, 0.000000, 0.000000],
+              "Rotation" : [-0.000000, 0.000000, 0.000000],
+              "Scale" : [1.000000, 1.000000, 1.000000],
+              "Static Mesh" : "C:\\Users\\jungle\\Desktop\\cpp_project\\한글_汉字_漢字_ひらがな_カタカナ\\KraftonJungle_week10\\KraftonEngine\\Asset\\FBX\\Lumi.fbx#Mesh_1",
+              "Two Sided Shadow" : false,
+              "Visible" : true,
+              "bEditorOnly" : false,
+              "bTickEnable" : true
+            }
+          }, {
+            "Children" : [],
+            "ClassName" : "UStaticMeshComponent",
+            "Properties" : {
+              "Blocks Movement" : true,
+              "Cast Shadow" : true,
+              "Element 0" : {
+                "Path" : "Asset/Materials/Auto/New_Material_Variant_Variant_Variant.mat"
+              },
+              "Generate Overlap Events" : true,
+              "Location" : [0.000000, 0.000000, 0.000000],
+              "Rotation" : [-0.000000, 0.000000, 0.000000],
+              "Scale" : [1.000000, 1.000000, 1.000000],
+              "Static Mesh" : "C:\\Users\\jungle\\Desktop\\cpp_project\\한글_汉字_漢字_ひらがな_カタカナ\\KraftonJungle_week10\\KraftonEngine\\Asset\\FBX\\Lumi.fbx#Mesh_2",
+              "Two Sided Shadow" : false,
+              "Visible" : true,
+              "bEditorOnly" : false,
+              "bTickEnable" : true
+            }
+          }, {
+            "Children" : [],
+            "ClassName" : "UStaticMeshComponent",
+            "Properties" : {
+              "Blocks Movement" : true,
+              "Cast Shadow" : true,
+              "Element 0" : {
+                "Path" : "Asset/Materials/Auto/New_Material_Variant.mat"
+              },
+              "Generate Overlap Events" : true,
+              "Location" : [0.000000, 0.000000, 0.000000],
+              "Rotation" : [-0.000000, 0.000000, 0.000000],
+              "Scale" : [1.000000, 1.000000, 1.000000],
+              "Static Mesh" : "C:\\Users\\jungle\\Desktop\\cpp_project\\한글_汉字_漢字_ひらがな_カタカナ\\KraftonJungle_week10\\KraftonEngine\\Asset\\FBX\\Lumi.fbx#Mesh_3",
+              "Two Sided Shadow" : false,
+              "Visible" : true,
+              "bEditorOnly" : false,
+              "bTickEnable" : true
+            }
+          }, {
+            "Children" : [],
+            "ClassName" : "UStaticMeshComponent",
+            "Properties" : {
+              "Blocks Movement" : true,
+              "Cast Shadow" : true,
+              "Element 0" : {
+                "Path" : "Asset/Materials/Auto/New_Material.mat"
+              },
+              "Generate Overlap Events" : true,
+              "Location" : [0.000000, 0.000000, 0.000000],
+              "Rotation" : [-0.000000, 0.000000, 0.000000],
+              "Scale" : [1.000000, 1.000000, 1.000000],
+              "Static Mesh" : "C:\\Users\\jungle\\Desktop\\cpp_project\\한글_汉字_漢字_ひらがな_カタカナ\\KraftonJungle_week10\\KraftonEngine\\Asset\\FBX\\Lumi.fbx#Mesh_4",
+              "Two Sided Shadow" : false,
+              "Visible" : true,
+              "bEditorOnly" : false,
+              "bTickEnable" : true
+            }
+          }, {
+            "Children" : [],
+            "ClassName" : "UStaticMeshComponent",
+            "Properties" : {
+              "Blocks Movement" : true,
+              "Cast Shadow" : true,
+              "Element 0" : {
+                "Path" : "Asset/Materials/Auto/New_Material_2.mat"
+              },
+              "Generate Overlap Events" : true,
+              "Location" : [0.000000, 0.000000, 0.000000],
+              "Rotation" : [-0.000000, 0.000000, 0.000000],
+              "Scale" : [1.000000, 1.000000, 1.000000],
+              "Static Mesh" : "C:\\Users\\jungle\\Desktop\\cpp_project\\한글_汉字_漢字_ひらがな_カタカナ\\KraftonJungle_week10\\KraftonEngine\\Asset\\FBX\\Lumi.fbx#Mesh_5",
+              "Two Sided Shadow" : false,
+              "Visible" : true,
+              "bEditorOnly" : false,
+              "bTickEnable" : true
+            }
+          }, {
+            "Children" : [],
+            "ClassName" : "UStaticMeshComponent",
+            "Properties" : {
+              "Blocks Movement" : true,
+              "Cast Shadow" : true,
+              "Element 0" : {
+                "Path" : "Asset/Materials/Auto/MI_StarMat.mat"
+              },
+              "Generate Overlap Events" : true,
+              "Location" : [0.000000, 0.000000, 0.000000],
+              "Rotation" : [-0.000000, 0.000000, 0.000000],
+              "Scale" : [1.000000, 1.000000, 1.000000],
+              "Static Mesh" : "C:\\Users\\jungle\\Desktop\\cpp_project\\한글_汉字_漢字_ひらがな_カタカナ\\KraftonJungle_week10\\KraftonEngine\\Asset\\FBX\\Lumi.fbx#Mesh_6",
+              "Two Sided Shadow" : false,
+              "Visible" : true,
+              "bEditorOnly" : false,
+              "bTickEnable" : true
+            }
+          }, {
+            "Children" : [],
+            "ClassName" : "UStaticMeshComponent",
+            "Properties" : {
+              "Blocks Movement" : true,
+              "Cast Shadow" : true,
+              "Element 0" : {
+                "Path" : "Asset/Materials/Auto/New_Material_1.mat"
+              },
+              "Generate Overlap Events" : true,
+              "Location" : [0.000000, 0.000000, 0.000000],
+              "Rotation" : [-0.000000, 0.000000, 0.000000],
+              "Scale" : [1.000000, 1.000000, 1.000000],
+              "Static Mesh" : "C:\\Users\\jungle\\Desktop\\cpp_project\\한글_汉字_漢字_ひらがな_カタカナ\\KraftonJungle_week10\\KraftonEngine\\Asset\\FBX\\Lumi.fbx#Mesh_7",
+              "Two Sided Shadow" : false,
+              "Visible" : true,
+              "bEditorOnly" : false,
+              "bTickEnable" : true
+            }
+          }, {
+            "Children" : [],
+            "ClassName" : "UStaticMeshComponent",
+            "Properties" : {
+              "Blocks Movement" : true,
+              "Cast Shadow" : true,
+              "Element 0" : {
+                "Path" : "Asset/Materials/Auto/New_Material_Variant_Variant_Variant_Variant.mat"
+              },
+              "Generate Overlap Events" : true,
+              "Location" : [0.000000, 0.000000, 0.000000],
+              "Rotation" : [-0.000000, 0.000000, 0.000000],
+              "Scale" : [1.000000, 1.000000, 1.000000],
+              "Static Mesh" : "C:\\Users\\jungle\\Desktop\\cpp_project\\한글_汉字_漢字_ひらがな_カタカナ\\KraftonJungle_week10\\KraftonEngine\\Asset\\FBX\\Lumi.fbx#Mesh_8",
+              "Two Sided Shadow" : false,
+              "Visible" : true,
+              "bEditorOnly" : false,
+              "bTickEnable" : true
+            }
+          }, {
+            "Children" : [],
+            "ClassName" : "UStaticMeshComponent",
+            "Properties" : {
+              "Blocks Movement" : true,
+              "Cast Shadow" : true,
+              "Element 0" : {
+                "Path" : "Asset/Materials/Auto/New_Material_Variant.mat"
+              },
+              "Generate Overlap Events" : true,
+              "Location" : [0.000000, 0.000000, 0.000000],
+              "Rotation" : [-0.000000, 0.000000, 0.000000],
+              "Scale" : [1.000000, 1.000000, 1.000000],
+              "Static Mesh" : "C:\\Users\\jungle\\Desktop\\cpp_project\\한글_汉字_漢字_ひらがな_カタカナ\\KraftonJungle_week10\\KraftonEngine\\Asset\\FBX\\Lumi.fbx#Mesh_9",
+              "Two Sided Shadow" : false,
+              "Visible" : true,
+              "bEditorOnly" : false,
+              "bTickEnable" : true
+            }
+          }],
+        "ClassName" : "USceneComponent",
+        "Properties" : {
+          "Location" : [1.505055, -0.321499, -0.454840],
+          "Rotation" : [-0.000000, 0.000000, 0.000000],
+          "Scale" : [1.000000, 1.000000, 1.000000],
+          "bEditorOnly" : false,
+          "bTickEnable" : true
+        }
+      },
+      "Tags" : [],
+      "bVisible" : true
+    }, {
+      "ActorUUID" : 144,
+      "ClassName" : "ADirectionalLightActor",
+      "NonSceneComponents" : [],
+      "RootComponent" : {
+        "Children" : [{
+            "Children" : [],
+            "ClassName" : "UBillboardComponent",
+            "Properties" : {
+              "Blocks Movement" : true,
+              "Cast Shadow" : true,
+              "Generate Overlap Events" : true,
+              "Height" : 1.000000,
+              "Location" : [0.000000, 0.000000, 0.000000],
+              "Material" : {
+                "Path" : "Asset/Materials/Editor/DirectionalLight.mat"
+              },
+              "Rotation" : [-0.000000, 0.000000, 0.000000],
+              "Scale" : [1.000000, 1.000000, 1.000000],
+              "Two Sided Shadow" : false,
+              "Visible" : true,
+              "Width" : 1.000000,
+              "bEditorOnly" : true,
+              "bTickEnable" : true
+            },
+            "bEditorOnly" : true,
+            "bHiddenInComponentTree" : true
+          }],
+        "ClassName" : "UDirectionalLightComponent",
+        "Properties" : {
+          "Cast Shadows" : true,
+          "Color" : [1.000000, 1.000000, 1.000000, 1.000000],
+          "Intensity" : 1.000000,
+          "Location" : [1.561017, -1.358457, 2.992068],
+          "Rotation" : [45.000000, -175.100006, 0.000000],
+          "Scale" : [1.000000, 1.000000, 1.000000],
+          "Shadow Bias" : 0.015700,
+          "Shadow Normal Bias" : -0.002000,
+          "Shadow Resolution Scale" : 1.000000,
+          "Shadow Sharpen" : 0.670000,
+          "Shadow Slope Bias" : 0.000100,
+          "Visible" : true,
+          "bEditorOnly" : false,
+          "bTickEnable" : true
+        }
+      },
+      "Tags" : [],
+      "bVisible" : true
+    }],
+  "ClassName" : "UWorld",
+  "ContextHandle" : "NewScene",
+  "ContextName" : "New Scene",
+  "Name" : "Untitled",
+  "PerspectiveCamera" : {
+    "AspectRatio" : 1.571835,
+    "FOV" : 1.047198,
+    "FarClip" : 1000.000000,
+    "Location" : [5.862678, 1.707129, 2.586484],
+    "NearClip" : 0.100000,
+    "OrthoWidth" : 10.000000,
+    "Orthographic" : false,
+    "Rotation" : [0.000000, 3.615444, -156.600143]
+  },
+  "Version" : 2,
+  "WorldType" : "Editor"
+}
