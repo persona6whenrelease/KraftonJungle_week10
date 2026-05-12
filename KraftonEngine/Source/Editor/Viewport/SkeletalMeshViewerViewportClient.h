@@ -50,6 +50,7 @@ public:
 
 	// 미리보기 메시를 트래킹 — bone proxy를 mesh component 자식으로 부착
 	void SetTrackedMesh(USkeletalMeshComponent* InMesh);
+	USkeletalMeshComponent* GetTrackedMesh() const { return TrackedMesh; }
 
 	// Bone 선택 — proxy 동기화 + gizmo target 설정. -1이면 선택 해제.
 	void SelectBone(int32 BoneIndex);
@@ -58,12 +59,23 @@ public:
 	// 뷰포트 클릭 좌표 변환용 — 매 프레임 위젯이 갱신
 	void SetViewportRect(float ScreenX, float ScreenY, float Width, float Height);
 
+	// Picking 진단 로그 토글 — toolbar 버튼에서 제어
+	bool IsLogPickingDiagnosticEnabled() const { return bLogPickingDiagnostic; }
+	void SetLogPickingDiagnosticEnabled(bool bEnabled) { bLogPickingDiagnostic = bEnabled; }
+
+	// Corner gizmo (우상단 오버레이) — viewport gizmo와 동일 본을 조작하는 2D 보조 컨트롤
+	bool IsCornerGizmoHolding() const { return CornerActiveAxis >= 0; }
+	void RenderCornerGizmoAndHandleInput();
+
 	void Tick(float DeltaTime, bool bViewportHovered, bool bIsCapturing, FInputFrame& InputFrame);
 
 private:
 	void SyncProxyFromBone(int32 BoneIndex);
 	void ApplyGizmoEditToBone();
 	int32 ResolveBoneFromTriangle(const FSkeletalMesh* MeshAsset, int32 FaceIndex) const;
+
+	bool IsMouseInCornerGizmoArea() const;
+	void ApplyCornerGizmoDelta(int32 Axis, float Dx, float Dy);
 
 private:
 	UCameraComponent* Camera = nullptr;
@@ -82,4 +94,10 @@ private:
 	float ViewportHeight = 0.0f;
 
 	bool bGizmoSceneRegistered = false;
+	bool bLogPickingDiagnostic = false;
+
+	// Corner gizmo state
+	int32 CornerActiveAxis = -1;       // -1=none, 0=X, 1=Y, 2=Z, 3=Center(uniform)
+	float CornerLastMouseX = 0.0f;
+	float CornerLastMouseY = 0.0f;
 };

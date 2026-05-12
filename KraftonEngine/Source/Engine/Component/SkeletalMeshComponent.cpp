@@ -10,7 +10,10 @@ void USkeletalMeshComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 {
 	USkinnedMeshComponent::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-//	ApplyDebugRandomBoneAnimation(DeltaTime);
+	if (bDebugRandomBoneAnimEnabled)
+	{
+		ApplyDebugRandomBoneAnimation(DeltaTime);
+	}
 }
 
 void USkeletalMeshComponent::ApplyDebugRandomBoneAnimation(float DeltaTime)

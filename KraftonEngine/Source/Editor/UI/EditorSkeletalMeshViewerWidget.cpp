@@ -249,6 +249,57 @@ void RenderViewerTransformToolbar(FSkeletalMeshViewerViewportClient* PreviewClie
 
 	ImGui::PopStyleColor(3);
 
+	// Debug bone animation 토글 — viewer 전용. anim ON 동안 gizmo 조작 무효.
+	USkeletalMeshComponent* TrackedMesh = PreviewClient ? PreviewClient->GetTrackedMesh() : nullptr;
+	ImGui::SameLine(0.0f, GroupSpacing);
+	if (!TrackedMesh)
+	{
+		ImGui::BeginDisabled();
+	}
+	const bool bAnimEnabled = TrackedMesh && TrackedMesh->IsDebugRandomBoneAnimEnabled();
+	if (bAnimEnabled)
+	{
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.5f, 0.8f, 1.0f));
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.38f, 0.58f, 0.88f, 1.0f));
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.22f, 0.42f, 0.72f, 1.0f));
+	}
+	if (ImGui::Button("Anim"))
+	{
+		if (TrackedMesh)
+		{
+			TrackedMesh->SetDebugRandomBoneAnimEnabled(!bAnimEnabled);
+		}
+	}
+	if (bAnimEnabled)
+	{
+		ImGui::PopStyleColor(3);
+	}
+	if (!TrackedMesh)
+	{
+		ImGui::EndDisabled();
+	}
+
+	// Picking 진단 로그 토글 — 디버깅용. 활성 시 LMB 클릭마다 [SkelViewerPick] 로그 출력.
+	const bool bLogEnabled = PreviewClient && PreviewClient->IsLogPickingDiagnosticEnabled();
+	ImGui::SameLine(0.0f, ButtonSpacing);
+	if (bLogEnabled)
+	{
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.5f, 0.8f, 1.0f));
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.38f, 0.58f, 0.88f, 1.0f));
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.22f, 0.42f, 0.72f, 1.0f));
+	}
+	if (ImGui::Button("Log"))
+	{
+		if (PreviewClient)
+		{
+			PreviewClient->SetLogPickingDiagnosticEnabled(!bLogEnabled);
+		}
+	}
+	if (bLogEnabled)
+	{
+		ImGui::PopStyleColor(3);
+	}
+
 	ImGui::SameLine(0.0f, GroupSpacing);
 	const bool bWorldCoord = Gizmo ? Gizmo->IsWorldSpace() : true;
 	if (bWorldCoord)
@@ -955,6 +1006,12 @@ void FEditorSkeletalMeshViewerWidget::RenderViewportPanel(float DeltaTime)
 			DrawViewerMeshStatsOverlay(
 				SelectedMesh ? SelectedMesh->GetSkeletalMeshAsset() : nullptr,
 				ViewportMin);
+
+			// Corner gizmo overlay (우상단 2D gizmo). Viewport gizmo와 동일한 본을 조작.
+			if (PreviewViewportClient)
+			{
+				PreviewViewportClient->RenderCornerGizmoAndHandleInput();
+			}
 		}
 		else
 		{

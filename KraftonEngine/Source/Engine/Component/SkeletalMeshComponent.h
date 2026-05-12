@@ -10,9 +10,13 @@ public:
 	USkeletalMeshComponent() = default;
 	~USkeletalMeshComponent() override = default;
 
+	bool IsDebugRandomBoneAnimEnabled() const { return bDebugRandomBoneAnimEnabled; }
+	void SetDebugRandomBoneAnimEnabled(bool bEnabled) { bDebugRandomBoneAnimEnabled = bEnabled; }
+
 protected:
 	void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction& ThisTickFunction) override;
 	void ApplyDebugRandomBoneAnimation(float DeltaTime);
 
 	float DebugBoneAnimTime = 0.0f;
+	bool bDebugRandomBoneAnimEnabled = false;
 };
