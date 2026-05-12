@@ -198,13 +198,6 @@ void FEditorSkeletalMeshViewerWidget::UpdateInput(float DeltaTime)
 	}
 
 	bPreviewViewportWantsKeyboardCapture = bPreviewViewportWantsMouseCapture && bRightMouseDown;
-
-	const bool bViewportUsesInput = bMouseInPreviewViewport || bPreviewViewportWantsMouseCapture;
-	PreviewViewportClient->Tick(
-		DeltaTime,
-		bViewportUsesInput,
-		bPreviewViewportWantsMouseCapture,
-		InputFrame);
 }
 
 bool FEditorSkeletalMeshViewerWidget::OpenFbxAsset(const FString& FbxPath)
@@ -405,6 +398,35 @@ void FEditorSkeletalMeshViewerWidget::RenderViewportPanel(float DeltaTime)
 
 	if (PreviewViewport && PreviewViewportClient && EditorEngine)
 	{
+		const bool bViewportHovered = ImGui::IsWindowHovered();
+		const bool bRightMouseDown = ImGui::IsMouseDown(ImGuiMouseButton_Right);
+		const bool bMiddleMouseDown = ImGui::IsMouseDown(ImGuiMouseButton_Middle);
+		const bool bAnyCaptureButtonDown = bRightMouseDown || bMiddleMouseDown;
+
+		if (!bPreviewViewportWantsMouseCapture)
+		{
+			if (bViewportHovered &&
+				(ImGui::IsMouseClicked(ImGuiMouseButton_Right) ||
+					ImGui::IsMouseClicked(ImGuiMouseButton_Middle)))
+			{
+				bPreviewViewportWantsMouseCapture = true;
+			}
+		}
+		else if (!bAnyCaptureButtonDown)
+		{
+			bPreviewViewportWantsMouseCapture = false;
+		}
+
+		bPreviewViewportWantsKeyboardCapture =
+			bPreviewViewportWantsMouseCapture && bRightMouseDown;
+
+		FInputFrame InputFrame(InputSystem::Get().MakeSnapshot());
+		PreviewViewportClient->Tick(
+			DeltaTime,
+			bViewportHovered || bPreviewViewportWantsMouseCapture,
+			bPreviewViewportWantsMouseCapture,
+			InputFrame);
+
 		PreviewViewport->RequestResize(
 			static_cast<uint32>(ViewportSize.x),
 			static_cast<uint32>(ViewportSize.y));

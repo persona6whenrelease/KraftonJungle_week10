@@ -4,6 +4,7 @@
 #include "Component/CameraComponent.h"
 #include "Engine/Input/InputFrame.h"
 #include "Mesh/SkeletalMeshAsset.h"
+#include "ImGui/imgui.h"
 
 void FSkeletalMeshViewerViewportClient::Initialize()
 {
@@ -75,7 +76,10 @@ void FSkeletalMeshViewerViewportClient::Tick(
 		return;
 	}
 
-	const float MoveSpeed = InputFrame.IsDown(VK_SHIFT) ? 35.0f : 10.0f;
+	const float MoveSpeed =
+		(ImGui::IsKeyDown(ImGuiKey_LeftShift) || ImGui::IsKeyDown(ImGuiKey_RightShift))
+			? 35.0f
+			: 10.0f;
 	const float RotateSpeed = 0.15f;
 	const float PanSpeed = 0.015f;
 	const float ZoomSpeed = 0.35f;
@@ -95,8 +99,10 @@ void FSkeletalMeshViewerViewportClient::Tick(
 		return;
 	}
 
-	const bool bRightMouseDown = InputFrame.IsDown(VK_RBUTTON);
-	const bool bMiddleMouseDown = InputFrame.IsDown(VK_MBUTTON);
+	const bool bRightMouseDown =
+		InputFrame.IsDown(VK_RBUTTON) || ImGui::IsMouseDown(ImGuiMouseButton_Right);
+	const bool bMiddleMouseDown =
+		InputFrame.IsDown(VK_MBUTTON) || ImGui::IsMouseDown(ImGuiMouseButton_Middle);
 
 	if (bRightMouseDown)
 	{
@@ -112,27 +118,27 @@ void FSkeletalMeshViewerViewportClient::Tick(
 
 		FVector MoveDelta = FVector::ZeroVector;
 
-		if (InputFrame.IsDown('W'))
+		if (ImGui::IsKeyDown(ImGuiKey_W))
 		{
 			MoveDelta += Camera->GetForwardVector();
 		}
-		if (InputFrame.IsDown('S'))
+		if (ImGui::IsKeyDown(ImGuiKey_S))
 		{
 			MoveDelta -= Camera->GetForwardVector();
 		}
-		if (InputFrame.IsDown('D'))
+		if (ImGui::IsKeyDown(ImGuiKey_D))
 		{
 			MoveDelta += Camera->GetRightVector();
 		}
-		if (InputFrame.IsDown('A'))
+		if (ImGui::IsKeyDown(ImGuiKey_A))
 		{
 			MoveDelta -= Camera->GetRightVector();
 		}
-		if (InputFrame.IsDown('E'))
+		if (ImGui::IsKeyDown(ImGuiKey_E))
 		{
 			MoveDelta += FVector::UpVector;
 		}
-		if (InputFrame.IsDown('Q'))
+		if (ImGui::IsKeyDown(ImGuiKey_Q))
 		{
 			MoveDelta -= FVector::UpVector;
 		}
