@@ -398,8 +398,6 @@ void FEditorContentBrowserWidget::DrawContents()
 
 		ImGui::EndPopup();
 	}
-
-	ImGui::SetCursorPos(ImVec2(startPos.x, BrowserContext.ContentGridMaxBottomY));
 }
 
 TArray<FContentItem> FEditorContentBrowserWidget::ReadDirectory(std::wstring Path)

@@ -613,7 +613,7 @@ void FBXElement::Import(ContentBrowserContext& Context)
 		AddMaterialElement(MaterialPath, InternalElements);
 	}
 
-	bExpanded = !InternalElements.empty();
+	//bExpanded = !InternalElements.empty();
 }
 
 void MaterialElement::OnLeftClicked(ContentBrowserContext& Context)
@@ -653,6 +653,14 @@ void ExpandableElement::Render(ContentBrowserContext& Context)
 	if (bExpanded)
 	{
 		DrawExpandedPanel(Context);
+	}
+}
+
+void ExpandableElement::OnRightClicked(ContentBrowserContext& Context)
+{
+	if (ImGui::MenuItem(bExpanded ? "Collapse" : "Expand"))
+	{
+		bExpanded = !bExpanded;
 	}
 }
 
@@ -711,15 +719,37 @@ void ExpandableElement::DrawInternalElements(ContentBrowserContext& Context)
 	}
 }
 
+void ImportableElement::Render(ContentBrowserContext& Context)
+{
+	if(InternalElements.size() <= 0 && bIsImported)
+		Import(Context);
+
+	ExpandableElement::Render(Context);
+}
+
 void ImportableElement::OnRightClicked(ContentBrowserContext& Context)
 {
 	ContentBrowserElement::OnRightClicked(Context);
-	if (ImGui::MenuItem("Import"))
-	{
-		InternalElements.clear();
-		Import(Context);
 
-		bIsImported = HasImportedBinary();
-		Icon.Reset();
+	if (IsImported())
+	{
+		ExpandableElement::OnRightClicked(Context);
 	}
+	else if (ImGui::MenuItem("Import"))
+		{
+			InternalElements.clear();
+			Import(Context);
+
+			bIsImported = HasImportedBinary();
+			Icon.Reset();
+		}
+}
+
+bool ImportableElement::IsImported()
+{
+	if (bIsImported)
+		return true;
+
+	bIsImported = HasImportedBinary();
+	return bIsImported;
 }

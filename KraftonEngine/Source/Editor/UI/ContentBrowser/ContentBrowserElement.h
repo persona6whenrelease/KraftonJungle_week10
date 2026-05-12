@@ -51,6 +51,7 @@ class ExpandableElement : public ContentBrowserElement
 {
 public:
 	virtual void Render(ContentBrowserContext& Context) override;
+	virtual void OnRightClicked(ContentBrowserContext& Context) override;
 
 private:
 	void DrawExpandButton(ContentBrowserContext& Context);
@@ -102,8 +103,9 @@ public:
 class ImportableElement : public ExpandableElement
 {
 public:
+	virtual void Render(ContentBrowserContext& Context) override;
 	virtual void OnRightClicked(ContentBrowserContext& Context) override;
-	bool IsImported() const { return bIsImported || HasImportedBinary(); }
+	bool IsImported();
 
 protected:
 	virtual void Import(ContentBrowserContext& Context) = 0;
