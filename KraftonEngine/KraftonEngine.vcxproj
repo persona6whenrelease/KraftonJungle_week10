@@ -320,7 +320,7 @@
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
-      <ClCompile Include="Source\Editor\Viewport\SkeletalMeshViewerViewportClient.cpp"/>
+    <ClCompile Include="Source\Editor\Viewport\SkeletalMeshViewerViewportClient.cpp" />
     <ClCompile Include="Source\Engine\Mesh\FBX\FbxMaterialImportUtils.cpp" />
     <ClCompile Include="Source\Engine\Mesh\FBX\FbxMeshGeometryBuilder.cpp" />
     <ClCompile Include="Source\Engine\Mesh\FBX\FbxMetaParser.cpp" />
@@ -331,6 +331,7 @@
     <ClCompile Include="Source\Engine\Mesh\FBX\FBXUtil.cpp" />
     <ClCompile Include="Source\Engine\Mesh\FBX\FBXImporter.cpp" />
     <ClCompile Include="Source\Engine\Mesh\FBX\FBXManager.cpp" />
+    <ClCompile Include="Source\Engine\Mesh\MeshManager.cpp" />
     <ClCompile Include="Source\Editor\EditorEngine.cpp" />
     <ClCompile Include="Source\Editor\EditorRenderPipeline.cpp" />
     <ClCompile Include="Source\Editor\Packaging\GamePackageAssetCollector.cpp" />
@@ -585,7 +586,7 @@
     <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
-      <ClInclude Include="Source\Editor\Viewport\SkeletalMeshViewerViewportClient.h"/>
+    <ClInclude Include="Source\Editor\Viewport\SkeletalMeshViewerViewportClient.h" />
     <ClInclude Include="Source\Engine\Mesh\FBX\FbxMaterialImportUtils.h" />
     <ClInclude Include="Source\Engine\Mesh\FBX\FbxMeshGeometryBuilder.h" />
     <ClInclude Include="Source\Engine\Mesh\FBX\FbxMetaParser.h" />
@@ -734,6 +735,7 @@
     <ClInclude Include="Source\Engine\Math\Vector.h" />
     <ClInclude Include="Source\Engine\Mesh\MeshSimplifier.h" />
     <ClInclude Include="Source\Engine\Mesh\MeshCommonTypes.h" />
+    <ClInclude Include="Source\Engine\Mesh\MeshManager.h" />
     <ClInclude Include="Source\Engine\Mesh\ObjImporter.h" />
     <ClInclude Include="Source\Engine\Mesh\ObjManager.h" />
     <ClInclude Include="Source\Engine\Mesh\SkeletalMesh.h" />

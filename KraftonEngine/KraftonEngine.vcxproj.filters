@@ -686,6 +686,9 @@
     <ClCompile Include="Source\Engine\Mesh\FBX\FBXManager.cpp">
       <Filter>Source\Engine\Mesh</Filter>
     </ClCompile>
+    <ClCompile Include="Source\Engine\Mesh\MeshManager.cpp">
+      <Filter>Source\Engine\Mesh</Filter>
+    </ClCompile>
     <ClCompile Include="Source\Engine\Mesh\SkeletalMesh.cpp">
       <Filter>Source\Engine\Mesh</Filter>
     </ClCompile>
@@ -1095,6 +1098,7 @@
     <ClCompile Include="Source\Engine\Mesh\FBX\FbxSkeletalMeshPartParser.cpp" />
     <ClCompile Include="Source\Engine\Mesh\FBX\FbxStaticMeshParser.cpp" />
     <ClCompile Include="Source\Engine\Mesh\FBX\FBXSceneAsset.cpp" />
+    <ClCompile Include="Source\Editor\Viewport\SkeletalMeshViewerViewportClient.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Source\Editor\EditorEngine.h">
@@ -1515,6 +1519,9 @@
       <Filter>Source\Engine\Mesh</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Mesh\MeshCommonTypes.h">
+      <Filter>Source\Engine\Mesh</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\Mesh\MeshManager.h">
       <Filter>Source\Engine\Mesh</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\Mesh\SkeletalMesh.h">
@@ -2358,6 +2365,7 @@
     <ClInclude Include="Source\Engine\Mesh\FBX\FbxSkeletalMeshPartParser.h" />
     <ClInclude Include="Source\Engine\Mesh\FBX\FbxStaticMeshParser.h" />
     <ClInclude Include="Source\Engine\Mesh\FBX\FBXSceneAsset.h" />
+    <ClInclude Include="Source\Editor\Viewport\SkeletalMeshViewerViewportClient.h" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="KraftonEngine.rc" />

@@ -39,7 +39,7 @@
 #include "Serialization/PrefabSaveManager.h"
 
 #include "GameFramework/StaticMeshActor.h"
-#include "Mesh/FBX/FBXManager.h"
+#include "Mesh/MeshManager.h"
 #include "Mesh/FBX/FBXSceneAsset.h"
 #include "Component/SkeletalMeshComponent.h"
 #include <algorithm>
@@ -1058,7 +1058,7 @@ void FLevelViewportLayout::RenderViewportUI(float DeltaTime)
 				FContentItem ContentItem = *reinterpret_cast<const FContentItem*>(payload->Data);
 
 				const FString FbxPath = FPaths::ToUtf8(ContentItem.Path);
-				UFBXSceneAsset* SceneAsset = FFBXManager::LoadFbxScene(FbxPath);
+				UFBXSceneAsset* SceneAsset = FMeshManager::LoadFbxScene(FbxPath);
 				if (!SceneAsset || SceneAsset->GetSceneComponents().empty())
 				{
 					UE_LOG("[Viewport] Failed to load FBX scene for drag-drop: %s",

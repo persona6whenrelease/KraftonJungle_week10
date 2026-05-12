@@ -1,7 +1,7 @@
 #include "Editor/UI/EditorSkeletalMeshViewerWidget.h"
 
 #include "Editor/Settings/EditorSettings.h"
-#include "Mesh/FBX/FBXManager.h"
+#include "Mesh/MeshManager.h"
 #include "Mesh/FBX/FBXSceneAsset.h"
 #include "Mesh/SkeletalMesh.h"
 #include "Mesh/SkeletalMeshAsset.h"
@@ -88,6 +88,7 @@ void FEditorSkeletalMeshViewerWidget::EnsurePreviewScene()
 	PreviewWorld->InitWorld();
 
 	PreviewActor = PreviewWorld->SpawnActor<AActor>();
+	PreviewActor->bTickInEditor = true;
 
 	PreviewMeshComponent = PreviewActor->AddComponent<USkeletalMeshComponent>();
 	PreviewActor->SetRootComponent(PreviewMeshComponent);
@@ -162,6 +163,16 @@ void FEditorSkeletalMeshViewerWidget::SetPreviewMesh(USkeletalMesh* InMesh, bool
 	}
 }
 
+void FEditorSkeletalMeshViewerWidget::TickPreviewScene(float DeltaTime)
+{
+	if (!PreviewWorld)
+	{
+		return;
+	}
+
+	PreviewWorld->Tick(DeltaTime, DeltaTime, LEVELTICK_ViewportsOnly);
+}
+
 void FEditorSkeletalMeshViewerWidget::UpdateInput(float DeltaTime)
 {
 	if (!bHasPreviewViewportRect || !PreviewViewportClient)
@@ -203,7 +214,7 @@ void FEditorSkeletalMeshViewerWidget::UpdateInput(float DeltaTime)
 bool FEditorSkeletalMeshViewerWidget::OpenFbxAsset(const FString& FbxPath)
 {
 	CurrentFbxPath = FbxPath;
-	CurrentSceneAsset = FFBXManager::LoadFbxScene(FbxPath);
+	CurrentSceneAsset = FMeshManager::LoadFbxScene(FbxPath);
 	SelectedResourceIndex = -1;
 	SelectedBoneIndex = -1;
 
@@ -426,6 +437,7 @@ void FEditorSkeletalMeshViewerWidget::RenderViewportPanel(float DeltaTime)
 			bViewportHovered || bPreviewViewportWantsMouseCapture,
 			bPreviewViewportWantsMouseCapture,
 			InputFrame);
+		TickPreviewScene(DeltaTime);
 
 		PreviewViewport->RequestResize(
 			static_cast<uint32>(ViewportSize.x),

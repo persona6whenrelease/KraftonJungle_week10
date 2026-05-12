@@ -3,6 +3,7 @@
 #include "Core/Log.h"
 #include "Engine/Platform/Paths.h"
 #include "Engine/Runtime/Engine.h"
+#include "Mesh/MeshManager.h"
 #include "Mesh/FBX/FBXImporter.h"
 #include "Mesh/FBX/FBXSceneAsset.h"
 #include "Mesh/SkeletalMesh.h"
@@ -22,9 +23,6 @@ TArray<FMeshAssetListItem> FFBXManager::AvailableFbxFiles;
 
 namespace
 {
-	constexpr uint32 FbxSceneCacheMagic = 0x4E435346u; // "FSCN"
-	constexpr uint32 FbxSceneCacheVersion = 1u;
-
 	struct FFBXSceneCacheHeader
 	{
 		uint32 Magic = 0;
@@ -54,16 +52,6 @@ namespace
 		case EFBXSceneCacheStatus::CacheInvalid: return "cache rebuild";
 		case EFBXSceneCacheStatus::RebuildFailed: return "cache rebuild failed";
 		default: return "unknown";
-		}
-	}
-
-	void EnsureFbxSceneCacheDirExists()
-	{
-		static bool bCreated = false;
-		if (!bCreated)
-		{
-			FPaths::CreateDir(FPaths::RootDir() + L"Asset\\FBXSceneCache\\");
-			bCreated = true;
 		}
 	}
 
@@ -152,23 +140,9 @@ namespace
 		Ar << Header.SourceTimestamp;
 	}
 
-	FString GetFbxSceneCacheFilePath(const FString& SourcePath)
-	{
-		EnsureFbxSceneCacheDirExists();
-
-		std::wstring SourceDiskPath;
-		FString ResolveError;
-		const bool bResolvedSource = FPaths::TryResolvePackagePath(SourcePath, SourceDiskPath, &ResolveError);
-		const std::filesystem::path SrcPath(bResolvedSource ? SourceDiskPath : FPaths::ToWide(SourcePath));
-
-		std::filesystem::path RelPath = std::filesystem::path(L"Asset\\FBXSceneCache") / SrcPath.stem();
-		RelPath += L".fbxscene.bin";
-		return FPaths::ToUtf8(RelPath.generic_wstring());
-	}
-
 	bool IsCacheHeaderUsable(const FString& RequestedPath, const FFBXSceneCacheHeader& Header)
 	{
-		if (Header.Magic != FbxSceneCacheMagic || Header.Version != FbxSceneCacheVersion)
+		if (Header.Magic != FMeshManager::FbxSceneCacheMagic || Header.Version != FMeshManager::FbxSceneCacheVersion)
 		{
 			return false;
 		}
@@ -183,7 +157,7 @@ namespace
 
 	bool TryLoadSceneFromCache(const FString& SourcePath, FFBXScene& OutScene, EFBXSceneCacheStatus& OutStatus)
 	{
-		const FString CachePath = GetFbxSceneCacheFilePath(SourcePath);
+		const FString CachePath = FMeshManager::GetFbxSceneCacheFilePath(SourcePath);
 		const std::filesystem::path CacheDiskPath(ResolveDiskPath(CachePath));
 		if (!std::filesystem::exists(CacheDiskPath))
 		{
@@ -200,7 +174,7 @@ namespace
 
 		FFBXSceneCacheHeader Header;
 		SerializeCacheHeader(Reader, Header);
-		if (Header.Magic != FbxSceneCacheMagic || Header.Version != FbxSceneCacheVersion)
+		if (Header.Magic != FMeshManager::FbxSceneCacheMagic || Header.Version != FMeshManager::FbxSceneCacheVersion)
 		{
 			OutStatus = EFBXSceneCacheStatus::CacheInvalid;
 			return false;
@@ -220,7 +194,7 @@ namespace
 
 	void SaveSceneToCache(FFBXScene& Scene)
 	{
-		const FString CachePath = GetFbxSceneCacheFilePath(Scene.SourcePath);
+		const FString CachePath = FMeshManager::GetFbxSceneCacheFilePath(Scene.SourcePath);
 		FWindowsBinWriter Writer(CachePath);
 		if (!Writer.IsValid())
 		{
@@ -229,8 +203,8 @@ namespace
 		}
 
 		FFBXSceneCacheHeader Header;
-		Header.Magic = FbxSceneCacheMagic;
-		Header.Version = FbxSceneCacheVersion;
+		Header.Magic = FMeshManager::FbxSceneCacheMagic;
+		Header.Version = FMeshManager::FbxSceneCacheVersion;
 		Header.SourcePath = NormalizePackagePath(Scene.SourcePath);
 		Header.SourceTimestamp = Scene.SourceTimestamp;
 		SerializeCacheHeader(Writer, Header);
