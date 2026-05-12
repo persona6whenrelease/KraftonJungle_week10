@@ -228,7 +228,11 @@ namespace {
 		const float PanSpeed = 0.015f;
 		const float ZoomSpeed = 0.35f;
 
-		const float ScrollNotches = InputFrame.GetScrollNotches();
+		float ScrollNotches = InputFrame.GetScrollNotches();
+		if (ScrollNotches == 0.0f)
+		{
+			ScrollNotches = ImGui::GetIO().MouseWheel;
+		}
 		if (bViewportHovered && ScrollNotches != 0.0f)
 		{
 			Camera->SetWorldLocation(

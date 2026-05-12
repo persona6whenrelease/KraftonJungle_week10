@@ -93,6 +93,8 @@ struct FFbxBoneMeta
 	TArray<int32> ChildBoneIds;
 	int32 SkeletonId = -1;
 	int32 SkeletonBoneIndex = -1;
+	FMatrix ModelLocalMatrix = FMatrix::Identity;
+	FMatrix ModelGlobalMatrix = FMatrix::Identity;
 	FMatrix BindGlobalMatrix = FMatrix::Identity;
 	FMatrix InvBindGlobalMatrix = FMatrix::Identity;
 	bool bReferencedByCluster = false;

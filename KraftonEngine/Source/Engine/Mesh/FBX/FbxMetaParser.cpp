@@ -1219,7 +1219,9 @@ int32 FFbxMetaParser::RegisterBoneNode(FbxNode* Node, bool bReferencedByCluster,
 	BoneMeta.Name = FBXUtil::GetNodeName(Node);
 	BoneMeta.bReferencedByCluster = bReferencedByCluster;
 	BoneMeta.bInsertedAsParentChain = bInsertedAsParentChain;
-	BoneMeta.BindGlobalMatrix = FBXUtil::ConvertFbxMatrix(Node->EvaluateGlobalTransform());
+	BoneMeta.ModelLocalMatrix = FBXUtil::ConvertFbxMatrix(Node->EvaluateLocalTransform());
+	BoneMeta.ModelGlobalMatrix = FBXUtil::ConvertFbxMatrix(Node->EvaluateGlobalTransform());
+	BoneMeta.BindGlobalMatrix = BoneMeta.ModelGlobalMatrix;
 	BoneMeta.InvBindGlobalMatrix = BoneMeta.BindGlobalMatrix.GetInverse();
 
 	auto NodeIt = ImportMeta.NodeToNodeId.find(Node);

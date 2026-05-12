@@ -2,11 +2,31 @@
 #include <cmath>
 #include "Core/Log.h"
 
+namespace
+{
+	// 창 핸들이 현재 실행 중인 내 프로세스가 만든 창인지 검사
+	bool IsWindowFromCurrentProcess(HWND Window)
+	{
+		if (!Window)
+		{
+			return false;
+		}
+
+		DWORD WindowProcessId = 0;
+		GetWindowThreadProcessId(Window, &WindowProcessId);
+		return WindowProcessId == GetCurrentProcessId();
+	}
+}
+
 void InputSystem::Tick()
 {
     // 윈도우 포커스가 없으면 모든 입력 상태 해제
     HWND Foreground = GetForegroundWindow();
-    bWindowFocused = !OwnerHWnd || (Foreground == OwnerHWnd) || IsChild(OwnerHWnd, Foreground);
+    bWindowFocused =
+	    !OwnerHWnd ||
+	    (Foreground == OwnerHWnd) ||
+	    IsChild(OwnerHWnd, Foreground) ||
+	    IsWindowFromCurrentProcess(Foreground);
     if (!bWindowFocused)
     {
         ResetAllKeyStates();

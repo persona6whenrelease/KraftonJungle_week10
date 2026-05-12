@@ -332,12 +332,12 @@ void DrawViewerShowFlagsControls(FViewportRenderOptions& Opts, const char* Table
 	}
 }
 
-void RenderViewerTransformToolbar(UEditorEngine* EditorEngine)
+void RenderViewerTransformToolbar(FSkeletalMeshViewerViewportClient* PreviewClient, UEditorEngine* EditorEngine)
 {
 	constexpr float ButtonSpacing = 4.0f;
 	constexpr float GroupSpacing = 12.0f;
 
-	UGizmoComponent* Gizmo = EditorEngine ? EditorEngine->GetGizmo() : nullptr;
+	UGizmoComponent* Gizmo = PreviewClient ? PreviewClient->GetBoneSelectionManager().GetGizmo() : nullptr;
 
 	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
 	ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1.0f, 1.0f, 1.0f, 0.15f));
@@ -404,6 +404,10 @@ void RenderViewerTransformToolbar(UEditorEngine* EditorEngine)
 		{
 			Settings.CoordSystem = bWorldCoord ? EEditorCoordSystem::Local : EEditorCoordSystem::World;
 		}
+		if (EditorEngine)
+		{
+			EditorEngine->ApplyTransformSettingsToGizmo(Gizmo);
+		}
 	}
 	if (bWorldCoord)
 	{
@@ -450,7 +454,7 @@ void RenderViewerTransformToolbar(UEditorEngine* EditorEngine)
 
 	if (EditorEngine && (bSnapChanged || Gizmo))
 	{
-		EditorEngine->ApplyTransformSettingsToGizmo();
+		EditorEngine->ApplyTransformSettingsToGizmo(Gizmo);
 	}
 }
 
@@ -482,7 +486,7 @@ void RenderViewerViewportToolbar(FSkeletalMeshViewerViewportClient* PreviewClien
 
 	const float RowStartX = ImGui::GetCursorPosX();
 	const float RowRightX = RowStartX + ImGui::GetContentRegionAvail().x;
-	RenderViewerTransformToolbar(Cast<UEditorEngine>(GEngine));
+	RenderViewerTransformToolbar(PreviewClient, Cast<UEditorEngine>(GEngine));
 
 	const float RightToolbarWidth =
 		CalcViewerTextButtonWidth(CurrentTypeName) +
@@ -1009,6 +1013,14 @@ void FEditorSkeletalMeshViewerWidget::RenderViewportPanel(float DeltaTime)
 	PreviewViewportMin = ViewportMin;
 	PreviewViewportMax = ImVec2(ViewportMin.x + ViewportSize.x, ViewportMin.y + ViewportSize.y);
 	bHasPreviewViewportRect = true;
+	ImGui::InvisibleButton(
+		"##SkeletalMeshPreviewViewportInput",
+		ViewportSize,
+		ImGuiButtonFlags_MouseButtonLeft |
+		ImGuiButtonFlags_MouseButtonRight |
+		ImGuiButtonFlags_MouseButtonMiddle);
+	const bool bViewportInputHovered = ImGui::IsItemHovered();
+	const bool bViewportInputActive = ImGui::IsItemActive();
 
 	// 에디터 메인 뷰포트에서 액터를 선택하는 등 외부 동작 후 preview의 SceneProxy가
 	// 누락되는 케이스 방어 — 컴포넌트 상태가 어긋났으면 매 프레임 자가 복구한다.
@@ -1037,8 +1049,10 @@ void FEditorSkeletalMeshViewerWidget::RenderViewportPanel(float DeltaTime)
 	{
 		const ImVec2 MousePos = ImGui::GetIO().MousePos;
 		const bool bViewportHovered =
-			MousePos.x >= PreviewViewportMin.x && MousePos.x <= PreviewViewportMax.x &&
-			MousePos.y >= PreviewViewportMin.y && MousePos.y <= PreviewViewportMax.y;
+			bViewportInputHovered ||
+			bViewportInputActive ||
+			(MousePos.x >= PreviewViewportMin.x && MousePos.x <= PreviewViewportMax.x &&
+				MousePos.y >= PreviewViewportMin.y && MousePos.y <= PreviewViewportMax.y);
 		const bool bRightMouseDown = ImGui::IsMouseDown(ImGuiMouseButton_Right);
 		const bool bMiddleMouseDown = ImGui::IsMouseDown(ImGuiMouseButton_Middle);
 		const bool bAnyCaptureButtonDown = bRightMouseDown || bMiddleMouseDown;
@@ -1086,7 +1100,6 @@ void FEditorSkeletalMeshViewerWidget::RenderViewportPanel(float DeltaTime)
 			FImGuiViewportPresenter::DrawInCurrentWindow(
 				PreviewViewport,
 				FViewportPresentationRect(ViewportMin.x, ViewportMin.y, ViewportSize.x, ViewportSize.y));
-			ImGui::Dummy(ViewportSize);
 			//// 임시 기즈모 디버그 라인
 			//DrawViewerGizmoDebugLines(
 			//	PreviewViewportClient,
