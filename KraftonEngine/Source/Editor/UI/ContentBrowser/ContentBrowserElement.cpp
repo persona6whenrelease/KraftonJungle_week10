@@ -28,6 +28,19 @@ namespace
 		return std::filesystem::path(FPaths::RootDir()) / Path;
 	}
 
+	bool PackageFileExists(const FString& PackagePath)
+	{
+		std::wstring DiskPath;
+		FString ResolveError;
+		if (!FPaths::TryResolvePackagePath(PackagePath, DiskPath, &ResolveError))
+		{
+			DiskPath = FPaths::ToWide(PackagePath);
+		}
+
+		const std::filesystem::path Path(DiskPath);
+		return std::filesystem::exists(Path) && std::filesystem::is_regular_file(Path);
+	}
+
 	//Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> TakeOwnedSnapshot(ID3D11ShaderResourceView* Snapshot)
 	//{
 	//	Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> Result;
@@ -502,12 +515,24 @@ void FBXElement::OnDoubleLeftClicked(ContentBrowserContext& Context)
 
 Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> FBXElement::GetElementIcon(ContentBrowserContext& Context)
 {
+	if (!HasImportedBinary())
+	{
+		return ContentBrowserElement::GetElementIcon(Context);
+	}
+
 	const FString FbxPath = FPaths::ToUtf8(ContentItem.Path.wstring());
 	UFBXSceneAsset* SceneAsset = FMeshManager::LoadFbxScene(FbxPath);
 
 	Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> Result;
 	Result.Attach(BuildFbxSceneSnapshot(Context, SceneAsset));
 	return Result;
+}
+
+bool FBXElement::HasImportedBinary() const
+{
+	const FString FbxPath = FPaths::ToUtf8(ContentItem.Path.wstring());
+	const FString CachePath = FMeshManager::GetFbxSceneCacheFilePath(FbxPath);
+	return PackageFileExists(CachePath);
 }
 
 void FBXElement::Import(ContentBrowserContext& Context)
@@ -694,6 +719,7 @@ void ImportableElement::OnRightClicked(ContentBrowserContext& Context)
 		InternalElements.clear();
 		Import(Context);
 
-		bIsImported = true;
+		bIsImported = HasImportedBinary();
+		Icon.Reset();
 	}
 }

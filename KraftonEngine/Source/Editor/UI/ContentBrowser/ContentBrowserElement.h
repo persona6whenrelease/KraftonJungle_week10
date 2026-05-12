@@ -103,10 +103,11 @@ class ImportableElement : public ExpandableElement
 {
 public:
 	virtual void OnRightClicked(ContentBrowserContext& Context) override;
-	bool IsImported() const { return bIsImported; }
+	bool IsImported() const { return bIsImported || HasImportedBinary(); }
 
 protected:
 	virtual void Import(ContentBrowserContext& Context) = 0;
+	virtual bool HasImportedBinary() const { return false; }
 
 private:
 	bool bIsImported = false;
@@ -121,6 +122,7 @@ public:
 
 protected:
 	void Import(ContentBrowserContext& Context) override;
+	bool HasImportedBinary() const override;
 };
 
 class PNGElement final : public ContentBrowserElement
