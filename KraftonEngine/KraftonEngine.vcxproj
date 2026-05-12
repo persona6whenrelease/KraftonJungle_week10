@@ -320,7 +320,9 @@
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="Source\Editor\Selection\BoneSelectionManager.cpp" />
     <ClCompile Include="Source\Editor\Viewport\SkeletalMeshViewerViewportClient.cpp" />
+    <ClCompile Include="Source\Engine\Component\SkeletalGizmoComponent.cpp" />
     <ClCompile Include="Source\Engine\Mesh\FBX\FbxMaterialImportUtils.cpp" />
     <ClCompile Include="Source\Engine\Mesh\FBX\FbxMeshGeometryBuilder.cpp" />
     <ClCompile Include="Source\Engine\Mesh\FBX\FbxMetaParser.cpp" />
@@ -587,7 +589,9 @@
     <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Source\Editor\Selection\BoneSelectionManager.h" />
     <ClInclude Include="Source\Editor\Viewport\SkeletalMeshViewerViewportClient.h" />
+    <ClInclude Include="Source\Engine\Component\SkeletalGizmoComponent.h" />
     <ClInclude Include="Source\Engine\Mesh\FBX\FbxMaterialImportUtils.h" />
     <ClInclude Include="Source\Engine\Mesh\FBX\FbxMeshGeometryBuilder.h" />
     <ClInclude Include="Source\Engine\Mesh\FBX\FbxMetaParser.h" />
@@ -890,6 +894,7 @@
     <ClInclude Include="Source\ObjViewer\ObjViewerPanel.h" />
     <ClInclude Include="Source\ObjViewer\ObjViewerRenderPipeline.h" />
     <ClInclude Include="Source\ObjViewer\ObjViewerViewportClient.h" />
+    <ClInclude Include="ThirdParty\FBXSDK\include\fbxsdk\scene\geometry\fbxskeleton.h" />
     <ClInclude Include="ThirdParty\ImGui\imconfig.h" />
     <ClInclude Include="ThirdParty\ImGui\imgui.h" />
     <ClInclude Include="ThirdParty\ImGui\imgui_impl_dx11.h" />
@@ -1278,6 +1283,9 @@
       <UseLibraryDependencyInputs>false</UseLibraryDependencyInputs>
       <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
     </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="Asset\Editor\Icons\icon_playInSelectedViewport_16x.png" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

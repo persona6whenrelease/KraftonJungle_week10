@@ -61,6 +61,11 @@ public:
 	void UpdateGizmoTransform();
 	float ComputeScreenSpaceScale(const FVector& CameraLocation, bool bIsOrtho = false, float OrthoWidth = 10.0f) const;
 	void ApplyScreenSpaceScaling(const FVector& CameraLocation, bool bIsOrtho = false, float OrthoWidth = 10.0f);
+	void SetScreenSpaceScaleOverride(float InScale);
+	void ClearScreenSpaceScaleOverride();
+	float GetScreenSpaceScaleForRender(const FVector& CameraLocation, bool bIsOrtho = false, float OrthoWidth = 10.0f) const;
+	void SetScreenSpacePickingRadii(float InAxisRadius, float InCenterRadius, float InRotateThickness);
+	void ClearScreenSpacePickingRadii();
 	void SetWorldSpace(bool bWorldSpace);
 	bool IsWorldSpace() const { return bIsWorldSpace; }
 	void SetSnapSettings(bool bTranslationEnabled, float InTranslationSnapSize,
@@ -84,6 +89,11 @@ public:
 	void SetTarget(USceneComponent* NewTarget);
 	void SetTarget(AActor* NewTargetActor);
 
+protected:
+	virtual void TranslateTarget(float DragAmount);
+	virtual void RotateTarget(float DragAmount);
+	virtual void ScaleTarget(float DragAmount);
+	void SetPreserveWorldLocationOnUpdate(bool bPreserve) { bPreserveWorldLocationOnUpdate = bPreserve; }
 private:
 	bool IntersectRayAxis(const FRay& Ray, FVector AxisEnd, float AxisScale, float& OutRayT);
 	bool IntersectRayRotationHandle(const FRay& Ray, int32 Axis, float& OutRayT) const;
@@ -94,9 +104,7 @@ private:
 	float ApplySnapToDragAmount(float DragAmount);
 	void ResetSnapAccumulation();
 	void ApplyWorldTranslationDelta(const FVector& WorldDelta);
-	void TranslateTarget(float DragAmount);
-	void RotateTarget(float DragAmount);
-	void ScaleTarget(float DragAmount);
+
 
 	void UpdateLinearDrag(const FRay& Ray);
 	void UpdateAngularDrag(const FRay& Ray);
@@ -127,6 +135,13 @@ private:
 	float LastAppliedSnappedDragAmount = 0.0f;
 	const FMeshData* MeshData = nullptr;
 	uint32 AxisMask = 0x7; // 비트 0=X, 1=Y, 2=Z — LineTrace용 (렌더링은 Proxy가 직접 계산)
+	bool bUseScreenSpaceScaleOverride = false;
+	float ScreenSpaceScaleOverride = 1.0f;
+	bool bUseScreenSpacePickingRadii = false;
+	float ScreenSpaceAxisPickRadius = 0.01f;
+	float ScreenSpaceCenterPickRadius = 0.01f;
+	float ScreenSpaceRotatePickThickness = 0.01f;
+	bool bPreserveWorldLocationOnUpdate = false;
 	FPrimitiveSceneProxy* InnerProxy = nullptr;	// GizmoInner 전용 프록시
 	FScene* RegisteredScene = nullptr;			// Actor 없이 독립 생성 시 사용
 };

@@ -141,7 +141,7 @@ bool UGizmoComponent::IntersectRayAxis(const FRay& Ray, FVector AxisEnd, float A
 	//기즈모 픽킹에 원기둥 크기를 반영합니다.
 	float ClickThreshold = Radius * AxisScale;
 	constexpr float StemRadius = 0.06f;
-	ClickThreshold = StemRadius * AxisScale;
+	ClickThreshold = bUseScreenSpacePickingRadii ? ScreenSpaceAxisPickRadius : StemRadius * AxisScale;
 	float ClickThresholdSquared = ClickThreshold * ClickThreshold;
 
 	if (DistanceSquared < ClickThresholdSquared)
@@ -158,7 +158,9 @@ bool UGizmoComponent::IntersectRayRotationHandle(const FRay& Ray, int32 Axis, fl
 	const FVector AxisVector = GetVectorForAxis(Axis).Normalized();
 	const float Scale = (Axis == 0) ? GetWorldScale().X : (Axis == 1 ? GetWorldScale().Y : GetWorldScale().Z);
 	const float RingRadius = AxisLength * Scale;
-	const float RingThickness = Radius * Scale * 1.75f;
+	const float RingThickness = bUseScreenSpacePickingRadii
+		? ScreenSpaceRotatePickThickness
+		: Radius * Scale * 1.75f;
 
 	const float Denom = Ray.Direction.Dot(AxisVector);
 	if (std::abs(Denom) < 1e-6f)
@@ -476,7 +478,10 @@ bool UGizmoComponent::LineTraceComponent(const FRay& Ray, FHitResult& OutHitResu
 
 		float CenterRayT = 0.0f;
 		constexpr float CenterSphereRadius = 0.12f;
-		if (IntersectRaySphere(Ray, GizmoLocation, CenterSphereRadius * CenterScale, CenterRayT))
+		const float CenterPickRadius = bUseScreenSpacePickingRadii
+			? ScreenSpaceCenterPickRadius
+			: CenterSphereRadius * CenterScale;
+		if (IntersectRaySphere(Ray, GizmoLocation, CenterPickRadius, CenterRayT))
 		{
 			OutHitResult.bHit = true;
 			OutHitResult.Distance = CenterRayT;
@@ -561,7 +566,10 @@ void UGizmoComponent::SetTarget(USceneComponent* NewTarget)
 
 	TargetComponent = NewTarget;
 
-	SetWorldLocation(TargetComponent->GetWorldLocation());
+	if (!bPreserveWorldLocationOnUpdate)
+	{
+		SetWorldLocation(TargetComponent->GetWorldLocation());
+	}
 	UpdateGizmoTransform();
 	SetVisibility(true);
 }
@@ -783,7 +791,9 @@ void UGizmoComponent::UpdateGizmoTransform()
 {
 	if (!TargetComponent) return;
 
-	const FVector DesiredLocation = TargetComponent->GetWorldLocation();
+	const FVector DesiredLocation = bPreserveWorldLocationOnUpdate
+		? GetWorldLocation()
+		: TargetComponent->GetWorldLocation();
 	
 	FRotator DesiredRotation = FRotator();
 	if (CurMode == EGizmoMode::Scale || !bIsWorldSpace)
@@ -849,6 +859,40 @@ void UGizmoComponent::ApplyScreenSpaceScaling(const FVector& CameraLocation, boo
 	SetRelativeScale(FVector(NewScale, NewScale, NewScale));
 }
 
+void UGizmoComponent::SetScreenSpaceScaleOverride(float InScale)
+{
+	bUseScreenSpaceScaleOverride = true;
+	ScreenSpaceScaleOverride = FMath::Max(InScale, 0.01f);
+}
+
+void UGizmoComponent::ClearScreenSpaceScaleOverride()
+{
+	bUseScreenSpaceScaleOverride = false;
+}
+
+float UGizmoComponent::GetScreenSpaceScaleForRender(const FVector& CameraLocation, bool bIsOrtho, float OrthoWidth) const
+{
+	if (bUseScreenSpaceScaleOverride)
+	{
+		return ScreenSpaceScaleOverride;
+	}
+
+	return ComputeScreenSpaceScale(CameraLocation, bIsOrtho, OrthoWidth);
+}
+
+void UGizmoComponent::SetScreenSpacePickingRadii(float InAxisRadius, float InCenterRadius, float InRotateThickness)
+{
+	bUseScreenSpacePickingRadii = true;
+	ScreenSpaceAxisPickRadius = FMath::Max(InAxisRadius, 0.001f);
+	ScreenSpaceCenterPickRadius = FMath::Max(InCenterRadius, 0.001f);
+	ScreenSpaceRotatePickThickness = FMath::Max(InRotateThickness, 0.001f);
+}
+
+void UGizmoComponent::ClearScreenSpacePickingRadii()
+{
+	bUseScreenSpacePickingRadii = false;
+}
+
 void UGizmoComponent::SetWorldSpace(bool bWorldSpace)
 {
 	bIsWorldSpace = bWorldSpace;
@@ -904,6 +948,8 @@ void UGizmoComponent::Deactivate()
 
 	TargetComponent = nullptr;
 	AllSelectedActors = nullptr;
+	ClearScreenSpaceScaleOverride();
+	ClearScreenSpacePickingRadii();
 	SetVisibility(false);
 	SelectedAxis = -1;
 }

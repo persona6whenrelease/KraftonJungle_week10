@@ -1,4 +1,4 @@
-#include "Editor/UI/EditorSkeletalMeshViewerWidget.h"
+﻿#include "Editor/UI/EditorSkeletalMeshViewerWidget.h"
 
 #include "Editor/Settings/EditorSettings.h"
 #include "Mesh/MeshManager.h"
@@ -8,12 +8,15 @@
 #include "ImGui/imgui.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <string>
 
 #include "Runtime/Engine.h"
 #include "Viewport/Viewport.h"
+#include "Component/CameraComponent.h"
 #include "Component/GizmoComponent.h"
+#include "Component/SkeletalGizmoComponent.h"
 #include "Component/SkeletalMeshComponent.h"
 #include "Engine/Input/InputFrame.h"
 #include "Engine/Input/InputSystem.h"
@@ -22,7 +25,9 @@
 #include "GameFramework/Light/DirectionalLightActor.h"
 #include "Core/ProjectSettings.h"
 #include "Platform/Paths.h"
+#include "Engine/UI/ImGui/ImGuiViewportPresenter.h"
 #include "Render/Pipeline/Renderer.h"
+#include "Render/Resource/MeshBufferManager.h"
 #include "WICTextureLoader.h"
 
 namespace
@@ -150,6 +155,135 @@ void DrawViewerMeshStatsOverlay(const FSkeletalMesh* MeshAsset, const ImVec2& Vi
 	DrawLine(VerticesText);
 	DrawLine(TrianglesText);
 }
+
+// 임시 기즈모 디버그 라인
+void DrawViewerGizmoDebugLines(
+	FSkeletalMeshViewerViewportClient* PreviewClient,
+	const ImVec2& ViewportMin,
+	const ImVec2& ViewportSize)
+{
+	if (!PreviewClient || ViewportSize.x <= 0.0f || ViewportSize.y <= 0.0f)
+	{
+		return;
+	}
+
+	UCameraComponent* Camera = PreviewClient->GetCamera();
+	UGizmoComponent* Gizmo = PreviewClient->GetBoneSelectionManager().GetGizmo();
+	if (!Camera || !Gizmo || !Gizmo->IsActive())
+	{
+		return;
+	}
+
+	const float PerViewScale = Gizmo->GetScreenSpaceScaleForRender(
+		Camera->GetWorldLocation(),
+		Camera->IsOrthogonal(),
+		Camera->GetOrthoWidth());
+	const FMatrix RenderModel =
+		FMatrix::MakeScaleMatrix(FVector(PerViewScale, PerViewScale, PerViewScale)) *
+		FMatrix::MakeRotationEuler(Gizmo->GetRelativeRotation().ToVector()) *
+		FMatrix::MakeTranslationMatrix(Gizmo->GetWorldLocation());
+	const FMatrix LocalToClip = RenderModel * Camera->GetViewProjectionMatrix();
+
+	auto ProjectLocalToScreen = [&](const FVector& LocalPosition, ImVec2& OutScreen) -> bool
+	{
+		const FVector ClipSpace = LocalToClip.TransformPositionWithW(LocalPosition);
+		if (!std::isfinite(ClipSpace.X) || !std::isfinite(ClipSpace.Y) || ClipSpace.Z < 0.0f)
+		{
+			return false;
+		}
+
+		OutScreen.x = ViewportMin.x + (ClipSpace.X * 0.5f + 0.5f) * ViewportSize.x;
+		OutScreen.y = ViewportMin.y + (1.0f - (ClipSpace.Y * 0.5f + 0.5f)) * ViewportSize.y;
+		return true;
+	};
+
+	ImDrawList* DrawList = ImGui::GetWindowDrawList();
+	const FMeshData& MeshData = FMeshBufferManager::Get().GetMeshData(EMeshShape::TransGizmo);
+	const ImU32 AxisColors[4] =
+	{
+		IM_COL32(255, 60, 60, 220),
+		IM_COL32(60, 255, 60, 220),
+		IM_COL32(80, 120, 255, 220),
+		IM_COL32(255, 255, 255, 220)
+	};
+	bool bBoundsValid[4] = {};
+	ImVec2 BoundsMin[4] = {};
+	ImVec2 BoundsMax[4] = {};
+
+	auto UpdateBounds = [&](int32 SubID, const ImVec2& Point)
+	{
+		if (SubID < 0 || SubID > 3)
+		{
+			return;
+		}
+
+		if (!bBoundsValid[SubID])
+		{
+			BoundsMin[SubID] = Point;
+			BoundsMax[SubID] = Point;
+			bBoundsValid[SubID] = true;
+			return;
+		}
+
+		BoundsMin[SubID].x = (std::min)(BoundsMin[SubID].x, Point.x);
+		BoundsMin[SubID].y = (std::min)(BoundsMin[SubID].y, Point.y);
+		BoundsMax[SubID].x = (std::max)(BoundsMax[SubID].x, Point.x);
+		BoundsMax[SubID].y = (std::max)(BoundsMax[SubID].y, Point.y);
+	};
+
+	const uint32 AxisMask = Gizmo->GetAxisMask();
+	for (uint32 IndexOffset = 0; IndexOffset + 2 < static_cast<uint32>(MeshData.Indices.size()); IndexOffset += 3)
+	{
+		const uint32 Index0 = MeshData.Indices[IndexOffset + 0];
+		const uint32 Index1 = MeshData.Indices[IndexOffset + 1];
+		const uint32 Index2 = MeshData.Indices[IndexOffset + 2];
+		if (Index0 >= MeshData.Vertices.size() || Index1 >= MeshData.Vertices.size() || Index2 >= MeshData.Vertices.size())
+		{
+			continue;
+		}
+
+		const FVertex& Vertex0 = MeshData.Vertices[Index0];
+		const FVertex& Vertex1 = MeshData.Vertices[Index1];
+		const FVertex& Vertex2 = MeshData.Vertices[Index2];
+		const int32 SubID = Vertex0.SubID;
+		if (SubID < 3 && (AxisMask & (1u << SubID)) == 0)
+		{
+			continue;
+		}
+
+		ImVec2 Screen0, Screen1, Screen2;
+		if (!ProjectLocalToScreen(Vertex0.Position, Screen0) ||
+			!ProjectLocalToScreen(Vertex1.Position, Screen1) ||
+			!ProjectLocalToScreen(Vertex2.Position, Screen2))
+		{
+			continue;
+		}
+
+		const ImU32 Color = AxisColors[(SubID >= 0 && SubID <= 3) ? SubID : 3];
+		DrawList->AddLine(Screen0, Screen1, Color, 1.0f);
+		DrawList->AddLine(Screen1, Screen2, Color, 1.0f);
+		DrawList->AddLine(Screen2, Screen0, Color, 1.0f);
+
+		UpdateBounds(SubID, Screen0);
+		UpdateBounds(SubID, Screen1);
+		UpdateBounds(SubID, Screen2);
+	}
+
+	ImVec2 CenterScreen;
+	if (ProjectLocalToScreen(FVector::ZeroVector, CenterScreen))
+	{
+		DrawList->AddCircleFilled(CenterScreen, 4.0f, IM_COL32(255, 255, 255, 255));
+	}
+
+	for (int32 SubID = 0; SubID < 4; ++SubID)
+	{
+		if (bBoundsValid[SubID])
+		{
+			DrawList->AddRect(BoundsMin[SubID], BoundsMax[SubID], AxisColors[SubID], 0.0f, 0, 1.5f);
+		}
+	}
+}
+// 임시 기즈모 디버그 라인
 
 void DrawViewerShowFlagsControls(FViewportRenderOptions& Opts, const char* TableId)
 {
@@ -570,7 +704,8 @@ void FEditorSkeletalMeshViewerWidget::EnsurePreviewScene()
 
 	PreviewViewportClient = new FSkeletalMeshViewerViewportClient();
 	PreviewViewportClient->Initialize();
-	
+	PreviewViewportClient->SetPreviewWorld(PreviewWorld);
+
 	PreviewViewport = new FViewport();
 
 	ID3D11Device* Device = GEngine ? GEngine->GetRenderer().GetFD3DDevice().GetDevice() : nullptr;
@@ -620,6 +755,12 @@ void FEditorSkeletalMeshViewerWidget::SetPreviewMesh(USkeletalMesh* InMesh, bool
 	}
 
 	PreviewMeshComponent->SetSkeletalMesh(InMesh);
+
+	// [추가] 뷰포트 클라이언트의 본 셀렉션 매니저에 타겟 컴포넌트 전달
+	if (PreviewViewportClient)
+	{
+		PreviewViewportClient->GetBoneSelectionManager().SetTargetSkeletalMesh(PreviewMeshComponent);
+	}
 
 	FSkeletalMesh* MeshAsset = InMesh ? InMesh->GetSkeletalMeshAsset() : nullptr;
 	if (MeshAsset)
@@ -805,7 +946,14 @@ void FEditorSkeletalMeshViewerWidget::RenderResourcePanel()
 				if (ImGui::Selectable(Label.c_str(), bSelected))
 				{
 					SelectedResourceIndex = MeshIndex;
-					SelectedBoneIndex = -1;
+					SelectedBoneIndex = -1; // UI 선택 초기화
+
+					// [추가] 매니저의 선택 상태도 초기화 (기즈모 숨김 처리 등)
+					if (PreviewViewportClient)
+					{
+						PreviewViewportClient->GetBoneSelectionManager().ClearSelection();
+					}
+
 					SetPreviewMesh(GetSelectedSkeletalMesh());
 				}
 			}
@@ -895,6 +1043,13 @@ void FEditorSkeletalMeshViewerWidget::RenderViewportPanel(float DeltaTime)
 		const bool bMiddleMouseDown = ImGui::IsMouseDown(ImGuiMouseButton_Middle);
 		const bool bAnyCaptureButtonDown = bRightMouseDown || bMiddleMouseDown;
 
+
+		const uint32 NewWidth = static_cast<uint32>(ViewportSize.x);
+		const uint32 NewHeight = static_cast<uint32>(ViewportSize.y);
+
+		PreviewViewport->RequestResize(NewWidth, NewHeight);
+		PreviewViewportClient->SetViewportRect(ViewportMin.x, ViewportMin.y, ViewportSize.x, ViewportSize.y);
+
 		if (!bPreviewViewportWantsMouseCapture)
 		{
 			if (bViewportHovered &&
@@ -912,17 +1067,14 @@ void FEditorSkeletalMeshViewerWidget::RenderViewportPanel(float DeltaTime)
 		bPreviewViewportWantsKeyboardCapture =
 			bPreviewViewportWantsMouseCapture && bRightMouseDown;
 
+		TickPreviewScene(DeltaTime);
+
 		FInputFrame InputFrame(InputSystem::Get().MakeSnapshot());
 		PreviewViewportClient->Tick(
 			DeltaTime,
 			bViewportHovered || bPreviewViewportWantsMouseCapture,
 			bPreviewViewportWantsMouseCapture,
 			InputFrame);
-		TickPreviewScene(DeltaTime);
-
-		PreviewViewport->RequestResize(
-			static_cast<uint32>(ViewportSize.x),
-			static_cast<uint32>(ViewportSize.y));
 
 		EditorEngine->RenderSkeletalMeshViewerPreview(
 			PreviewWorld,
@@ -931,12 +1083,19 @@ void FEditorSkeletalMeshViewerWidget::RenderViewportPanel(float DeltaTime)
 
 		if (PreviewViewport->GetSRV())
 		{
-			ImGui::Image(
-				(ImTextureID)PreviewViewport->GetSRV(),
-				ViewportSize);
-			DrawViewerMeshStatsOverlay(
-				SelectedMesh ? SelectedMesh->GetSkeletalMeshAsset() : nullptr,
-				ViewportMin);
+			FImGuiViewportPresenter::DrawInCurrentWindow(
+				PreviewViewport,
+				FViewportPresentationRect(ViewportMin.x, ViewportMin.y, ViewportSize.x, ViewportSize.y));
+			ImGui::Dummy(ViewportSize);
+			//// 임시 기즈모 디버그 라인
+			//DrawViewerGizmoDebugLines(
+			//	PreviewViewportClient,
+			//	ViewportMin,
+			//	ViewportSize);
+			//// 임시 기즈모 디버그 라인
+			//DrawViewerMeshStatsOverlay(
+			//	SelectedMesh ? SelectedMesh->GetSkeletalMeshAsset() : nullptr,
+			//	ViewportMin);
 		}
 		else
 		{
@@ -972,6 +1131,9 @@ void FEditorSkeletalMeshViewerWidget::RenderBonePanel()
 		}
 		else
 		{
+			// [추가] 렌더링 전 기존 선택 인덱스 캐싱
+			int32 PrevSelectedBoneIndex = SelectedBoneIndex;
+
 			for (int32 BoneIndex = 0; BoneIndex < static_cast<int32>(MeshAsset->Bones.size()); ++BoneIndex)
 			{
 				if (MeshAsset->Bones[BoneIndex].ParentIndex < 0)
@@ -979,6 +1141,13 @@ void FEditorSkeletalMeshViewerWidget::RenderBonePanel()
 					RenderBoneTreeNode(MeshAsset->Bones, BoneIndex, SelectedBoneIndex);
 				}
 			}
+
+			// [추가] 클릭으로 인해 인덱스가 변했다면 매니저에 선택 명령 전달
+			if (PrevSelectedBoneIndex != SelectedBoneIndex && PreviewViewportClient)
+			{
+				PreviewViewportClient->GetBoneSelectionManager().SelectBone(SelectedBoneIndex);
+			}
+
 		}
 	}
 	ImGui::EndChild();

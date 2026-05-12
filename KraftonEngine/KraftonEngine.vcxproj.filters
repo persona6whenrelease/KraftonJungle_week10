@@ -1105,6 +1105,8 @@
     <ClCompile Include="Source\Engine\Mesh\FBX\FbxStaticMeshParser.cpp" />
     <ClCompile Include="Source\Engine\Mesh\FBX\FBXSceneAsset.cpp" />
     <ClCompile Include="Source\Editor\Viewport\SkeletalMeshViewerViewportClient.cpp" />
+    <ClCompile Include="Source\Engine\Component\SkeletalGizmoComponent.cpp" />
+    <ClCompile Include="Source\Editor\Selection\BoneSelectionManager.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Source\Editor\EditorEngine.h">
@@ -2375,11 +2377,17 @@
     <ClInclude Include="Source\Engine\Mesh\FBX\FbxStaticMeshParser.h" />
     <ClInclude Include="Source\Engine\Mesh\FBX\FBXSceneAsset.h" />
     <ClInclude Include="Source\Editor\Viewport\SkeletalMeshViewerViewportClient.h" />
+    <ClInclude Include="ThirdParty\FBXSDK\include\fbxsdk\scene\geometry\fbxskeleton.h" />
+    <ClInclude Include="Source\Engine\Component\SkeletalGizmoComponent.h" />
+    <ClInclude Include="Source\Editor\Selection\BoneSelectionManager.h" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="KraftonEngine.rc" />
   </ItemGroup>
   <ItemGroup>
     <None Include="VcpkgLua.props" />
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="Asset\Editor\Icons\icon_playInSelectedViewport_16x.png" />
   </ItemGroup>
 </Project>
