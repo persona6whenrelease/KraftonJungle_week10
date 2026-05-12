@@ -1,7 +1,7 @@
 #include "Editor/UI/EditorSkeletalMeshViewerWidget.h"
 
 #include "Editor/Settings/EditorSettings.h"
-#include "Mesh/FBX/FBXManager.h"
+#include "Mesh/MeshManager.h"
 #include "Mesh/FBX/FBXSceneAsset.h"
 #include "Mesh/SkeletalMesh.h"
 #include "Mesh/SkeletalMeshAsset.h"
@@ -214,7 +214,7 @@ void FEditorSkeletalMeshViewerWidget::UpdateInput(float DeltaTime)
 bool FEditorSkeletalMeshViewerWidget::OpenFbxAsset(const FString& FbxPath)
 {
 	CurrentFbxPath = FbxPath;
-	CurrentSceneAsset = FFBXManager::LoadFbxScene(FbxPath);
+	CurrentSceneAsset = FMeshManager::LoadFbxScene(FbxPath);
 	SelectedResourceIndex = -1;
 	SelectedBoneIndex = -1;
 

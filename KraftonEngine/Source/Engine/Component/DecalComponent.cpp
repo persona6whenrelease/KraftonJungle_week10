@@ -9,7 +9,6 @@
 #include "Debug/DrawDebugHelpers.h"
 #include "Render/Proxy/DecalSceneProxy.h"
 #include "Resource/ResourceManager.h"
-#include "Mesh/ObjManager.h"
 #include "Engine/Runtime/Engine.h"
 #include "Texture/Texture2D.h"
 #include "Materials/Material.h"

@@ -32,8 +32,7 @@
 #include "Object/FName.h"
 #include "Object/ObjectIterator.h"
 #include "Materials/Material.h"
-#include "Mesh/FBX/FBXManager.h"
-#include "Mesh/ObjManager.h"
+#include "Mesh/MeshManager.h"
 #include "Mesh/SkeletalMesh.h"
 #include "Mesh/StaticMesh.h"
 #include "Platform/Paths.h"
@@ -1499,7 +1498,7 @@ bool FEditorPropertyWidget::RenderPropertyWidget(TArray<FPropertyDescriptor>& Pr
 			if (bSelectedNone)
 				ImGui::SetItemDefaultFocus();
 
-			const TArray<FMeshAssetListItem>& MeshFiles = FObjManager::GetAvailableMeshFiles();
+			const TArray<FMeshAssetListItem>& MeshFiles = FMeshManager::GetAvailableStaticMeshFiles();
 			for (const FMeshAssetListItem& Item : MeshFiles)
 			{
 				bool bSelected = (*Val == Item.FullPath);
@@ -1524,10 +1523,10 @@ bool FEditorPropertyWidget::RenderPropertyWidget(TArray<FPropertyDescriptor>& Pr
 			if (!ObjPath.empty())
 			{
 				ID3D11Device* Device = GEngine->GetRenderer().GetFD3DDevice().GetDevice();
-				UStaticMesh* Loaded = FObjManager::LoadObjStaticMesh(ObjPath, Device);
+				UStaticMesh* Loaded = FMeshManager::LoadStaticMesh(ObjPath, Device);
 				if (Loaded)
 				{
-					*Val = FObjManager::GetBinaryFilePath(ObjPath);
+					*Val = FMeshManager::GetObjBinaryFilePath(ObjPath);
 					bChanged = true;
 				}
 			}
