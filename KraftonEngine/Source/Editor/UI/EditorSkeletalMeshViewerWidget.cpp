@@ -88,6 +88,7 @@ void FEditorSkeletalMeshViewerWidget::EnsurePreviewScene()
 	PreviewWorld->InitWorld();
 
 	PreviewActor = PreviewWorld->SpawnActor<AActor>();
+	PreviewActor->bTickInEditor = true;
 
 	PreviewMeshComponent = PreviewActor->AddComponent<USkeletalMeshComponent>();
 	PreviewActor->SetRootComponent(PreviewMeshComponent);
@@ -160,6 +161,16 @@ void FEditorSkeletalMeshViewerWidget::SetPreviewMesh(USkeletalMesh* InMesh, bool
 	{
 		PreviewViewportClient->FrameMesh(MeshAsset);
 	}
+}
+
+void FEditorSkeletalMeshViewerWidget::TickPreviewScene(float DeltaTime)
+{
+	if (!PreviewWorld)
+	{
+		return;
+	}
+
+	PreviewWorld->Tick(DeltaTime, DeltaTime, LEVELTICK_ViewportsOnly);
 }
 
 void FEditorSkeletalMeshViewerWidget::UpdateInput(float DeltaTime)
@@ -426,6 +437,7 @@ void FEditorSkeletalMeshViewerWidget::RenderViewportPanel(float DeltaTime)
 			bViewportHovered || bPreviewViewportWantsMouseCapture,
 			bPreviewViewportWantsMouseCapture,
 			InputFrame);
+		TickPreviewScene(DeltaTime);
 
 		PreviewViewport->RequestResize(
 			static_cast<uint32>(ViewportSize.x),

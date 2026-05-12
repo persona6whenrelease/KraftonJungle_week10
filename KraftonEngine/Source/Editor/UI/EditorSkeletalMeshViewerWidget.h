@@ -25,6 +25,7 @@ private:
 	void EnsurePreviewScene();
 	void ReleasePreviewScene();
 	void SetPreviewMesh(USkeletalMesh* PreviewMesh, bool bResetCamera = true);
+	void TickPreviewScene(float DeltaTime);
 	
 	void RenderResourcePanel();
 	void RenderViewportPanel(float DeltaTime);
