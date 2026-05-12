@@ -1,4 +1,4 @@
-#include "Editor/Viewport/FLevelViewportLayout.h"
+﻿#include "Editor/Viewport/FLevelViewportLayout.h"
 
 #include "Editor/EditorEngine.h"
 #include "Editor/Viewport/LevelEditorViewportClient.h"
@@ -39,6 +39,7 @@
 #include "Serialization/PrefabSaveManager.h"
 
 #include "GameFramework/StaticMeshActor.h"
+#include "GameFramework/SkeletalMeshActor.h"
 
 #include <algorithm>
 
@@ -1040,6 +1041,25 @@ void FLevelViewportLayout::RenderViewportUI(float DeltaTime)
 				NewActor->InitDefaultComponents(FPaths::ToUtf8(ContentItem.Path));
 				Editor->GetWorld()->AddActor(NewActor);
 				
+				FVector SpawnLocation(0, 0, 0);
+				FPoint MP = { ImGui::GetIO().MousePos.x, ImGui::GetIO().MousePos.y };
+				if (TryComputePlacementLocation(GetActiveViewportSlotIndex(), MP, SpawnLocation))
+				{
+					NewActor->SetActorLocation(SpawnLocation);
+				}
+				if (SelectionManager)
+				{
+					SelectionManager->Select(NewActor);
+				}
+			}
+			if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("FBXContentItem"))
+			{
+				FContentItem ContentItem = *reinterpret_cast<const FContentItem*>(payload->Data);
+
+				ASkeletalMeshActor* NewActor = Cast<ASkeletalMeshActor>(FObjectFactory::Get().Create(ASkeletalMeshActor::StaticClass()->GetName(), Editor->GetWorld()));
+				NewActor->InitDefaultComponents(FPaths::ToUtf8(ContentItem.Path));
+				Editor->GetWorld()->AddActor(NewActor);
+
 				FVector SpawnLocation(0, 0, 0);
 				FPoint MP = { ImGui::GetIO().MousePos.x, ImGui::GetIO().MousePos.y };
 				if (TryComputePlacementLocation(GetActiveViewportSlotIndex(), MP, SpawnLocation))

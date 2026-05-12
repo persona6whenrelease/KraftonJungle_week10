@@ -89,3 +89,9 @@ public:
 	virtual const char* GetDragItemType() override { return "CurveContentItem"; }
 	void OnDoubleLeftClicked(ContentBrowserContext& Context) override;
 };
+
+class FBXElement final : public ContentBrowserElement
+{
+public:
+	virtual const char* GetDragItemType() override { return "FBXContentItem"; }
+};

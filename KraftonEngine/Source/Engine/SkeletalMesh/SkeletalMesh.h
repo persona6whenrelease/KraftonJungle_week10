@@ -7,6 +7,7 @@
 #include <memory>
 
 struct ID3D11Device;
+class UStaticMesh;
 
 /**
  * USkeletalMesh
@@ -40,9 +41,17 @@ public:
 	// 본 이름 리스트 설정 (Importer에서 호출)
 	void SetBoneNames(TArray<FName>&& InNames);
 
+	// FBX hybrid (skinned + static) 케이스에서 함께 추출된 static 파트.
+	// 보유하지 않을 수 있다 (pure skeletal FBX). 라이프사이클은 UObjectManager가 관리한다.
+	UStaticMesh* GetEmbeddedStaticMesh() const { return EmbeddedStaticMesh; }
+	void         SetEmbeddedStaticMesh(UStaticMesh* InMesh) { EmbeddedStaticMesh = InMesh; }
+
 private:
 	// 메시 및 본 데이터 본체
 	FSkeletalMesh* SkeletalMeshAsset = nullptr;
+
+	// FBX hybrid에서 추출된 static 파트 (옵셔널)
+	UStaticMesh* EmbeddedStaticMesh = nullptr;
 
 	// 머티리얼 슬롯 정보
 	TArray<FStaticMaterial> StaticMaterials;

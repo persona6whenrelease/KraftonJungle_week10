@@ -44,17 +44,8 @@ struct FVertexPNCTT
 	FVector4 Tangent;
 };
 
-struct FSkeletalMeshVertex
-{
-	FVector Position;
-	FVector Normal;
-	FVector4 Tangent;
-	FVector4 Color;
-	FVector2 UV;
-	int boneIndices[4];
-	float boneWeights[4];
-};
-
+// Skeletal mesh의 본은 계층(parent + SRT)만 보유한다.
+// Bone-to-vertex binding과 InverseBindMatrix는 FBoneCluster(SkeletalMeshAsset.h)에 저장된다.
 struct FBone
 {
 	int32 ParentIndex;
@@ -62,17 +53,7 @@ struct FBone
 	FVector Scale;
 	FQuat Rotation;
 	FVector Translation;
-	FMatrix InverseBindMatrix;
 };
-
-struct TSkeletalData
-{
-	TArray<FSkeletalMeshVertex> Vertices;
-	TArray<FBone> Bones;
-	TArray<uint32> Indices;
-};
-
-using FSkeletalData = TSkeletalData;
 
 template<typename VertexType>
 struct TMeshData

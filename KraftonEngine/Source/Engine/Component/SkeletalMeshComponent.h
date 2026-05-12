@@ -4,10 +4,12 @@
 #include "SkeletalMesh/SkeletalMesh.h"
 #include "Render/Types/VertexTypes.h"
 #include "Render/Resource/Buffer.h"
+#include "Mesh/StaticMeshAsset.h"  // FNormalVertex
 #include "Core/PropertyTypes.h"
 
 class UMaterial;
 class FPrimitiveSceneProxy;
+class UStaticMeshComponent;
 
 class USkeletalMeshComponent : public USkinnedMeshComponent
 {
@@ -45,12 +47,15 @@ private:
 	// FBone SRT → LocalTransforms[]
 	void UpdateLocalTransforms();
 
-	// ComponentSpaceMatrices * IBP → SkinningMatrices → 모드별 분기
+	// 모드별 스키닝 디스패치 — cluster 모델: per-cluster matrix를 inline에서 계산.
 	void UpdateSkinning();
 	void UpdateSkinningCPU();
 	void UpdateSkinningGPU();   // stub — Proxy 단계에서 완성
 	void CalcDynamicLocalBounds();
 	void CacheLocalBounds();
+
+	// hybrid FBX: USkeletalMesh가 EmbeddedStaticMesh를 보유하면 sibling을 lazy-create.
+	void SyncEmbeddedStaticMesh();
 
 	// 에셋
 	USkeletalMesh*        SkeletalMesh    = nullptr;
@@ -58,13 +63,15 @@ private:
 	TArray<UMaterial*>    OverrideMaterials;
 	TArray<FMaterialSlot> MaterialSlots;
 
-	// CPU 스키닝
-	TArray<FSkeletalMeshVertex> SkinnedVertices;
-	FDynamicVertexBuffer        DynamicVB;
+	// CPU 스키닝 결과 (bind-pose vertex 레이아웃과 동일: FNormalVertex 48B)
+	TArray<FNormalVertex> SkinnedVertices;
+	FDynamicVertexBuffer  DynamicVB;
 
-	// 공통
-	TArray<FMatrix> SkinningMatrices;
-	TArray<int32>   ParentIndices;      // RecalcComponentSpaceMatrices 전달용 캐시
+	// 본 계층 — RecalcComponentSpaceMatrices 전달용 캐시
+	TArray<int32>   ParentIndices;
+
+	// 같은 액터에 lazy-create한 static sub-mesh 컴포넌트 (hybrid FBX에만 존재)
+	UStaticMeshComponent* EmbeddedStaticMeshComp = nullptr;
 
 	// 바운드 캐시
 	FVector CachedLocalCenter = { 0.f, 0.f, 0.f };

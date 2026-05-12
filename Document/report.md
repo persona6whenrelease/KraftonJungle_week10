@@ -1,240 +1,365 @@
-# Skeletal Mesh — Bind Pose Identity Test 해결 보고서
+# FBX Importer Refactoring — Cluster 기반 Skeletal Mesh + Static 분리
+
+작성일: 2026-05-12
+대상 브랜치: `feature/SkeletonMesh`
+스코프: Step A + Step B + Step C + Step D (Step E는 미진행)
+
+---
 
 ## 0. 결과 요약
 
-**최종 상태**:
-```
-Bind Pose Identity Test: SUCCESS (maxAbsDiff over 63 bones = 0.000002)
-```
-- maxAbsDiff = 2×10⁻⁶ (부동소수점 정밀도 수준, 임계값 1×10⁻⁴ 충분히 통과)
-- T-Pose 메시가 의도한 본 위치로 정상 렌더링 확인
-
-**결정적 버그**: `FbxMatrixToFMatrix` 헬퍼의 **불필요한 transpose 적용**.
-FbxAMatrix와 엔진 FMatrix 모두 row 3에 Translation을 저장하는 메모리 컨벤션을 사용하는데, 헬퍼가 row↔column을 뒤바꿔서 Translation을 row 3 → column 3으로 옮겨버렸음. 그 결과 엔진이 본의 -위치를 IBP에서 읽지 못하고 0으로 인식.
-
----
-
-## 1. 초기 문제
-
-### 증상
-- 임포트 직후 `Bone[0] Matrix Error - Row3 (Translation): 0.0000, -0.8444, 5.8700`
-- T-Pose에서 `IBP × ComponentSpace ≠ Identity`
-- 메시가 정상 위치에 렌더되지 않음
-
-### 환경
-- 좌표계: Z-Up, Left-Handed, X-Forward (`ConvertScene`으로 강제 변환)
-- 행렬: Row-Major, Row-Vector convention
-- 본 계층 누적: `Local * Parent`
-- 스키닝: `InverseBind * ComponentSpace`
-
----
-
-## 2. 진단 과정
-
-### STEP A — 진단 로그 추가
-**목적**: 잔차 패턴을 보고 원인 분류
-
-추가한 진단:
-- `[IBP Diag]` — 본별 `M` (메시 노드 변환), `L` (TransformLinkMatrix), 계산된 IBP의 Translation
-- `[BindPose Diag]` — cluster 보유 본 수 / fallback 수
-- 본 트리 dump — 각 본의 `parent`, `T(local)`
-- `[Hierarchy Diag]` — 비루트에서 `parent=-1`인 본 수
-- Identity Test 보강 — `maxAbsDiff over N bones` + Top-3
-
-### STEP B — IBP 공식 보정
-
-**문제**: 기존 코드는 `IBP = TransformLinkMatrix.Inverse()` 한 줄로, **메시 노드 변환 M을 무시**.
-
-**수정**:
-```cpp
-FbxAMatrix IBP_Fbx = TransformLinkMatrix.Inverse() * TransformMatrix;
-RawMesh->Bones[BoneIndex].InverseBindMatrix = FbxMatrixToFMatrix(IBP_Fbx);
-```
-
-**수식**:
-- FBX의 본 mesh-space bind 글로벌 = `M⁻¹ · L`
-- 따라서 `IBP_FBX = (M⁻¹ · L)⁻¹ = L⁻¹ · M`
-
-**1차 결과**:
-```
-Top1 Bone[52] Row3=( 0.05, -0.85, 5.87)
-Top2 Bone[56] Row3=( 0.05, -0.85, 5.87)
-Top3 Bone[54] Row3=(-0.00, -0.84, 5.87)
-```
-모든 본에 거의 동일한 잔차 → 공통 부모(Armature) 변환 누락 시그널.
-
-### STEP C/D — TLM 기반 LocalTransform 역산
-
-**문제**: `RecalcComponentSpaceMatrices`가 본 트리만 누적하므로 Armature 노드 변환이 CS에 들어가지 않음. CS_col은 "본 부모 누적"이지 "mesh space 글로벌"이 아님.
-
-**해결책**: 본의 LocalTransform을 본 트리 누적용이 아니라 cluster TLM에서 직접 역산:
-- 루트 본: `Local_col = M⁻¹ · L_root`
-- 비루트 본: `Local_col = L_parent⁻¹ · L_child`
-- cluster 없음: `EvaluateLocalTransform()` fallback
-
-이러면 텔레스코핑으로 `CS_col(bone) = M⁻¹ · L_bone` (mesh space)이 됨 → `CS · IBP = Identity`.
-
-추가로 부모 검색을 단일 부모 검사 → 체인 거슬러 올라가기로 보강 (Empty 노드 통과).
-
-**2차 결과** (Blender export 옵션 변경 후):
-```
-Top1 Bone[58] maxAbsDiff=14232 Row3=(290, 330, -2467)
-```
-잔차 폭증 — 본별로 다른 패턴, 본 mesh-space 위치 자체가 그대로 잔차로 출력. **IBP가 본 위치를 빼주지 못함**.
-
-### STEP E — 로그 출력 환경 보강
-Top-3 제한 해제(전체 본 출력), `[IBP Diag]`를 모든 본에 대해 출력하도록 변경. 진단 패턴 식별에 필수.
-
-### STEP F — 결정적 수정 (`FbxMatrixToFMatrix` transpose 제거)
-
-전체 본 `[IBP Diag]` 로그에서 결정적 단서:
-```
-[IBP Diag] Bone[0] hips M=(-0.0, -0.0, -0.0) L=(0.131, 0.000, 2.852) IBP.Row3=(0.0, 0.0, 0.0)
-```
-**모든 본의 `IBP.Row3 = (0, 0, 0)`** — IBP에서 Translation이 통째로 빠짐.
-
-수식 예상: hips는 (0.131, 0, 2.852)에 있으므로 `IBP.Row3 ≈ (-0.131, 0, -2.852)`여야 함. 실제로는 0.
-
-**원인 식별**:
-| 객체 | Translation 저장 위치 |
-|---|---|
-| FbxAMatrix | row 3 (`Get(3, 0..2)`) — 실측 확인 |
-| 엔진 FMatrix | row 3 (`M[3][0..2]`) |
-
-두 메모리 컨벤션이 **동일**한데, `FbxMatrixToFMatrix`는 의도적으로 transpose:
-```cpp
-OutMat.M[c][r] = (float)FbxMat.Get(r, c);   // row↔col 뒤바꿈
-```
-결과: Translation이 row 3 → column 3 (`M[0][3], M[1][3], M[2][3]`)으로 이동. 엔진의 row-major 곱셈은 row 3의 Translation만 사용하므로, 변환 후 IBP의 Translation을 못 봄.
-
-**수정**:
-```cpp
-OutMat.M[r][c] = (float)FbxMat.Get(r, c);   // 직접 복사
-```
-
-**3차 결과**:
-```
-Bind Pose Identity Test: SUCCESS (maxAbsDiff over 63 bones = 0.000002)
-```
-✓ 통과.
-
----
-
-## 3. 최종 수정 사항 정리
-
-### 3.1 `KraftonEngine/Source/Engine/SkeletalMesh/FBXImporter.cpp`
-
-#### (1) `FbxMatrixToFMatrix` — transpose 제거 (결정적 수정)
-```cpp
-// 변경 전
-OutMat.M[c][r] = (float)FbxMat.Get(r, c);
-
-// 변경 후
-OutMat.M[r][c] = (float)FbxMat.Get(r, c);
-```
-
-#### (2) `FBindPoseInfo` 구조체 + `GatherBindPoseInfo` 헬퍼 추가
-Scene 전체 재귀로 모든 `FbxCluster`의 `(TransformLinkMatrix, TransformMatrix)` 쌍을 `TMap<FbxNode*, FBindPoseInfo>`에 수집. LocalTransform TLM 역산에 사용.
-
-#### (3) `ExtractMesh` — IBP 공식 보정
-```cpp
-FbxAMatrix FbxTransformMatrix;
-Cluster->GetTransformMatrix(FbxTransformMatrix);            // M
-FbxAMatrix FbxTransformLinkMatrix;
-Cluster->GetTransformLinkMatrix(FbxTransformLinkMatrix);    // L
-
-FbxAMatrix IBP_Fbx = FbxTransformLinkMatrix.Inverse() * FbxTransformMatrix;
-RawMesh->Bones[BoneIndex].InverseBindMatrix = FbxMatrixToFMatrix(IBP_Fbx);
-```
-
-#### (4) `ExtractSkeleton` — 부모 검색 체인 보강 + LocalTransform TLM 역산
-```cpp
-// 부모 검색: Empty/Null 노드를 통과해 본까지 거슬러 올라감
-while (ParentNode) {
-    for (j ...) if (JointNodes[j] == ParentNode) { ParentIndex = j; break; }
-    if (found) break;
-    ParentNode = ParentNode->GetParent();
-}
-
-// LocalTransform 계산
-if (cluster O) {
-    if (parent O + parent cluster O) Local = ParentTLM.Inverse() * SelfTLM;
-    else if (root)                   Local = SelfTM.Inverse() * SelfTLM;
-    else                             Local = EvaluateLocalTransform();  // fallback
-} else {
-    Local = EvaluateLocalTransform();  // fallback
-}
-```
-
-#### (5) 진단 로그 추가
-- `[IBP Diag]` 모든 본 한 줄 출력 (M, L, IBP Translation)
-- `[IBP Verify]` Bone[0] 한정 (L.GetT(), L.Get(0..2, 3), IBP.Col3)
-- `[BindPose Diag]` cluster 카운터
-- 본 트리 dump
-- `[Hierarchy Diag]` 비루트 parent=-1 경고
-
-### 3.2 `KraftonEngine/Source/Engine/Component/SkeletalMeshComponent.cpp`
-
-#### Identity Test 로그 전체 본 출력
-- `TopN = std::min<size_t>(3, ...)` → `TopN = Diffs.size()` (전체)
-- 라벨 "Top%d" 제거 → `Bone[%d] maxAbsDiff=...`
-- SUCCESS/FAILED 양쪽에 `maxAbsDiff over N bones` 첨부
-
----
-
-## 4. 핵심 교훈
-
-### 4.1 메모리 컨벤션은 의미 컨벤션과 별개
-FBX SDK 문서/관습은 "column-vector convention"이라고 명시되지만, **메모리 저장 레이아웃은 row 3에 Translation을 두는 형태** (DirectX와 같음). 코드에서 `Get(3, 0..2)`를 호출하면 Translation이 나옴.
-
-엔진 row-major + row-vector convention도 row 3에 Translation. 두 객체의 **메모리 레이아웃이 같다면 메모리상 transpose는 불필요**. 곱셈 의미만 다르더라도 위치 인덱스가 같으면 그대로 복사가 정답.
-
-### 4.2 잔차 패턴이 원인을 직접 가리킴
-- "모든 본 동일 잔차" → 공통 부모 변환 1개 누락
-- "본별 다른, 본 mesh-space 위치 비례 잔차" → IBP 무력화 (Translation 못 봄)
-- "본 Z 좌표에 비례하는 잔차" → 본 계층 누적 부족
-
-전체 본 출력이 없으면 이 패턴을 식별할 수 없으므로 진단 로그를 무제한으로 두는 게 중요.
-
-### 4.3 FBX 캐시는 진단의 적
-`FFBXManager::LoadSkeletalMesh`의 2단계 캐시 (메모리 + 디스크 `.bin`)가 임포트를 건너뛸 수 있음. import 측 로그가 안 보이면 캐시 hit을 의심하고 `Asset/MeshCache/*.bin`을 삭제할 것.
-
-### 4.4 단계적 디버그 + Identity Test 자동 판정의 가치
-T-Pose에서 `IBP × CS = Identity` 라는 수학적 invariant를 자동으로 검사하는 로직 덕분에 매 수정 단계의 효과를 즉시 판정할 수 있었음. 시각 검증보다 훨씬 신뢰성 높음.
-
----
-
-## 5. 잔존 과제
-
-### 5.1 Hierarchy Warning (비치명적)
-```
-[Hierarchy Diag] WARNING: 2 non-root bones have ParentIndex=-1.
-[59] shin.L.001  parent=-1 (<root>) T=(0.641, 0.139, 0.351)
-[61] shin.R.001  parent=-1 (<root>) T=(-0.641, 0.139, 0.351)
-```
-Blender의 IK 잔재 본이 Only Deform Bones를 거쳐도 export에 포함됨. Identity Test는 통과했으므로 스키닝 동작에는 영향 없지만, 추후:
-- Blender 측에서 본 정리
-- 또는 import 시 자식 본이 없거나 가중치 0인 본을 자동 제거
-
-### 5.2 `FbxAMatrix` convention 문서화
-헬퍼 `FbxMatrixToFMatrix`에 짧은 주석으로 "FbxAMatrix와 FMatrix 모두 row-major-호환 메모리 레이아웃 (row 3 = Translation)" 명시 완료. 추가로 코드베이스 다른 곳에서 FbxAMatrix를 다룬다면 같은 가정을 따라야 함을 팀에 공유 필요.
-
-### 5.3 FBX 캐시 정책
-사용자가 export 옵션을 바꾸거나 import 코드를 수정한 후에도 디스크 `.bin` 캐시가 살아 있으면 옛 결과가 나옴. 다음 중 하나 검토:
-- `.bin` 파일에 import 코드 버전 stamp를 박아서 mismatch 시 강제 재빌드
-- 디버그 빌드에서는 캐시 비활성화
-- `ForceReimport` 메뉴 추가
-
----
-
-## 6. 검증 기준점
-
-향후 회귀 발생 시 다음 값들을 비교하면 어디서 깨졌는지 빠르게 식별 가능:
-
-| 지표 | 정상값 | 의미 |
+| 항목 | Before | After |
 |---|---|---|
-| `Bones with cluster` | Total과 동일, fallback=0 | TLM 역산 100% 적용 |
-| `non-root parent=-1` | 0 (또는 알려진 부수 본 수) | Hierarchy 완전성 |
-| `Bone[0] hips IBP.Row3` | `(-T.X, -T.Y, -T.Z)` of hips L | IBP 공식 정확성 |
-| `Bone[0] IBP.Col3` | 모두 0 | transpose 미적용 (메모리 컨벤션 일치) |
-| `maxAbsDiff over N bones` | < 1×10⁻⁴ | Identity Test 통과 |
+| Skinning 영향 표현 | per-vertex `boneIndices[4] / boneWeights[4]` flatten | per-cluster `FBoneCluster { BoneIndex, VertexIndices[], Weights[], InverseBindMatrix }` |
+| Skeletal vertex 레이아웃 | `FSkeletalMeshVertex` 96B | `FNormalVertex` 48B (StaticMesh와 동일) |
+| `FBone::InverseBindMatrix` | 본마다 1개 | 제거 — cluster로 이동 |
+| 0-weight vertex 동작 | (0,0,0)으로 collapse 버그 | bind-pose passthrough (자연 해결) |
+| Skin 없는 FBX mesh node | 처리 경로 없음 | `FStaticMesh`로 분리 추출 |
+| Bone influence 개수 한계 | 4개 / vertex | 사실상 무제한 (cluster가 별도 추적) |
+| 1 actor당 component | SkeletalMeshComponent 1개 | + hybrid 시 sibling `UStaticMeshComponent` lazy-create |
+| Importer 진입점 | `ImportSkeletalMesh(path, OutSkel)` | `ImportFbx(path, OutSkel, OutStatic)` (구 API는 wrapper 유지) |
+| 캐시 `.bin` 호환성 | v1 | v2 — 버전 mismatch 시 `Serialize` false 반환 (Step D에서 강제 재import) |
+
+남은 컴파일 영향: **없음**. `FSkeletalMeshVertex` / `FBone::InverseBindMatrix` / 멤버 `SkinningMatrices`에 대한 코드 참조는 모두 정리.
+
+---
+
+## 1. 변경 동기
+
+기존 import 파이프라인의 두 근본 문제:
+
+1. **Cluster 정보 손실**
+   - FBX의 `FbxCluster`(한 bone이 어떤 vertex들에 어떤 weight로 영향) 가 import 시점에 per-vertex `boneIndices[4] / boneWeights[4]`로 flatten되어 들어옴 (`FBXImporter.cpp:292-306`, `VertexTypes.h:47-56` — old).
+   - 4-bone 초과 영향은 무조건 truncate.
+   - Asset/structure는 cluster를 1차 시민으로 보존하지 않음 → editor/툴에서 cluster 단위 처리가 불가능.
+
+2. **Static vertex / sub-mesh 미지원**
+   - 모든 vertex가 skinned라고 가정 → `TotalWeight == 0`인 vertex는 CPU 스키닝(`SkeletalMeshComponent.cpp:215-226` — old)에서 원점(0,0,0)으로 collapse.
+   - Skin이 없는 FBX mesh node는 처리 경로 자체가 없어 일부 prop이 누락 또는 origin collapse.
+
+설계 결정 (사용자 합의):
+- Cluster를 asset의 1차 시민으로 도입 — flatten 모델 폐기.
+- StaticMesh 측 타입(`FStaticMesh`, `FNormalVertex`, `FStaticMeshSection`, `FStaticMaterial`, `FMeshBuffer`)을 그대로 재사용.
+- Hybrid FBX는 `USkeletalMesh`가 옵셔널 `UStaticMesh*`를 composition으로 보유.
+
+---
+
+## 2. Step A — Data Type Refactor
+
+### 2.1 [`Render/Types/VertexTypes.h`](KraftonEngine/Source/Engine/Render/Types/VertexTypes.h)
+- **삭제**: `FSkeletalMeshVertex` struct (96B, pos/normal/tangent/color/uv + boneIndices[4]/boneWeights[4]).
+- **삭제**: `TSkeletalData`, `FSkeletalData` alias (현재 코드 사용처 없음).
+- **`FBone`**: `InverseBindMatrix` 멤버 제거. 본은 이제 ParentIndex + S·R·T만 보유 (계층/포즈 관리 책임만).
+
+### 2.2 [`Engine/SkeletalMesh/SkeletalMeshAsset.h`](KraftonEngine/Source/Engine/SkeletalMesh/SkeletalMeshAsset.h)
+- **신규 struct `FBoneCluster`**:
+  ```cpp
+  struct FBoneCluster {
+      int32          BoneIndex      = -1;
+      TArray<uint32> VertexIndices;     // 영향받는 vertex (mesh-local index)
+      TArray<float>  Weights;           // 위와 1:1, 동일 길이
+      FMatrix        InverseBindMatrix = FMatrix::Identity;
+                                         // = TransformLinkMatrix.Inverse() * TransformMatrix
+  };
+  ```
+  `friend operator<<`로 serialize.
+
+- **`FSkeletalMesh` 멤버 재구성**:
+  | 멤버 | Before | After |
+  |---|---|---|
+  | `Vertices` | `TArray<FSkeletalMeshVertex>` | `TArray<FNormalVertex>` |
+  | `Indices`  | `TArray<uint32>` | (그대로) |
+  | `Bones`    | `TArray<FBone>` (IBP 포함) | `TArray<FBone>` (IBP 없음) |
+  | `Clusters` | (없음) | **`TArray<FBoneCluster>` 신규** |
+  | `Sections` | (그대로) | (그대로) |
+  | `RenderBuffer` | `FMeshBuffer` (96B 정점) | `FMeshBuffer` (48B 정점) |
+
+- **`Serialize(FArchive&) → bool`**: 버전 필드(`SerializeVersion = 2`) 추가. 로드 시 버전 mismatch면 즉시 `false` 반환 — 호출자(FBXManager, Step D)가 재import 트리거.
+
+- **`CacheBounds`**: `Vertices[i].Position` → `Vertices[i].pos` (FNormalVertex 필드명).
+
+### 2.3 [`Engine/SkeletalMesh/SkeletalMesh.cpp`](KraftonEngine/Source/Engine/SkeletalMesh/SkeletalMesh.cpp)
+- **`USkeletalMesh::InitResources`**: `TMeshData<FSkeletalMeshVertex>` → `TMeshData<FNormalVertex>`. GPU 정적 VB(`RenderBuffer`)가 48B 스트라이드로 생성됨.
+
+### 2.4 [`Engine/SkeletalMesh/SkeletalMesh.h`](KraftonEngine/Source/Engine/SkeletalMesh/SkeletalMesh.h)
+- Forward decl: `class UStaticMesh;`.
+- 신규 멤버 `UStaticMesh* EmbeddedStaticMesh = nullptr;` + `Get/SetEmbeddedStaticMesh()` (hybrid FBX의 static 파트 보유).
+- 라이프사이클은 UObjectManager가 관리 — destructor에서 명시적 delete 하지 않음.
+
+---
+
+## 3. Step B — FBX Importer Refactor
+
+### 3.1 [`Engine/SkeletalMesh/FBXImporter.h`](KraftonEngine/Source/Engine/SkeletalMesh/FBXImporter.h)
+- **새 진입점**:
+  ```cpp
+  static bool ImportFbx(const FString& FilePath,
+                        USkeletalMesh* OutSkeletal,   // optional
+                        UStaticMesh*   OutStatic);    // optional
+  ```
+  적어도 한쪽에 유효 데이터가 들어가면 `true`.
+
+- **Backward-compat wrapper**: `ImportSkeletalMesh(path, OutMesh)` → `ImportFbx(path, OutMesh, nullptr)`. 기존 호출자는 변경 불필요.
+
+- **신규 private 헬퍼**:
+  - `ExtractSkeletalMesh(FbxMesh*, FSkeletalMesh*, USkeletalMesh*)` — cluster 보존 추출.
+  - `ExtractStaticMesh(FbxMesh*, FStaticMesh*)` — bone-less mesh node를 `FNormalVertex`로 추출.
+  - `HasValidSkinDeformer(FbxMesh*, USkeletalMesh*)` — skin 분기 판단.
+  - `NormalizeClusterWeights(FSkeletalMesh*)` — 모든 cluster의 weight를 per-vertex sum=1.0으로 정규화.
+
+### 3.2 [`Engine/SkeletalMesh/FBXImporter.cpp`](KraftonEngine/Source/Engine/SkeletalMesh/FBXImporter.cpp)
+- **`ProcessNode`**: 각 mesh node를 `HasValidSkinDeformer` 결과로 분기 →
+  - skin 있음 + `OutSkeletal` 바인딩 → `ExtractSkeletalMesh`.
+  - skin 없음 + `OutStatic` 바인딩 → `ExtractStaticMesh`.
+  - 바인딩 없으면 skip + warning 로그.
+
+- **`ExtractSkeletalMesh`** (현 `ExtractMesh`의 cluster-aware 재구성):
+  1. 폴리곤 펼치기 루프에서 `FNormalVertex`만 채운다 (bone 필드 없음).
+  2. **Control-point → expanded vertex index map** 빌드 (`TArray<TArray<uint32>> CPToExpanded`). 한 control point가 폴리곤 펼치기로 N개 expanded vertex가 되므로 map은 `[N]` 형태.
+  3. Section 등록 (현재는 단일 "Default" 슬롯 — 머티리얼 분할은 후속 작업).
+  4. FBX의 각 `FbxCluster`마다 `FBoneCluster` 인스턴스 직접 생성:
+     - `BoneIndex = OutMesh->GetBoneIndex(name)`
+     - IBP 계산: `IBP = TransformLinkMatrix.Inverse() * TransformMatrix` (이전과 동일 수식, 단 본이 아닌 cluster에 저장).
+     - `(CPIndex, Weight)` 쌍을 expanded vertex 단위로 펼쳐 `VertexIndices`/`Weights`에 push.
+
+- **`ExtractStaticMesh`** (신규):
+  - Mesh node의 `EvaluateGlobalTransform()`을 `FbxMatrixToFMatrix`로 변환하여 `BakeXform`으로 사용.
+  - Vertex 추출 시 pos는 `BakeXform.TransformPositionWithW(localPos)`, normal은 `BakeXform.TransformVector(localN)`로 평탄화. → static mesh는 actor transform과 독립적으로 world-space 기준 bind된 결과를 가짐.
+  - 결과를 누적 가능한 단일 `FStaticMesh`에 push (한 FBX 파일의 모든 unskinned mesh node가 하나의 static asset에 합쳐짐).
+
+- **`NormalizeClusterWeights`** (신규):
+  - 1pass: per-vertex total weight 합산.
+  - 2pass: 각 cluster의 `Weights[i] /= Totals[VertexIndices[i]]` — 기존 `ExtractMesh:303-306` 의 정규화 동작과 동일한 출력 보장.
+
+- **`ExtractSkeleton`**: IBP 저장 코드(`Bones[i].InverseBindMatrix = ...`) 제거. 이제 본은 parent + S·R·T만 다룸. 진단 로그는 유지.
+
+### 3.3 동작 변경 요약
+- **0-weight vertex**: cluster `VertexIndices`에 한 번도 등장하지 않음 → 스키닝 누적 단계에서 자연스럽게 bind-pose passthrough.
+- **>4 bone influence**: 더 이상 truncate되지 않음 (cluster는 vertex 수에 비례하는 크기로 자라기만 함).
+- **Static-only FBX**: `OutStatic`만 주어진 호출에서 정상 동작 (예: future StaticMesh 측에서 FBX 사용 시).
+
+---
+
+## 4. Step C — Component / SceneProxy Refactor
+
+### 4.1 [`Engine/Component/SkeletalMeshComponent.h`](KraftonEngine/Source/Engine/Component/SkeletalMeshComponent.h)
+- `#include "Mesh/StaticMeshAsset.h"` 추가 (FNormalVertex 가시화).
+- forward decl: `class UStaticMeshComponent;`.
+- 멤버 변경:
+  - **`SkinningMatrices` 멤버 삭제** (cluster 기반에서는 per-bone IBP 합성 불필요 — per-cluster 임시 행렬을 inline에서 만든다).
+  - `SkinnedVertices`: `TArray<FSkeletalMeshVertex>` → `TArray<FNormalVertex>`.
+  - **신규 `UStaticMeshComponent* EmbeddedStaticMeshComp = nullptr;`** — hybrid FBX의 static 파트를 같은 actor에 부착한 sibling.
+- 신규 메서드: `SyncEmbeddedStaticMesh()` — `SetSkeletalMesh()` 끝에서 호출, lazy-create / detach 처리.
+
+### 4.2 [`Engine/Component/SkeletalMeshComponent.cpp`](KraftonEngine/Source/Engine/Component/SkeletalMeshComponent.cpp)
+
+**Includes 추가**: `Component/StaticMeshComponent.h`, `Mesh/StaticMesh.h`, `GameFramework/AActor.h`.
+
+**`SetSkeletalMesh(InMesh)`**:
+- `InMesh == nullptr` 분기에서도 `SyncEmbeddedStaticMesh()` 호출 (이전 child 정리).
+- `DynamicVB.Create(Device, vertexCount, sizeof(FSkeletalMeshVertex))` → `sizeof(FNormalVertex)`.
+- 본 카운트 기반 `SkinningMatrices.assign(BoneCount, Identity)` 호출 제거 (멤버 자체가 사라짐).
+- 마지막에 `SyncEmbeddedStaticMesh()` 호출.
+
+**`SyncEmbeddedStaticMesh()` (신규)**:
+```cpp
+AActor* Owner = GetOwner();
+UStaticMesh* Embedded = SkeletalMesh ? SkeletalMesh->GetEmbeddedStaticMesh() : nullptr;
+if (!Embedded) {
+    if (EmbeddedStaticMeshComp && Owner) Owner->RemoveComponent(EmbeddedStaticMeshComp);
+    EmbeddedStaticMeshComp = nullptr;
+    return;
+}
+if (!Owner) return;                                 // actor 부착 전이면 다음 호출에 재시도
+if (!EmbeddedStaticMeshComp)
+    EmbeddedStaticMeshComp = Owner->AddComponent<UStaticMeshComponent>();
+EmbeddedStaticMeshComp->SetStaticMesh(Embedded);
+```
+→ 1-component-per-proxy 제약을 유지하면서 hybrid asset을 동일 actor의 두 sibling component로 분담.
+
+**`UpdateSkinning()`**: 단순 디스패치만 남김. 옛 bind-pose identity 진단 로그(per-bone IBP 검증) 제거 — cluster 모델에서는 의미가 다름. 옛 `SkinningMatrices[i] = Bones[i].InverseBindMatrix * Comp[i]` 라인 삭제.
+
+**`UpdateSkinningCPU()`** — cluster 기반 재작성:
+```cpp
+const auto& Src      = Asset->Vertices;              // FNormalVertex 배열
+const auto& Clusters = Asset->Clusters;
+const auto& Comp     = ComponentSpaceMatrices;
+SkinnedVertices = Src;                               // color/tex/tangent 보존
+
+// 1) cluster에 잡힌 vertex 집합 표시
+TArray<bool> bSkinned(N, false);
+for (const FBoneCluster& C : Clusters)
+    for (uint32 vi : C.VertexIndices) bSkinned[vi] = true;
+
+// 2) skinned vertex만 pos/normal=0 초기화 (untouched vertex는 bind-pose passthrough)
+for (vi: 0..N)
+    if (bSkinned[vi]) { SkinnedVertices[vi].pos=0; SkinnedVertices[vi].normal=0; }
+
+// 3) cluster 순회 — 행렬 한 번 계산 후 영향 vertex 누적
+for (const FBoneCluster& C : Clusters) {
+    FMatrix M = C.InverseBindMatrix * Comp[C.BoneIndex];
+    for (i: 0..C.VertexIndices.size()) {
+        SkinnedVertices[vi].pos    += M.TransformPositionWithW(Src[vi].pos)    * w;
+        SkinnedVertices[vi].normal += M.TransformVector(Src[vi].normal)        * w;
+    }
+}
+DynamicVB.Update(...);
+```
+→ 이전 모델의 (0,0,0) collapse 버그가 자연 해결됨.
+
+**`GetMeshDataView()`**: `View.Stride = sizeof(FSkeletalMeshVertex)` → `sizeof(FNormalVertex)`. 픽킹/BVH 등에서 vertex view 가 48B 스트라이드로 일관됨.
+
+**`CalcDynamicLocalBounds()`**: `V.Position` → `V.pos`.
+
+**`UpdateSkinningGPU()`**: stub 주석 갱신 — cluster 모델에서 GPU 스키닝은 vertex shader가 cluster SRV(또는 bone-matrix palette)를 받아야 하므로 별도 파이프라인 설계가 필요함을 명시.
+
+### 4.3 [`Engine/Render/Proxy/SkeletalSceneProxy.cpp`](KraftonEngine/Source/Engine/Render/Proxy/SkeletalSceneProxy.cpp)
+- 코드 변경 없음 (stride는 `FMeshBuffer::GetVertexBuffer().GetStride()` / `FDynamicVertexBuffer::GetStride()`로 auto-adapt).
+- GPU 모드 분기 주석만 갱신 — bind-pose VB라는 점, cluster SRV 슬롯 필요성 명시.
+
+---
+
+## 5. 의미 있는 동작 변경
+
+| # | 동작 | Before | After |
+|---|---|---|---|
+| 1 | 0-weight vertex 위치 | (0,0,0) collapse | bind-pose 위치 그대로 |
+| 2 | bone 5개 이상에 영향받는 vertex | 4개로 truncate (visual glitch) | 모든 영향 반영 |
+| 3 | skin 없는 FBX prop mesh | import 누락 / origin collapse | 별도 `FStaticMesh`로 추출 |
+| 4 | hybrid FBX → actor에 부착 | skeletal 1개 component만 | skeletal + static 2개 sibling component |
+| 5 | `.bin` 캐시 v1 로드 | undefined behavior (포맷 mismatch) | `Serialize` false 반환 → FBXManager가 감지 → 강제 재import |
+| 6 | CPU 스키닝 vertex stride | 96B | 48B (대역폭 ~50% 절감) |
+| 7 | FBXManager 의 importer 호출 | 구 API `ImportSkeletalMesh(path, skel)` | `ImportFbx(path, skel, pendingStatic)` — hybrid 결과 수신 |
+
+---
+
+## 6. Step D — Asset/Manager 통합
+
+### 6.1 [`Engine/SkeletalMesh/SkeletalMesh.cpp`](KraftonEngine/Source/Engine/SkeletalMesh/SkeletalMesh.cpp)
+
+**Includes 추가**: `Mesh/StaticMesh.h`, `Object/ObjectFactory.h`.
+
+**`USkeletalMesh::Serialize(Ar)` 갱신**:
+- `SkeletalMeshAsset->Serialize(Ar)` 가 **false** 를 반환하면 (= 캐시 버전 mismatch) → 임시 객체 delete, `SkeletalMeshAsset = nullptr` 로 두고 **early return**.
+  - 호출자(FBXManager)가 `GetSkeletalMeshAsset() == nullptr` 을 재빌드 신호로 사용.
+- 정상 분기에서 `StaticMaterials` / `BoneNames` 직렬화 직후, **`EmbeddedStaticMesh` 도 함께 직렬화**:
+  - `bool bHasEmbedded` flag → loading 시 `UObjectManager::Get().CreateObject<UStaticMesh>()` 로 생성 → `EmbeddedStaticMesh->Serialize(Ar)` 위임.
+  - `UStaticMesh::Serialize` 는 `Super::Serialize` 를 호출하지 않으므로 UObject base 중복 직렬화 위험 없음 (`StaticMesh.cpp:26-56` 확인).
+
+**`USkeletalMesh::InitResources(Device)` 갱신**:
+- 기존 `SkeletalMeshAsset` GPU 버퍼 생성 후, `EmbeddedStaticMesh` 가 있으면 `EmbeddedStaticMesh->InitResources(InDevice)` 도 호출 → hybrid 의 static 파트도 GPU 에 올라감.
+
+### 6.2 [`Engine/SkeletalMesh/FBXManager.cpp`](KraftonEngine/Source/Engine/SkeletalMesh/FBXManager.cpp)
+
+**Includes 추가**: `Mesh/StaticMesh.h`, `Object/ObjectFactory.h`.
+
+**`FFBXManager::LoadSkeletalMesh` 갱신** — 두 분기:
+
+1. **캐시 로드 후 무효 감지**:
+   ```cpp
+   SkeletalMesh->Serialize(Reader);
+   if (!SkeletalMesh->GetSkeletalMeshAsset()) {
+       UE_LOG("Skeletal mesh cache invalid (version mismatch?), rebuilding: %s", BinPath.c_str());
+       bNeedRebuild = true;
+   }
+   ```
+   → v1 캐시는 첫 로드에서 자동으로 폐기되고 v2 로 다시 구워진다.
+
+2. **재빌드 분기 — `ImportFbx` 호출**:
+   ```cpp
+   UStaticMesh* PendingStatic = UObjectManager::Get().CreateObject<UStaticMesh>();
+   if (FFbxImporter::ImportFbx(FbxPath, SkeletalMesh, PendingStatic)) {
+       if (PendingStatic->GetStaticMeshAsset())            // static 데이터가 실제로 들어왔을 때만
+           SkeletalMesh->SetEmbeddedStaticMesh(PendingStatic);
+       // 빈 객체는 UObjectManager GC에 위임 (ObjManager 와 동일 패턴)
+
+       FWindowsBinWriter Writer(BinPath);
+       if (Writer.IsValid()) SkeletalMesh->Serialize(Writer);
+   }
+   ```
+
+**`FFBXManager::ReleaseAllGPU` 갱신**:
+- 기존 `SkeletalMeshAsset->RenderBuffer->Release()` 외에, `EmbeddedStaticMesh->GetStaticMeshAsset()->RenderBuffer` 도 함께 해제. LOD 버퍼는 LOD 활성화 시 함께 처리(현재 LOD 생성은 ObjManager 측에서도 주석 처리됨).
+
+### 6.3 hybrid FBX 동작 정리
+
+캐시 흐름:
+```
+LoadSkeletalMesh
+  ├── 메모리 캐시 hit → 그대로 반환
+  ├── 디스크 .bin v2 hit → Serialize → InitResources (skel + embedded) → cache 등록
+  ├── 디스크 .bin v1 hit → Serialize false → 재빌드 분기
+  └── 재빌드 분기:
+       PendingStatic = CreateObject<UStaticMesh>()
+       ImportFbx(path, skel, PendingStatic)
+         ├── skinned mesh node → skel 에 cluster 채움
+         └── unskinned mesh node → PendingStatic 에 FStaticMesh 채움
+       PendingStatic 에 데이터 있으면 → skel->SetEmbeddedStaticMesh()
+       Serialize(Writer)  # v2 캐시 생성, EmbeddedStaticMesh 포함
+       InitResources(Device)  # skel + embedded 둘 다 GPU 업로드
+       cache 등록
+```
+
+runtime 렌더 흐름:
+```
+USkeletalMeshComponent::SetSkeletalMesh(skel)
+  ├── 기존 동작 (cluster 기반 스키닝, DynamicVB, etc.)
+  └── SyncEmbeddedStaticMesh()
+       └── skel->GetEmbeddedStaticMesh() 있으면
+            owner actor->AddComponent<UStaticMeshComponent>()
+            child->SetStaticMesh(embedded)
+```
+
+---
+
+## 7. 미진행 / 후속 작업
+
+### Step E — 검증 (예정)
+- Regression: 기존 skeletal 캐릭터 .fbx — 본 수/시각 동일, v1 캐시 자동 재빌드 후 정상 렌더.
+- Pure static FBX: `UStaticMesh` 만 생성, sibling static component 가 actor 에 부착되어 렌더.
+- Hybrid FBX: 두 sibling component, 둘 다 렌더.
+- Zero-weight vertex .fbx: bind-pose 위치 확인.
+- OBJ regression: `Engine/Mesh/` 미변경 검증.
+
+### GPU 스키닝 (이번 PR 스코프 밖)
+- vertex에 bone 정보가 더 이상 없으므로, vertex shader가 cluster index buffer + bone-matrix palette를 SRV로 받도록 파이프라인 확장 필요.
+- 현 단계는 CPU 스키닝까지만 지원. 구조는 추후 확장을 위해 stub 형태로 유지.
+
+---
+
+## 8. 수정/생성 파일 목록
+
+### 수정
+- `Engine/Render/Types/VertexTypes.h`
+- `Engine/SkeletalMesh/SkeletalMeshAsset.h`
+- `Engine/SkeletalMesh/SkeletalMesh.h`
+- `Engine/SkeletalMesh/SkeletalMesh.cpp`
+- `Engine/SkeletalMesh/FBXImporter.h`
+- `Engine/SkeletalMesh/FBXImporter.cpp`
+- `Engine/SkeletalMesh/FBXManager.cpp` *(Step D 신규)*
+- `Engine/Component/SkeletalMeshComponent.h`
+- `Engine/Component/SkeletalMeshComponent.cpp`
+- `Engine/Render/Proxy/SkeletalSceneProxy.cpp` (주석만)
+
+### 변경 없음 (재사용)
+- `Engine/Mesh/*` 전체 (StaticMesh / OBJ 파이프라인)
+- `Engine/Component/StaticMeshComponent.*`
+- `Engine/Render/Proxy/StaticMeshSceneProxy.*`
+- `Engine/Render/Resource/Buffer.h`
+
+---
+
+## 9. 참고 — 새/사라진 타입 정리
+
+**신규**:
+- `FBoneCluster` — bone 1개와 vertex 영향 목록을 묶은 단위 (FbxCluster 1:1 대응).
+
+**삭제**:
+- `FSkeletalMeshVertex` — 96B 정점 구조체. `FNormalVertex` (48B)가 대체.
+- `FBone::InverseBindMatrix` 멤버 — `FBoneCluster`로 이동.
+- `TSkeletalData`, `FSkeletalData` alias — 사용처 없는 dead code.
+- `USkeletalMeshComponent::SkinningMatrices` 멤버 — per-cluster transient 행렬로 대체.
+
+**기존 유지 (재사용)**:
+- `FNormalVertex`, `FStaticMeshSection`, `FStaticMaterial`, `FMeshBuffer`, `FVertexBuffer`, `FIndexBuffer`, `FDynamicVertexBuffer`, `TMeshData<>`.
+- `UStaticMesh`, `UStaticMeshComponent`, `FStaticMeshSceneProxy`, `FStaticMesh`.

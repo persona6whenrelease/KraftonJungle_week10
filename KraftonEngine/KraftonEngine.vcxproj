@@ -417,6 +417,7 @@ xcopy /Y /D /I "$(ProjectDir)ThirdParty\FBX\lib\release\*.dll" "$(OutDir)"</Comm
     <ClCompile Include="Source\Engine\GameFramework\Light\SpotLightActor.cpp" />
     <ClCompile Include="Source\Engine\GameFramework\Pawn.cpp" />
     <ClCompile Include="Source\Engine\GameFramework\PlayerController.cpp" />
+    <ClCompile Include="Source\Engine\GameFramework\SkeletalMeshActor.cpp" />
     <ClCompile Include="Source\Engine\GameFramework\StaticMeshActor.cpp" />
     <ClCompile Include="Source\Engine\GameFramework\World.cpp" />
     <ClCompile Include="Source\Engine\Input\GameplayInputRouter.cpp" />
@@ -690,6 +691,7 @@ xcopy /Y /D /I "$(ProjectDir)ThirdParty\FBX\lib\release\*.dll" "$(OutDir)"</Comm
     <ClInclude Include="Source\Engine\GameFramework\Light\SpotLightActor.h" />
     <ClInclude Include="Source\Engine\GameFramework\Pawn.h" />
     <ClInclude Include="Source\Engine\GameFramework\PlayerController.h" />
+    <ClInclude Include="Source\Engine\GameFramework\SkeletalMeshActor.h" />
     <ClInclude Include="Source\Engine\GameFramework\StaticMeshActor.h" />
     <ClInclude Include="Source\Engine\GameFramework\World.h" />
     <ClInclude Include="Source\Engine\GameFramework\WorldContext.h" />

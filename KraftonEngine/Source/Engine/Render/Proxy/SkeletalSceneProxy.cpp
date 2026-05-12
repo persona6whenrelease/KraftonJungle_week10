@@ -63,8 +63,9 @@ FGPUGeometryView FSkeletalSceneProxy::GetGeometryView() const
 	}
 	else
 	{
-		// GPU 스키닝: 에셋의 정적 VB/IB (bone indices/weights 포함)
-		// 본 행렬 SRV 슬롯은 파이프라인 확장 시 추가 예정
+		// GPU 스키닝(미구현 stub): 에셋의 정적 bind-pose VB/IB.
+		// cluster 모델에서는 vertex에 bone 정보가 없으므로,
+		// vertex shader가 cluster SRV(또는 bone-matrix palette)를 별도 슬롯으로 받아야 함.
 		if (!Asset->RenderBuffer->IsValid()) return {};
 		return {
 			Asset->RenderBuffer->GetVertexBuffer().GetBuffer(),

@@ -1,6 +1,8 @@
-﻿#include "FBXImporter.h"
+#include "FBXImporter.h"
 #include "SkeletalMesh.h"
 #include "SkeletalMeshAsset.h"
+#include "Mesh/StaticMesh.h"
+#include "Mesh/StaticMeshAsset.h"
 #include "Core/Log.h"
 
 // FBX SDK Header
@@ -10,9 +12,9 @@
 #include <fbxsdk.h>
 
 /**
- * FBX 전용 행렬(FbxAMatrix)을 엔진의 FMatrix로 변환하는 헬퍼 함수.
- * 실측 결과 FbxAMatrix는 row 3에 Translation을 저장하는 row-major-호환 메모리 컨벤션을
- * 사용하므로(엔진 FMatrix와 동일), transpose 없이 직접 복사한다.
+ * FBX 전용 행렬(FbxAMatrix)을 엔진의 FMatrix로 변환.
+ * FbxAMatrix는 row 3에 Translation을 저장하는 row-major-호환 메모리 컨벤션이므로
+ * (엔진 FMatrix와 동일), transpose 없이 직접 복사한다.
  */
 static FMatrix FbxMatrixToFMatrix(const fbxsdk::FbxAMatrix& FbxMat)
 {
@@ -28,7 +30,7 @@ static FMatrix FbxMatrixToFMatrix(const fbxsdk::FbxAMatrix& FbxMat)
 }
 
 /**
- * Scene 내에서 eSkeleton 속성을 가진 모든 조인트 노드를 재귀적으로 수집합니다.
+ * Scene 내에서 eSkeleton 속성을 가진 모든 조인트 노드를 재귀적으로 수집.
  */
 static void GatherJoints(fbxsdk::FbxNode* Node, TArray<fbxsdk::FbxNode*>& OutJoints)
 {
@@ -52,7 +54,7 @@ static void GatherJoints(fbxsdk::FbxNode* Node, TArray<fbxsdk::FbxNode*>& OutJoi
  */
 struct FBindPoseInfo
 {
-	fbxsdk::FbxAMatrix TransformLink;   // L: 본 글로벌 (col-major)
+	fbxsdk::FbxAMatrix TransformLink;   // L: 본 글로벌
 	fbxsdk::FbxAMatrix TransformMesh;   // M: 메시 노드 글로벌
 	bool bValid = false;
 };
@@ -91,9 +93,11 @@ static void GatherBindPoseInfo(fbxsdk::FbxNode* Node, TMap<fbxsdk::FbxNode*, FBi
 	}
 }
 
-bool FFbxImporter::ImportSkeletalMesh(const FString& FilePath, USkeletalMesh* OutMesh)
+bool FFbxImporter::ImportFbx(const FString& FilePath,
+                             USkeletalMesh* OutSkeletal,
+                             UStaticMesh*   OutStatic)
 {
-	if (!OutMesh) return false;
+	if (!OutSkeletal && !OutStatic) return false;
 
 	// 1. FbxManager 생성
 	FbxManager* SdkManager = FbxManager::Create();
@@ -126,72 +130,190 @@ bool FFbxImporter::ImportSkeletalMesh(const FString& FilePath, USkeletalMesh* Ou
 	FbxAxisSystem EngineAxisSystem(FbxAxisSystem::eZAxis, FbxAxisSystem::eParityEven, FbxAxisSystem::eLeftHanded);
 	EngineAxisSystem.ConvertScene(Scene);
 
-	// 6. 데이터 추출을 위한 Raw Mesh 구조체 준비
-	FSkeletalMesh* RawMesh = new FSkeletalMesh();
-	RawMesh->PathFileName = FilePath;
+	// 6. Raw output 컨테이너 준비
+	FSkeletalMesh* RawSkel   = OutSkeletal ? new FSkeletalMesh() : nullptr;
+	FStaticMesh*   RawStatic = OutStatic   ? new FStaticMesh()   : nullptr;
+	if (RawSkel)   RawSkel->PathFileName   = FilePath;
+	if (RawStatic) RawStatic->PathFileName = FilePath;
 
 	// 7. 스켈레톤 먼저 추출 (본 인덱스 매핑을 위해)
-	ExtractSkeleton(Scene, OutMesh, RawMesh);
+	if (OutSkeletal)
+	{
+		ExtractSkeleton(Scene, OutSkeletal, RawSkel);
+	}
 
-	// 8. 노드 순회하며 메시 데이터 추출
+	// 8. 노드 순회 — skin 여부에 따라 분기
 	FbxNode* RootNode = Scene->GetRootNode();
 	if (RootNode)
 	{
-		ProcessNode(RootNode, OutMesh, RawMesh);
+		ProcessNode(RootNode, OutSkeletal, RawSkel, OutStatic, RawStatic);
 	}
 
-	// 9. 추출된 데이터를 에셋에 주입
-	OutMesh->SetSkeletalMeshAsset(RawMesh);
+	// 9. cluster weight 정규화 (per-vertex sum = 1.0)
+	if (RawSkel)
+	{
+		NormalizeClusterWeights(RawSkel);
+	}
 
-	// 10. SDK 자원 해제
+	// 10. 결과를 asset에 주입 (비어 있으면 해제)
+	bool bHaveSkel   = (RawSkel   && !RawSkel->Vertices.empty());
+	bool bHaveStatic = (RawStatic && !RawStatic->Vertices.empty());
+
+	if (OutSkeletal)
+	{
+		if (bHaveSkel) OutSkeletal->SetSkeletalMeshAsset(RawSkel);
+		else           { delete RawSkel; }
+	}
+	if (OutStatic)
+	{
+		if (bHaveStatic) OutStatic->SetStaticMeshAsset(RawStatic);
+		else             { delete RawStatic; }
+	}
+
+	// 11. SDK 자원 해제
 	SdkManager->Destroy();
 
-	UE_LOG("Successfully imported FBX: %s", FilePath.c_str());
+	if (!bHaveSkel && !bHaveStatic)
+	{
+		UE_LOG("FBX import produced no mesh data: %s", FilePath.c_str());
+		return false;
+	}
+
+	UE_LOG("Successfully imported FBX: %s (skeletal=%d, static=%d)",
+		FilePath.c_str(), bHaveSkel ? 1 : 0, bHaveStatic ? 1 : 0);
 	return true;
 }
 
-void FFbxImporter::ProcessNode(FbxNode* Node, USkeletalMesh* OutMesh, FSkeletalMesh* RawMesh)
+bool FFbxImporter::HasValidSkinDeformer(FbxMesh* Mesh, USkeletalMesh* OutMesh)
+{
+	if (!Mesh) return false;
+	int SkinCount = Mesh->GetDeformerCount(FbxDeformer::eSkin);
+	for (int i = 0; i < SkinCount; ++i)
+	{
+		FbxSkin* Skin = (FbxSkin*)Mesh->GetDeformer(i, FbxDeformer::eSkin);
+		int ClusterCount = Skin->GetClusterCount();
+		for (int j = 0; j < ClusterCount; ++j)
+		{
+			FbxCluster* Cluster = Skin->GetCluster(j);
+			FbxNode* Link = Cluster->GetLink();
+			if (!Link) continue;
+			// OutMesh가 주어진 경우 본 이름이 실제 스켈레톤에 매핑되는지 확인.
+			if (OutMesh && OutMesh->GetBoneIndex(FName(Link->GetName())) < 0) continue;
+			return true;
+		}
+	}
+	return false;
+}
+
+void FFbxImporter::ProcessNode(FbxNode* Node,
+                               USkeletalMesh* OutSkeletal, FSkeletalMesh* RawSkel,
+                               UStaticMesh*   OutStatic,   FStaticMesh*   RawStatic)
 {
 	if (!Node) return;
 
-	// 노드의 속성 확인
 	FbxNodeAttribute* Attribute = Node->GetNodeAttribute();
-	if (Attribute)
+	if (Attribute && Attribute->GetAttributeType() == FbxNodeAttribute::eMesh)
 	{
-		if (Attribute->GetAttributeType() == FbxNodeAttribute::eMesh)
+		FbxMesh* Mesh = (FbxMesh*)Attribute;
+		const bool bSkinned = HasValidSkinDeformer(Mesh, OutSkeletal);
+
+		if (bSkinned)
 		{
-			ExtractMesh((FbxMesh*)Attribute, RawMesh, OutMesh);
+			if (RawSkel && OutSkeletal)
+			{
+				ExtractSkeletalMesh(Mesh, RawSkel, OutSkeletal);
+			}
+			else
+			{
+				UE_LOG("Skipping skinned mesh node '%s' (no skeletal output bound).", Node->GetName());
+			}
+		}
+		else
+		{
+			if (RawStatic)
+			{
+				ExtractStaticMesh(Mesh, RawStatic);
+			}
+			else
+			{
+				UE_LOG("Skipping unskinned mesh node '%s' (no static output bound).", Node->GetName());
+			}
 		}
 	}
 
-	// 자식 노드 재귀 순회
 	for (int i = 0; i < Node->GetChildCount(); ++i)
 	{
-		ProcessNode(Node->GetChild(i), OutMesh, RawMesh);
+		ProcessNode(Node->GetChild(i), OutSkeletal, RawSkel, OutStatic, RawStatic);
 	}
 }
 
-void FFbxImporter::ExtractMesh(FbxMesh* Mesh, FSkeletalMesh* RawMesh, USkeletalMesh* OutMesh)
+void FFbxImporter::ExtractSkeletalMesh(FbxMesh* Mesh, FSkeletalMesh* RawMesh, USkeletalMesh* OutMesh)
 {
 	if (!Mesh || !RawMesh || !OutMesh) return;
 
-	UE_LOG("Extracting Mesh: %s", Mesh->GetName());
-
-	// 1. 삼각형화 (Triangulate) 확인
-	// FBX SDK의 GeometryConverter를 사용하여 모든 폴리곤을 삼각형으로 변환할 수 있습니다.
-	// 여기서는 이미 삼각형화 되어있다고 가정하거나, 수동으로 인덱스를 처리합니다.
+	UE_LOG("Extracting Skeletal Mesh: %s", Mesh->GetName());
 
 	int ControlPointsCount = Mesh->GetControlPointsCount();
 	FbxVector4* ControlPoints = Mesh->GetControlPoints();
 
-	// 2. 스키닝 데이터 추출 (Control Point Index -> Bone Weights)
-	struct FWeightInfo {
-		int32 BoneIndex = 0;
-		float Weight = 0.0f;
-	};
-	TArray<TArray<FWeightInfo>> CPWeights;
-	CPWeights.resize(ControlPointsCount);
+	// 1. 정점/인덱스 버퍼 구축 (bind-pose FNormalVertex, bone 정보 없음).
+	//    동시에 control-point index → expanded vertex index 매핑을 만든다.
+	TArray<TArray<uint32>> CPToExpanded;
+	CPToExpanded.resize(ControlPointsCount);
 
+	const uint32 IndexBase   = (uint32)RawMesh->Indices.size();
+	const uint32 VertexBase  = (uint32)RawMesh->Vertices.size();
+
+	int PolygonCount = Mesh->GetPolygonCount();
+	for (int i = 0; i < PolygonCount; ++i)
+	{
+		int PolygonSize = Mesh->GetPolygonSize(i);
+		if (PolygonSize != 3) continue; // 삼각형만 처리 (삼각형화 가정)
+
+		for (int j = 0; j < 3; ++j)
+		{
+			int CPIndex = Mesh->GetPolygonVertex(i, j);
+			FNormalVertex Vertex = {}; // zero-init
+
+			FbxVector4 Pos = ControlPoints[CPIndex];
+			Vertex.pos = FVector((float)Pos[0], (float)Pos[1], (float)Pos[2]);
+
+			FbxVector4 Normal;
+			if (Mesh->GetPolygonVertexNormal(i, j, Normal))
+			{
+				Vertex.normal = FVector((float)Normal[0], (float)Normal[1], (float)Normal[2]);
+			}
+
+			FbxVector2 UV;
+			bool bUnmapped;
+			if (Mesh->GetPolygonVertexUV(i, j, "", UV, bUnmapped))
+			{
+				Vertex.tex = FVector2((float)UV[0], 1.0f - (float)UV[1]); // DirectX UV Flip
+			}
+
+			Vertex.color   = FVector4(1, 1, 1, 1);
+			Vertex.tangent = FVector4(0, 0, 0, 1); // tangent 계산은 후속 작업
+
+			uint32 ExpandedIndex = (uint32)RawMesh->Vertices.size();
+			RawMesh->Vertices.push_back(Vertex);
+			RawMesh->Indices.push_back(ExpandedIndex);
+			CPToExpanded[CPIndex].push_back(ExpandedIndex);
+		}
+	}
+
+	// 2. Section 등록 (전체 메시를 단일 섹션으로 — 머티리얼 분할은 후속 작업)
+	{
+		FStaticMeshSection Section;
+		Section.MaterialSlotName = "Default";
+		Section.FirstIndex   = IndexBase;
+		Section.NumTriangles = (uint32)(RawMesh->Indices.size() - IndexBase) / 3;
+		if (Section.NumTriangles > 0)
+		{
+			RawMesh->Sections.push_back(Section);
+		}
+	}
+
+	// 3. Cluster 추출 → FBoneCluster 직접 생성
 	int SkinCount = Mesh->GetDeformerCount(FbxDeformer::eSkin);
 	for (int i = 0; i < SkinCount; ++i)
 	{
@@ -206,118 +328,152 @@ void FFbxImporter::ExtractMesh(FbxMesh* Mesh, FSkeletalMesh* RawMesh, USkeletalM
 			int32 BoneIndex = OutMesh->GetBoneIndex(FName(Link->GetName()));
 			if (BoneIndex == -1) continue;
 
-			// IBP 계산: 메시 노드 변환(M)과 본 글로벌(L) 모두 반영.
-			// FBX(Column-Major)에서 본의 메시 공간 바인드 글로벌 = M^-1 * L 이므로
-			// IBP_FBX = (M^-1 * L)^-1 = L^-1 * M.
-			// FbxMatrixToFMatrix는 직접 복사를 수행하므로 FBX 공간에서 모든 행렬 합성을 마친 뒤 변환한다.
+			// IBP 계산:
+			//   FBX 공간에서 본의 메시 바인드 글로벌 = M^-1 * L 이므로
+			//   IBP = (M^-1 * L)^-1 = L^-1 * M.
+			FbxAMatrix FbxTransformMatrix;
+			Cluster->GetTransformMatrix(FbxTransformMatrix);            // M
+			FbxAMatrix FbxTransformLinkMatrix;
+			Cluster->GetTransformLinkMatrix(FbxTransformLinkMatrix);    // L
+			FbxAMatrix IBP_Fbx = FbxTransformLinkMatrix.Inverse() * FbxTransformMatrix;
+
+			FBoneCluster NewCluster;
+			NewCluster.BoneIndex         = BoneIndex;
+			NewCluster.InverseBindMatrix = FbxMatrixToFMatrix(IBP_Fbx);
+
+			int CPCount = Cluster->GetControlPointIndicesCount();
+			int*    CPIndices = Cluster->GetControlPointIndices();
+			double* CPWeights = Cluster->GetControlPointWeights();
+
+			// expanded vertex 단위로 펼친다 (한 control point가 여러 expanded vertex로 복제됨)
+			for (int k = 0; k < CPCount; ++k)
 			{
-				FbxAMatrix FbxTransformMatrix;
-				Cluster->GetTransformMatrix(FbxTransformMatrix);            // 메시 노드 변환 M
-
-				FbxAMatrix FbxTransformLinkMatrix;
-				Cluster->GetTransformLinkMatrix(FbxTransformLinkMatrix);    // 본 글로벌 L
-
-				FbxAMatrix IBP_Fbx = FbxTransformLinkMatrix.Inverse() * FbxTransformMatrix;
-				RawMesh->Bones[BoneIndex].InverseBindMatrix = FbxMatrixToFMatrix(IBP_Fbx);
-
-				// 진단 로그: 모든 본의 M, L, IBP Translation 한 줄 출력
-				const FMatrix& IBP = RawMesh->Bones[BoneIndex].InverseBindMatrix;
-				{		//UE_LOG("[IBP Diag] Bone[%d] %s M=(%.3f, %.3f, %.3f) L=(%.3f, %.3f, %.3f) IBP.Row3=(%.3f, %.3f, %.3f)",
-				//	BoneIndex, Link->GetName(),
-				//	(float)FbxTransformMatrix.Get(3, 0), (float)FbxTransformMatrix.Get(3, 1), (float)FbxTransformMatrix.Get(3, 2),
-				//	(float)FbxTransformLinkMatrix.Get(3, 0), (float)FbxTransformLinkMatrix.Get(3, 1), (float)FbxTransformLinkMatrix.Get(3, 2),
-				//	IBP.M[3][0], IBP.M[3][1], IBP.M[3][2]);
-
-				//// Bone[0] 한정: transpose 가설 검증용 추가 출력
-				//if (BoneIndex == 0)
-				//{
-				//	FbxVector4 TLM_T = FbxTransformLinkMatrix.GetT();
-				//	UE_LOG("[IBP Verify] Bone[0] L.GetT()=(%.3f, %.3f, %.3f) L.Get(0,3..2,3)=(%.3f, %.3f, %.3f) IBP.Col3=(%.3f, %.3f, %.3f)",
-				//		(float)TLM_T[0], (float)TLM_T[1], (float)TLM_T[2],
-				//		(float)FbxTransformLinkMatrix.Get(0, 3), (float)FbxTransformLinkMatrix.Get(1, 3), (float)FbxTransformLinkMatrix.Get(2, 3),
-				//		IBP.M[0][3], IBP.M[1][3], IBP.M[2][3]);
-				//}
+				int cp = CPIndices[k];
+				float w = (float)CPWeights[k];
+				if (cp < 0 || cp >= (int)CPToExpanded.size()) continue;
+				for (uint32 ev : CPToExpanded[cp])
+				{
+					NewCluster.VertexIndices.push_back(ev);
+					NewCluster.Weights.push_back(w);
 				}
 			}
 
-			// 이 본에 영향을 받는 정점 인덱스와 가중치 추출
-			int IndexCount = Cluster->GetControlPointIndicesCount();
-			int* Indices = Cluster->GetControlPointIndices();
-			double* Weights = Cluster->GetControlPointWeights();
-
-			for (int k = 0; k < IndexCount; ++k)
+			if (!NewCluster.VertexIndices.empty())
 			{
-				CPWeights[Indices[k]].push_back({ BoneIndex, (float)Weights[k] });
+				RawMesh->Clusters.push_back(std::move(NewCluster));
 			}
 		}
 	}
 
-	// 3. 정점 및 인덱스 버퍼 구축
-	int PolygonCount = Mesh->GetPolygonCount();
-	uint32 VertexOffset = (uint32)RawMesh->Vertices.size();
+	UE_LOG("Extracted skel mesh '%s': +%u verts, +%u indices, +%d clusters",
+		Mesh->GetName(),
+		(uint32)RawMesh->Vertices.size() - VertexBase,
+		(uint32)RawMesh->Indices.size()  - IndexBase,
+		(int)RawMesh->Clusters.size());
+}
 
+void FFbxImporter::ExtractStaticMesh(FbxMesh* Mesh, FStaticMesh* RawMesh)
+{
+	if (!Mesh || !RawMesh) return;
+
+	UE_LOG("Extracting Static Mesh: %s", Mesh->GetName());
+
+	int ControlPointsCount = Mesh->GetControlPointsCount();
+	FbxVector4* ControlPoints = Mesh->GetControlPoints();
+
+	// Mesh node의 global transform을 vertex pos/normal에 베이크
+	// (skeleton에 attach 되지 않으므로 actor transform과 함께 평탄화)
+	FbxNode* Owner = Mesh->GetNode();
+	FbxAMatrix NodeGlobal;
+	NodeGlobal.SetIdentity();
+	if (Owner)
+	{
+		NodeGlobal = Owner->EvaluateGlobalTransform();
+	}
+	const FMatrix BakeXform = FbxMatrixToFMatrix(NodeGlobal);
+
+	const uint32 IndexBase = (uint32)RawMesh->Indices.size();
+
+	int PolygonCount = Mesh->GetPolygonCount();
 	for (int i = 0; i < PolygonCount; ++i)
 	{
 		int PolygonSize = Mesh->GetPolygonSize(i);
-		// 삼각형만 처리 (삼각형화가 미리 되어있어야 함)
 		if (PolygonSize != 3) continue;
 
 		for (int j = 0; j < 3; ++j)
 		{
 			int CPIndex = Mesh->GetPolygonVertex(i, j);
-			FSkeletalMeshVertex Vertex = {}; // 초기화 필수 (쓰레기 값 방지)
+			FNormalVertex Vertex = {};
 
-			// Position
 			FbxVector4 Pos = ControlPoints[CPIndex];
-			Vertex.Position = FVector((float)Pos[0], (float)Pos[1], (float)Pos[2]);
+			FVector LocalPos((float)Pos[0], (float)Pos[1], (float)Pos[2]);
+			Vertex.pos = BakeXform.TransformPositionWithW(LocalPos);
 
-			// Normal (간단히 첫 번째 레이어 사용)
 			FbxVector4 Normal;
 			if (Mesh->GetPolygonVertexNormal(i, j, Normal))
 			{
-				Vertex.Normal = FVector((float)Normal[0], (float)Normal[1], (float)Normal[2]);
+				FVector LocalN((float)Normal[0], (float)Normal[1], (float)Normal[2]);
+				Vertex.normal = BakeXform.TransformVector(LocalN);
 			}
 
-			// UV (간단히 첫 번째 레이어 사용)
 			FbxVector2 UV;
 			bool bUnmapped;
 			if (Mesh->GetPolygonVertexUV(i, j, "", UV, bUnmapped))
 			{
-				Vertex.UV = FVector2((float)UV[0], 1.0f - (float)UV[1]); // DirectX UV Flip
+				Vertex.tex = FVector2((float)UV[0], 1.0f - (float)UV[1]);
 			}
 
-			// Color (기본 흰색)
-			Vertex.Color = FVector4(1, 1, 1, 1);
+			Vertex.color   = FVector4(1, 1, 1, 1);
+			Vertex.tangent = FVector4(0, 0, 0, 1);
 
-			// Skinning Weights (최대 4개)
-			const auto& Weights = CPWeights[CPIndex];
-			float TotalWeight = 0.0f;
-			for (int k = 0; k < (int)Weights.size() && k < 4; ++k)
-			{
-				Vertex.boneIndices[k] = Weights[k].BoneIndex;
-				Vertex.boneWeights[k] = Weights[k].Weight;
-				TotalWeight += Vertex.boneWeights[k];
-			}
-
-			// 가중치 정규화
-			if (TotalWeight > 0.0f)
-			{
-				for (int k = 0; k < 4; ++k) Vertex.boneWeights[k] /= TotalWeight;
-			}
-
+			uint32 ExpandedIndex = (uint32)RawMesh->Vertices.size();
 			RawMesh->Vertices.push_back(Vertex);
-			RawMesh->Indices.push_back((uint32)RawMesh->Indices.size()); // 간단한 인덱싱
+			RawMesh->Indices.push_back(ExpandedIndex);
 		}
 	}
 
-	// 섹션 추가 (전체 메시를 하나의 섹션으로 처리)
 	FStaticMeshSection Section;
 	Section.MaterialSlotName = "Default";
-	Section.FirstIndex = VertexOffset;
-	Section.NumTriangles = (uint32)(RawMesh->Indices.size() - VertexOffset) / 3;
-	RawMesh->Sections.push_back(Section);
+	Section.FirstIndex   = IndexBase;
+	Section.NumTriangles = (uint32)(RawMesh->Indices.size() - IndexBase) / 3;
+	if (Section.NumTriangles > 0)
+	{
+		RawMesh->Sections.push_back(Section);
+	}
 
-	UE_LOG("Extracted %d vertices and %d indices.", RawMesh->Vertices.size(), RawMesh->Indices.size());
+	UE_LOG("Extracted static mesh '%s': total verts=%u, indices=%u",
+		Mesh->GetName(),
+		(uint32)RawMesh->Vertices.size(),
+		(uint32)RawMesh->Indices.size());
+}
+
+void FFbxImporter::NormalizeClusterWeights(FSkeletalMesh* RawMesh)
+{
+	if (!RawMesh) return;
+	if (RawMesh->Clusters.empty() || RawMesh->Vertices.empty()) return;
+
+	// 1. per-vertex total weight 계산
+	TArray<float> Totals;
+	Totals.assign(RawMesh->Vertices.size(), 0.0f);
+	for (const FBoneCluster& C : RawMesh->Clusters)
+	{
+		for (size_t i = 0; i < C.VertexIndices.size(); ++i)
+		{
+			uint32 vi = C.VertexIndices[i];
+			if (vi < Totals.size()) Totals[vi] += C.Weights[i];
+		}
+	}
+
+	// 2. 각 cluster의 weight를 vertex 기준으로 정규화
+	for (FBoneCluster& C : RawMesh->Clusters)
+	{
+		for (size_t i = 0; i < C.VertexIndices.size(); ++i)
+		{
+			uint32 vi = C.VertexIndices[i];
+			float  t  = (vi < Totals.size()) ? Totals[vi] : 0.0f;
+			if (t > 0.0f) C.Weights[i] /= t;
+		}
+	}
 }
 
 void FFbxImporter::ExtractSkeleton(FbxScene* Scene, USkeletalMesh* OutMesh, FSkeletalMesh* RawMesh)
@@ -334,7 +490,7 @@ void FFbxImporter::ExtractSkeleton(FbxScene* Scene, USkeletalMesh* OutMesh, FSke
 		return;
 	}
 
-	// 1-b. 본별 BindPose 정보(L, M) 수집 — TLM 역산용
+	// 1-b. 본별 BindPose 정보(L, M) 수집 — TLM 역산용 (LocalTransform 산출에만 사용)
 	TMap<FbxNode*, FBindPoseInfo> BoneBindPose;
 	GatherBindPoseInfo(Scene->GetRootNode(), BoneBindPose);
 
@@ -350,7 +506,7 @@ void FFbxImporter::ExtractSkeleton(FbxScene* Scene, USkeletalMesh* OutMesh, FSke
 	RawMesh->Bones.resize(JointNodes.size());
 
 	int32 NumWithCluster = 0;
-	int32 NumFallback = 0;
+	int32 NumFallback    = 0;
 
 	for (int32 i = 0; i < (int32)JointNodes.size(); ++i)
 	{
@@ -377,9 +533,9 @@ void FFbxImporter::ExtractSkeleton(FbxScene* Scene, USkeletalMesh* OutMesh, FSke
 		}
 
 		// LocalTransform 계산: cluster의 TLM을 부모/자식으로 역산
-		// - 루트 본:    Local_col = M^-1 * SelfTLM   (메시 노드 변환 흡수)
-		// - 비루트 본:  Local_col = ParentTLM^-1 * SelfTLM   (Empty/Armature 변환 자동 흡수)
-		// - cluster 없음: EvaluateLocalTransform() fallback
+		//  - 루트 본:   Local = M^-1 * SelfTLM   (메시 노드 변환 흡수)
+		//  - 비루트:    Local = ParentTLM^-1 * SelfTLM
+		//  - cluster 없음: EvaluateLocalTransform() fallback
 		FbxAMatrix LocalTransform;
 		auto SelfIt = BoneBindPose.find(CurrentJoint);
 		bool bUsedFallback = false;
@@ -416,23 +572,21 @@ void FFbxImporter::ExtractSkeleton(FbxScene* Scene, USkeletalMesh* OutMesh, FSke
 
 		if (bUsedFallback) ++NumFallback;
 
-		FbxVector4 T = LocalTransform.GetT();
+		FbxVector4    T = LocalTransform.GetT();
 		FbxQuaternion Q = LocalTransform.GetQ();
-		FbxVector4 S = LocalTransform.GetS();
+		FbxVector4    S = LocalTransform.GetS();
 
 		CurrentBone.Translation = FVector((float)T[0], (float)T[1], (float)T[2]);
-		CurrentBone.Rotation = FQuat((float)Q[0], (float)Q[1], (float)Q[2], (float)Q[3]);
-		CurrentBone.Scale = FVector((float)S[0], (float)S[1], (float)S[2]);
-
-		// IBP는 ExtractMesh()의 Cluster에서 TransformLinkMatrix 기반으로 덮어씀.
-		CurrentBone.InverseBindMatrix = FMatrix::Identity;
+		CurrentBone.Rotation    = FQuat((float)Q[0], (float)Q[1], (float)Q[2], (float)Q[3]);
+		CurrentBone.Scale       = FVector((float)S[0], (float)S[1], (float)S[2]);
+		// IBP는 더 이상 FBone에 저장되지 않음 — cluster의 InverseBindMatrix로 이동.
 	}
 
 	UE_LOG("Successfully extracted %d bones.", RawMesh->Bones.size());
 	UE_LOG("[BindPose Diag] Bones with cluster: %d / %d (fallback used: %d)",
 		NumWithCluster, (int32)JointNodes.size(), NumFallback);
 
-	// 진단 로그: 본 트리. parent=-1이 비루트에 나타나면 Hierarchy Gap(BUG #2) 의심
+	// 진단 로그: 본 트리. parent=-1이 비루트에 나타나면 Hierarchy Gap 의심.
 	int32 OrphanCount = 0;
 	for (int32 i = 0; i < (int32)RawMesh->Bones.size(); ++i)
 	{
@@ -445,6 +599,7 @@ void FFbxImporter::ExtractSkeleton(FbxScene* Scene, USkeletalMesh* OutMesh, FSke
 	}
 	if (OrphanCount > 0)
 	{
-		UE_LOG("[Hierarchy Diag] WARNING: %d non-root bones have ParentIndex=-1. Possible Empty/Null nodes between bones (BUG #2).", OrphanCount);
+		UE_LOG("[Hierarchy Diag] WARNING: %d non-root bones have ParentIndex=-1. "
+			"Possible Empty/Null nodes between bones.", OrphanCount);
 	}
 }

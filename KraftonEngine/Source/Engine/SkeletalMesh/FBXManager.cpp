@@ -1,7 +1,9 @@
 ﻿#include "SkeletalMesh/FBXManager.h"
 #include "SkeletalMesh/SkeletalMesh.h"
 #include "SkeletalMesh/FBXImporter.h"
+#include "Mesh/StaticMesh.h"
 #include "Materials/Material.h"
+#include "Object/ObjectFactory.h"
 #include "Core/Log.h"
 #include "Serialization/WindowsArchive.h"
 #include "Engine/Platform/Paths.h"
@@ -191,6 +193,12 @@ USkeletalMesh* FFBXManager::LoadSkeletalMesh(const FString& PathFileName, ID3D11
 		if (Reader.IsValid())
 		{
 			SkeletalMesh->Serialize(Reader);
+			// 직렬화 도중 버전 미스매치 등으로 SkeletalMeshAsset이 비었으면 재빌드한다.
+			if (!SkeletalMesh->GetSkeletalMeshAsset())
+			{
+				UE_LOG("Skeletal mesh cache invalid (version mismatch?), rebuilding: %s", BinPath.c_str());
+				bNeedRebuild = true;
+			}
 		}
 		else
 		{
@@ -205,8 +213,17 @@ USkeletalMesh* FFBXManager::LoadSkeletalMesh(const FString& PathFileName, ID3D11
 		if (SkeletalMesh->GetSkeletalMeshAsset() && !SkeletalMesh->GetSkeletalMeshAsset()->PathFileName.empty())
 			FbxPath = SkeletalMesh->GetSkeletalMeshAsset()->PathFileName;
 
-		if (FFbxImporter::ImportSkeletalMesh(FbxPath, SkeletalMesh))
+		// hybrid FBX의 static 파트를 받기 위한 임시 UStaticMesh.
+		// importer가 데이터를 채우지 않으면 빈 객체로 남고 UObjectManager가 GC한다.
+		UStaticMesh* PendingStatic = UObjectManager::Get().CreateObject<UStaticMesh>();
+
+		if (FFbxImporter::ImportFbx(FbxPath, SkeletalMesh, PendingStatic))
 		{
+			if (PendingStatic && PendingStatic->GetStaticMeshAsset())
+			{
+				SkeletalMesh->SetEmbeddedStaticMesh(PendingStatic);
+			}
+
 			// 파싱 결과 저장
 			FWindowsBinWriter Writer(BinPath);
 			if (Writer.IsValid())
@@ -216,7 +233,7 @@ USkeletalMesh* FFBXManager::LoadSkeletalMesh(const FString& PathFileName, ID3D11
 		}
 		else
 		{
-			return nullptr; 
+			return nullptr;
 		}
 	}
 
@@ -236,13 +253,28 @@ void FFBXManager::ReleaseAllGPU()
 {
 	for (auto& [Key, Mesh] : SkeletalMeshCache)
 	{
-		if (Mesh)
+		if (!Mesh) continue;
+
+		// Skeletal RenderBuffer
+		if (FSkeletalMesh* Asset = Mesh->GetSkeletalMeshAsset())
 		{
-			FSkeletalMesh* Asset = Mesh->GetSkeletalMeshAsset();
-			if (Asset && Asset->RenderBuffer)
+			if (Asset->RenderBuffer)
 			{
 				Asset->RenderBuffer->Release();
 				Asset->RenderBuffer.reset();
+			}
+		}
+
+		// Embedded static RenderBuffer (hybrid FBX)
+		if (UStaticMesh* Embedded = Mesh->GetEmbeddedStaticMesh())
+		{
+			if (FStaticMesh* StaticAsset = Embedded->GetStaticMeshAsset())
+			{
+				if (StaticAsset->RenderBuffer)
+				{
+					StaticAsset->RenderBuffer->Release();
+					StaticAsset->RenderBuffer.reset();
+				}
 			}
 		}
 	}

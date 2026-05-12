@@ -1,31 +1,67 @@
-﻿#pragma once
+#pragma once
 
 #include "Core/CoreTypes.h"
 #include "Render/Types/VertexTypes.h"
 #include "Render/Resource/Buffer.h"
 #include "Serialization/Archive.h"
-#include "Mesh/StaticMeshAsset.h" // For FStaticMeshSection
+#include "Mesh/StaticMeshAsset.h" // For FStaticMeshSection, FNormalVertex
 #include <memory>
+#include <algorithm>
+
+/**
+ * FBoneCluster
+ * 한 bone이 어떤 vertex들에 어떤 weight로 영향을 미치는지 보존하는 단위.
+ * FBX의 FbxCluster와 1:1 대응한다.
+ *
+ * VertexIndices.size() == Weights.size() 가 항상 유지된다.
+ */
+struct FBoneCluster
+{
+	int32 BoneIndex = -1;
+	TArray<uint32> VertexIndices;
+	TArray<float>  Weights;
+	FMatrix        InverseBindMatrix = FMatrix::Identity;
+
+	friend FArchive& operator<<(FArchive& Ar, FBoneCluster& C)
+	{
+		Ar << C.BoneIndex;
+		Ar << C.VertexIndices;
+		Ar << C.Weights;
+		Ar.Serialize(C.InverseBindMatrix.Data, sizeof(float) * 16);
+		return Ar;
+	}
+};
 
 /**
  * FSkeletalMesh
- * 실제 기하 데이터와 본 정보를 담고 있는 데이터 컨테이너.
+ * Skeletal mesh asset 본체.
+ *
+ * Cluster-기반 모델: vertex 자체에는 bone 정보가 없고,
+ * Clusters 배열을 통해 bone-to-vertex 영향이 표현된다.
+ * 어떤 cluster의 VertexIndices에도 등장하지 않는 vertex는 bind-pose에 그대로 통과한다.
  */
 struct FSkeletalMesh
 {
+	// 직렬화 포맷 버전. cluster 도입으로 v1→v2.
+	// v1은 FSkeletalMeshVertex(boneIndices/boneWeights flatten) 기반이었음 — 호환 불가.
+	static constexpr uint32 SerializeVersion = 2;
+
 	FString PathFileName;
 
-	// CPU Skinning의 소스가 되는 원본 정점 데이터
-	TArray<FSkeletalMeshVertex> Vertices;
+	// CPU 스키닝의 소스가 되는 bind-pose 정점 (bone 정보 없음, StaticMesh와 동일 레이아웃)
+	TArray<FNormalVertex> Vertices;
 	TArray<uint32> Indices;
 
-	// 스켈레톤 본 정보
+	// 스켈레톤 본 계층 (parent + SRT)
 	TArray<FBone> Bones;
+
+	// Bone-to-vertex binding (FbxCluster 1:1)
+	TArray<FBoneCluster> Clusters;
 
 	// 머티리얼 슬롯별 섹션 정보
 	TArray<FStaticMeshSection> Sections;
 
-	// 정적 리소스 버퍼 (IB는 여기서 공유, VB는 T-Pose 프리뷰용)
+	// 정적 리소스 버퍼 (IB는 여기서 공유, VB는 bind-pose 프리뷰용)
 	std::unique_ptr<FMeshBuffer> RenderBuffer;
 
 	FVector BoundsCenter = FVector(0, 0, 0);
@@ -37,16 +73,16 @@ struct FSkeletalMesh
 		bBoundsValid = false;
 		if (Vertices.empty()) return;
 
-		FVector LocalMin = Vertices[0].Position;
-		FVector LocalMax = Vertices[0].Position;
-		for (const FSkeletalMeshVertex& V : Vertices)
+		FVector LocalMin = Vertices[0].pos;
+		FVector LocalMax = Vertices[0].pos;
+		for (const FNormalVertex& V : Vertices)
 		{
-			LocalMin.X = (std::min)(LocalMin.X, V.Position.X);
-			LocalMin.Y = (std::min)(LocalMin.Y, V.Position.Y);
-			LocalMin.Z = (std::min)(LocalMin.Z, V.Position.Z);
-			LocalMax.X = (std::max)(LocalMax.X, V.Position.X);
-			LocalMax.Y = (std::max)(LocalMax.Y, V.Position.Y);
-			LocalMax.Z = (std::max)(LocalMax.Z, V.Position.Z);
+			LocalMin.X = (std::min)(LocalMin.X, V.pos.X);
+			LocalMin.Y = (std::min)(LocalMin.Y, V.pos.Y);
+			LocalMin.Z = (std::min)(LocalMin.Z, V.pos.Z);
+			LocalMax.X = (std::max)(LocalMax.X, V.pos.X);
+			LocalMax.Y = (std::max)(LocalMax.Y, V.pos.Y);
+			LocalMax.Z = (std::max)(LocalMax.Z, V.pos.Z);
 		}
 
 		BoundsCenter = (LocalMin + LocalMax) * 0.5f;
@@ -54,43 +90,53 @@ struct FSkeletalMesh
 		bBoundsValid = true;
 	}
 
-	void Serialize(FArchive& Ar)
+	// 직렬화 성공 여부 — 로드 시 버전 mismatch면 false.
+	bool Serialize(FArchive& Ar)
 	{
+		uint32 Version = SerializeVersion;
+		Ar << Version;
+		if (Ar.IsLoading() && Version != SerializeVersion)
+		{
+			// 이전 캐시 포맷 — 호출자가 재import 하도록 신호.
+			return false;
+		}
+
 		Ar << PathFileName;
-		
-		// 1. Vertices 수동 직렬화
+
+		// 1. Vertices (FNormalVertex)
 		uint32 VCount = (uint32)Vertices.size();
 		Ar << VCount;
 		if (Ar.IsLoading()) Vertices.resize(VCount);
 		for (auto& V : Vertices)
 		{
-			Ar.Serialize(&V.Position, sizeof(FVector));
-			Ar.Serialize(&V.Normal, sizeof(FVector));
-			Ar.Serialize(&V.Tangent, sizeof(FVector4));
-			Ar.Serialize(&V.Color, sizeof(FVector4));
-			Ar.Serialize(&V.UV, sizeof(FVector2));
-			
-			for (int i = 0; i < 4; ++i) Ar << V.boneIndices[i];
-			for (int i = 0; i < 4; ++i) Ar << V.boneWeights[i];
+			Ar.Serialize(&V.pos,     sizeof(FVector));
+			Ar.Serialize(&V.normal,  sizeof(FVector));
+			Ar.Serialize(&V.color,   sizeof(FVector4));
+			Ar.Serialize(&V.tex,     sizeof(FVector2));
+			Ar.Serialize(&V.tangent, sizeof(FVector4));
 		}
 
-		// 2. Indices 직렬화 (uint32는 OK)
+		// 2. Indices
 		Ar << Indices;
 
-		// 3. Bones 수동 직렬화
+		// 3. Bones (IBP 제거됨 — cluster로 이동)
 		uint32 BCount = (uint32)Bones.size();
 		Ar << BCount;
 		if (Ar.IsLoading()) Bones.resize(BCount);
 		for (auto& B : Bones)
 		{
 			Ar << B.ParentIndex;
-			Ar.Serialize(&B.Scale, sizeof(FVector));
-			Ar.Serialize(&B.Rotation, sizeof(FQuat));
+			Ar.Serialize(&B.Scale,       sizeof(FVector));
+			Ar.Serialize(&B.Rotation,    sizeof(FQuat));
 			Ar.Serialize(&B.Translation, sizeof(FVector));
-			Ar.Serialize(B.InverseBindMatrix.Data, sizeof(float) * 16);
 		}
 
-		// 4. Sections 직렬화
+		// 4. Clusters
+		Ar << Clusters;
+
+		// 5. Sections
 		Ar << Sections;
+
+		return true;
 	}
 };

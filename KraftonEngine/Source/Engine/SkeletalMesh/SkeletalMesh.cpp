@@ -1,5 +1,7 @@
 ﻿#include "SkeletalMesh.h"
 #include "Render/Resource/Buffer.h"
+#include "Mesh/StaticMesh.h"
+#include "Object/ObjectFactory.h"
 
 IMPLEMENT_CLASS(USkeletalMesh, UObject)
 
@@ -17,7 +19,8 @@ void USkeletalMesh::Serialize(FArchive& Ar)
 {
 	Super::Serialize(Ar);
 
-	// 1. 메시 데이터 본체 직렬화
+	// 1. 메시 데이터 본체 직렬화 — 버전 미스매치 시 SkeletalMeshAsset을 nullptr로 두고 즉시 반환.
+	//    FBXManager가 GetSkeletalMeshAsset() == nullptr 을 재빌드 신호로 사용한다.
 	bool bHasAsset = (SkeletalMeshAsset != nullptr);
 	Ar << bHasAsset;
 
@@ -25,8 +28,15 @@ void USkeletalMesh::Serialize(FArchive& Ar)
 	{
 		if (bHasAsset)
 		{
-			SkeletalMeshAsset = new FSkeletalMesh();
-			SkeletalMeshAsset->Serialize(Ar);
+			FSkeletalMesh* Temp = new FSkeletalMesh();
+			if (!Temp->Serialize(Ar))
+			{
+				// 구 포맷(v1) 캐시 — 폐기하고 호출자가 재빌드하도록 한다.
+				delete Temp;
+				SkeletalMeshAsset = nullptr;
+				return;
+			}
+			SkeletalMeshAsset = Temp;
 		}
 	}
 	else
@@ -44,6 +54,21 @@ void USkeletalMesh::Serialize(FArchive& Ar)
 	if (Ar.IsLoading())
 	{
 		RebuildBoneMap();
+	}
+
+	// 3. EmbeddedStaticMesh (hybrid FBX의 static 파트) 직렬화 — 항상 플래그 1바이트 흐름 유지.
+	bool bHasEmbedded = (EmbeddedStaticMesh != nullptr);
+	Ar << bHasEmbedded;
+	if (bHasEmbedded)
+	{
+		if (Ar.IsLoading())
+		{
+			EmbeddedStaticMesh = UObjectManager::Get().CreateObject<UStaticMesh>();
+		}
+		if (EmbeddedStaticMesh)
+		{
+			EmbeddedStaticMesh->Serialize(Ar);
+		}
 	}
 }
 
@@ -63,20 +88,27 @@ void USkeletalMesh::SetStaticMaterials(TArray<FStaticMaterial>&& InMaterials)
 
 void USkeletalMesh::InitResources(ID3D11Device* InDevice)
 {
-	if (!SkeletalMeshAsset) return;
+	if (SkeletalMeshAsset)
+	{
+		// Bind-pose 렌더링 및 인덱스 버퍼 공유를 위한 RenderBuffer 생성
+		SkeletalMeshAsset->RenderBuffer = std::make_unique<FMeshBuffer>();
 
-	// T-Pose 렌더링 및 인덱스 버퍼 공유를 위한 RenderBuffer 생성
-	SkeletalMeshAsset->RenderBuffer = std::make_unique<FMeshBuffer>();
-	
-	// FMeshBuffer::Create는 TMeshData를 인자로 받으므로 임시 구조체 생성
-	TMeshData<FSkeletalMeshVertex> MeshData;
-	MeshData.Vertices = SkeletalMeshAsset->Vertices;
-	MeshData.Indices = SkeletalMeshAsset->Indices;
+		// FMeshBuffer::Create는 TMeshData를 인자로 받으므로 임시 구조체 생성
+		TMeshData<FNormalVertex> MeshData;
+		MeshData.Vertices = SkeletalMeshAsset->Vertices;
+		MeshData.Indices  = SkeletalMeshAsset->Indices;
 
-	SkeletalMeshAsset->RenderBuffer->Create(InDevice, MeshData);
-	
-	// 바운드 갱신
-	SkeletalMeshAsset->CacheBounds();
+		SkeletalMeshAsset->RenderBuffer->Create(InDevice, MeshData);
+
+		// 바운드 갱신
+		SkeletalMeshAsset->CacheBounds();
+	}
+
+	// Hybrid FBX에서 함께 들어온 static 파트의 GPU 리소스도 초기화한다.
+	if (EmbeddedStaticMesh)
+	{
+		EmbeddedStaticMesh->InitResources(InDevice);
+	}
 }
 
 int32 USkeletalMesh::GetBoneIndex(const FName& Name) const

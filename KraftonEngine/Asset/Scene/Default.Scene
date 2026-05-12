@@ -11,9 +11,9 @@
               "Blocks Movement" : true,
               "Cast Shadow" : true,
               "Generate Overlap Events" : true,
-              "Location" : [0.000000, 0.000000, 0.000000],
+              "Location" : [0.081636, 0.000000, 0.000000],
               "Rotation" : [0.000000, 0.000000, 0.000000],
-              "Scale" : [0.100000, 0.100000, 0.100000],
+              "Scale" : [1.000000, 1.000000, 1.000000],
               "Skeletal Mesh" : null,
               "Skinning Mode" : 0,
               "Two Sided Shadow" : false,
@@ -48,11 +48,11 @@
     "AspectRatio" : 1.637037,
     "FOV" : 1.047198,
     "FarClip" : 1000.000000,
-    "Location" : [1.642354, -0.211211, 3.809673],
+    "Location" : [0.355010, 1.428656, 2.997620],
     "NearClip" : 0.100000,
     "OrthoWidth" : 10.000000,
     "Orthographic" : false,
-    "Rotation" : [0.000000, 32.415272, 119.100517]
+    "Rotation" : [0.000000, 37.515438, 61.050995]
   },
   "Version" : 2,
   "WorldType" : "Editor"

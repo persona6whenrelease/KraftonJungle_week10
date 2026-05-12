@@ -1,4 +1,7 @@
 ﻿#include "Component/SkeletalMeshComponent.h"
+#include "Component/StaticMeshComponent.h"
+#include "Mesh/StaticMesh.h"
+#include "GameFramework/AActor.h"
 #include <algorithm>
 #include <cmath>
 #include "Object/ObjectFactory.h"
@@ -22,13 +25,17 @@ void USkeletalMeshComponent::SetSkeletalMesh(USkeletalMesh* InMesh)
 		SkeletalMeshPath = "None";
 		OverrideMaterials.clear();
 		MaterialSlots.clear();
+		SyncEmbeddedStaticMesh(); // 기존 child가 있으면 제거
 		return;
 	}
 
-	SkeletalMeshPath = InMesh->GetSkeletalMeshAsset()->PathFileName;
-
 	FSkeletalMesh* Asset = InMesh->GetSkeletalMeshAsset();
-	if (!Asset) return;
+	SkeletalMeshPath = Asset ? Asset->PathFileName : FString("None");
+	if (!Asset)
+	{
+		SyncEmbeddedStaticMesh();
+		return;
+	}
 
 	// 머티리얼 슬롯 초기화
 	const TArray<FStaticMaterial>& DefaultMaterials = InMesh->GetStaticMaterials();
@@ -50,18 +57,48 @@ void USkeletalMeshComponent::SetSkeletalMesh(USkeletalMesh* InMesh)
 
 	// 포즈 버퍼 초기화 (부모)
 	InitializePoseBuffers(BoneCount);
-	SkinningMatrices.assign(BoneCount, FMatrix::Identity);
 
-	// CPU 스키닝 버퍼
+	// CPU 스키닝 버퍼 — vertex 레이아웃은 FNormalVertex (bone 데이터 없음).
 	SkinnedVertices = Asset->Vertices;
 	ID3D11Device* Device = GEngine->GetRenderer().GetFD3DDevice().GetDevice();
-	ID3D11DeviceContext* DeviceContext = GEngine->GetRenderer().GetFD3DDevice().GetDeviceContext();
-	DynamicVB.Create(Device, (uint32)Asset->Vertices.size(), sizeof(FSkeletalMeshVertex));
+	DynamicVB.Create(Device, (uint32)Asset->Vertices.size(), sizeof(FNormalVertex));
 
 	UpdateAnimation(0.0f);
 	CacheLocalBounds();
+	SyncEmbeddedStaticMesh();
 	MarkRenderStateDirty();
 	MarkWorldBoundsDirty();
+}
+
+void USkeletalMeshComponent::SyncEmbeddedStaticMesh()
+{
+	AActor* Owner = GetOwner();
+	UStaticMesh* Embedded = SkeletalMesh ? SkeletalMesh->GetEmbeddedStaticMesh() : nullptr;
+
+	if (!Embedded)
+	{
+		if (EmbeddedStaticMeshComp && Owner)
+		{
+			Owner->RemoveComponent(EmbeddedStaticMeshComp);
+		}
+		EmbeddedStaticMeshComp = nullptr;
+		return;
+	}
+
+	if (!Owner)
+	{
+		// 액터에 부착 전이면 lazy-create 불가. 다음 SetSkeletalMesh 호출 시 재시도.
+		return;
+	}
+
+	if (!EmbeddedStaticMeshComp)
+	{
+		EmbeddedStaticMeshComp = Owner->AddComponent<UStaticMeshComponent>();
+	}
+	if (EmbeddedStaticMeshComp)
+	{
+		EmbeddedStaticMeshComp->SetStaticMesh(Embedded);
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -131,66 +168,8 @@ void USkeletalMeshComponent::UpdateLocalTransforms()
 
 void USkeletalMeshComponent::UpdateSkinning()
 {
-	FSkeletalMesh* Asset = SkeletalMesh->GetSkeletalMeshAsset();
-	if (!Asset) return;
-
-	static bool bLoggedIdentityTest = false;
-	bool bAllIdentity = true;
-
-	struct FBoneDiff { int32 Index; float MaxAbs; };
-	TArray<FBoneDiff> Diffs;
-	if (!bLoggedIdentityTest) Diffs.reserve(SkinningMatrices.size());
-
-	for (int32 i = 0; i < (int32)SkinningMatrices.size(); ++i)
-	{
-		// Row-Major: V' = V * InverseBind * ComponentSpace
-		SkinningMatrices[i] = Asset->Bones[i].InverseBindMatrix * ComponentSpaceMatrices[i];
-
-		if (!bLoggedIdentityTest)
-		{
-			const FMatrix& Sm = SkinningMatrices[i];
-			float MaxAbs = 0.0f;
-			for (int r = 0; r < 4; ++r)
-				for (int c = 0; c < 4; ++c)
-				{
-					float Expected = (r == c) ? 1.0f : 0.0f;
-					float Diff = std::fabs(Sm.M[r][c] - Expected);
-					if (Diff > MaxAbs) MaxAbs = Diff;
-				}
-			Diffs.push_back({ i, MaxAbs });
-			if (MaxAbs > 1e-4f) bAllIdentity = false;
-		}
-	}
-
-	if (!bLoggedIdentityTest && !SkinningMatrices.empty())
-	{
-		float MaxDiffOverall = 0.0f;
-		for (const auto& d : Diffs) if (d.MaxAbs > MaxDiffOverall) MaxDiffOverall = d.MaxAbs;
-
-		if (bAllIdentity)
-		{
-			UE_LOG("Bind Pose Identity Test: SUCCESS (maxAbsDiff over %d bones = %.6f)",
-				(int32)Diffs.size(), MaxDiffOverall);
-		}
-		else
-		{
-			UE_LOG("Bind Pose Identity Test: FAILED (maxAbsDiff over %d bones = %.6f)",
-				(int32)Diffs.size(), MaxDiffOverall);
-
-			// 전체 본을 잔차 큰 순으로 출력
-			std::sort(Diffs.begin(), Diffs.end(),
-				[](const FBoneDiff& A, const FBoneDiff& B) { return A.MaxAbs > B.MaxAbs; });
-			const int32 TopN = (int32)Diffs.size();
-			for (int32 k = 0; k < TopN; ++k)
-			{
-				const int32 idx = Diffs[k].Index;
-				const FMatrix& Sm = SkinningMatrices[idx];
-				UE_LOG("  Bone[%d] maxAbsDiff=%.6f Row3=(%.4f, %.4f, %.4f)",
-					idx, Diffs[k].MaxAbs, Sm.M[3][0], Sm.M[3][1], Sm.M[3][2]);
-			}
-		}
-		bLoggedIdentityTest = true;
-	}
+	if (!SkeletalMesh) return;
+	if (!SkeletalMesh->GetSkeletalMeshAsset()) return;
 
 	if (SkinningMode == ESkinningMode::CPU)
 		UpdateSkinningCPU();
@@ -203,26 +182,56 @@ void USkeletalMeshComponent::UpdateSkinningCPU()
 	FSkeletalMesh* Asset = SkeletalMesh->GetSkeletalMeshAsset();
 	if (!Asset) return;
 
-	const TArray<FSkeletalMeshVertex>& Src = Asset->Vertices;
+	const TArray<FNormalVertex>&  Src      = Asset->Vertices;
+	const TArray<FBoneCluster>&   Clusters = Asset->Clusters;
+	const TArray<FMatrix>&        Comp     = ComponentSpaceMatrices;
+	const size_t                  N        = Src.size();
+	if (N == 0) return;
+
+	// 1) bind-pose 그대로 복사 (color/tex/tangent 보존).
 	SkinnedVertices = Src;
 
-	for (int32 vi = 0; vi < (int32)Src.size(); ++vi)
+	// 2) cluster에 잡힌 vertex는 pos/normal을 0으로 초기화한 뒤 누적.
+	//    cluster에 한 번도 등장하지 않는 vertex는 bind-pose에 그대로 통과한다
+	//    — 이전 모델의 (0,0,0) collapse 버그가 자연 해결.
+	TArray<bool> bSkinned;
+	bSkinned.assign(N, false);
+	for (const FBoneCluster& C : Clusters)
 	{
-		const FSkeletalMeshVertex& V = Src[vi];
-		FVector SkinPos  = { 0.f, 0.f, 0.f };
-		FVector SkinNorm = { 0.f, 0.f, 0.f };
-
-		for (int j = 0; j < 4; ++j)
+		for (uint32 vi : C.VertexIndices)
 		{
-			float W = V.boneWeights[j];
-			if (W <= 0.f) continue;
-			const FMatrix& M = SkinningMatrices[V.boneIndices[j]];
-			SkinPos  += M.TransformPositionWithW(V.Position) * W;
-			SkinNorm += M.TransformVector(V.Normal) * W;
+			if (vi < N) bSkinned[vi] = true;
 		}
+	}
+	for (size_t vi = 0; vi < N; ++vi)
+	{
+		if (bSkinned[vi])
+		{
+			SkinnedVertices[vi].pos    = FVector(0.f, 0.f, 0.f);
+			SkinnedVertices[vi].normal = FVector(0.f, 0.f, 0.f);
+		}
+	}
 
-		SkinnedVertices[vi].Position = SkinPos;
-		SkinnedVertices[vi].Normal   = SkinNorm;
+	// 3) cluster 순회 — per-cluster matrix 한 번 계산 후 영향 vertex 누적.
+	const int32 BoneCount = (int32)Comp.size();
+	for (const FBoneCluster& C : Clusters)
+	{
+		if (C.BoneIndex < 0 || C.BoneIndex >= BoneCount) continue;
+
+		// Row-Major: V' = V * IBP * ComponentSpace
+		const FMatrix M = C.InverseBindMatrix * Comp[C.BoneIndex];
+
+		const size_t Cnt = C.VertexIndices.size();
+		for (size_t i = 0; i < Cnt; ++i)
+		{
+			const uint32 vi = C.VertexIndices[i];
+			const float  w  = C.Weights[i];
+			if (vi >= N || w <= 0.f) continue;
+
+			const FNormalVertex& SrcV = Src[vi];
+			SkinnedVertices[vi].pos    += M.TransformPositionWithW(SrcV.pos) * w;
+			SkinnedVertices[vi].normal += M.TransformVector(SrcV.normal)     * w;
+		}
 	}
 
 	ID3D11DeviceContext* Ctx = GEngine->GetRenderer().GetFD3DDevice().GetDeviceContext();
@@ -231,8 +240,10 @@ void USkeletalMeshComponent::UpdateSkinningCPU()
 
 void USkeletalMeshComponent::UpdateSkinningGPU()
 {
-	// GPU 스키닝: 파이프라인에 SRV 슬롯 추가 후 아래 라인 활성화
-	// static_cast<FSkeletalSceneProxy*>(SceneProxy)->UpdateBoneMatrices(SkinningMatrices);
+	// GPU 스키닝: 아직 구현되지 않음 (stub).
+	// cluster 모델에서는 per-vertex bone index/weight가 없으므로,
+	// vertex shader가 cluster SRV(또는 bone matrix palette + cluster index buffer)
+	// 를 읽도록 별도 파이프라인 설계가 필요. 후속 작업.
 }
 
 // ---------------------------------------------------------------------------
@@ -262,7 +273,7 @@ FMeshDataView USkeletalMeshComponent::GetMeshDataView() const
 	FMeshDataView View;
 	View.VertexData  = Asset->Vertices.data();
 	View.VertexCount = (uint32)Asset->Vertices.size();
-	View.Stride      = sizeof(FSkeletalMeshVertex);
+	View.Stride      = sizeof(FNormalVertex);
 	View.IndexData   = Asset->Indices.data();
 	View.IndexCount  = (uint32)Asset->Indices.size();
 	return View;
@@ -321,7 +332,7 @@ void USkeletalMeshComponent::CalcDynamicLocalBounds()
 
 	for (const auto& V : SkinnedVertices)
 	{
-		LocalBox.Expand(V.Position);
+		LocalBox.Expand(V.pos);
 	}
 
 	if (LocalBox.IsValid())

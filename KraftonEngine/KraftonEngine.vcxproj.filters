@@ -698,6 +698,9 @@
     <ClCompile Include="Source\Engine\GameFramework\PlayerController.cpp">
       <Filter>Source\Engine\GameFramework</Filter>
     </ClCompile>
+    <ClCompile Include="Source\Engine\GameFramework\SkeletalMeshActor.cpp">
+      <Filter>Source\Engine\GameFramework</Filter>
+    </ClCompile>
     <ClCompile Include="Source\Engine\GameFramework\StaticMeshActor.cpp">
       <Filter>Source\Engine\GameFramework</Filter>
     </ClCompile>
@@ -1509,6 +1512,9 @@
       <Filter>Source\Engine\GameFramework</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\GameFramework\PlayerController.h">
+      <Filter>Source\Engine\GameFramework</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Engine\GameFramework\SkeletalMeshActor.h">
       <Filter>Source\Engine\GameFramework</Filter>
     </ClInclude>
     <ClInclude Include="Source\Engine\GameFramework\StaticMeshActor.h">
