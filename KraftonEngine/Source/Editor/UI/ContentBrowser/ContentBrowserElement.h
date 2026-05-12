@@ -44,7 +44,7 @@ public:
 private:
 	void DrawExpandButton(ContentBrowserContext& Context);
 	void DrawExpandedPanel(ContentBrowserContext& Context);
-	void DrawInternalElements(ContentBrowserContext& Context, float PanelWidth);
+	void DrawInternalElements(ContentBrowserContext& Context);
 
 protected:
 	bool bExpanded = false;
@@ -67,6 +67,20 @@ class ObjectElement final : public ContentBrowserElement
 {
 public:
 	virtual const char* GetDragItemType() override { return "ObjectContentItem"; }
+};
+
+class ImportedStaticMeshElement final : public ContentBrowserElement
+{
+public:
+	virtual const char* GetDragItemType() override { return "StaticMeshContentItem"; }
+	void OnDoubleLeftClicked(ContentBrowserContext& Context) override { (void)Context; }
+};
+
+class ImportedSkeletalMeshElement final : public ContentBrowserElement
+{
+public:
+	virtual const char* GetDragItemType() override { return "SkeletalMeshContentItem"; }
+	void OnDoubleLeftClicked(ContentBrowserContext& Context) override { (void)Context; }
 };
 
 class ImportableElement : public ExpandableElement

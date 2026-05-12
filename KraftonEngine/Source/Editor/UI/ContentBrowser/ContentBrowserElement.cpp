@@ -1,5 +1,63 @@
 ﻿#include "ContentBrowserElement.h"
+#include "Mesh/FBX/FBXSceneAsset.h"
+#include "Mesh/MeshManager.h"
 #include "Platform/Paths.h"
+
+namespace
+{
+	std::filesystem::path ToProjectAssetPath(const FString& AssetPath)
+	{
+		std::filesystem::path Path(FPaths::ToWide(AssetPath));
+		if (Path.is_absolute())
+		{
+			return Path;
+		}
+		return std::filesystem::path(FPaths::RootDir()) / Path;
+	}
+
+	void AddUniqueMaterialPath(
+		const FMeshMaterial& Material,
+		TSet<FString>& AddedMaterialPaths,
+		TArray<FString>& OutMaterialPaths)
+	{
+		if (!Material.MaterialInterface)
+		{
+			return;
+		}
+
+		const FString& MaterialPath = Material.MaterialInterface->GetAssetPathFileName();
+		if (MaterialPath.empty() || MaterialPath == "None")
+		{
+			return;
+		}
+
+		if (AddedMaterialPaths.find(MaterialPath) != AddedMaterialPaths.end())
+		{
+			return;
+		}
+		AddedMaterialPaths.insert(MaterialPath);
+		OutMaterialPaths.push_back(MaterialPath);
+	}
+
+	void AddMaterialElement(
+		const FString& MaterialPath,
+		TArray<std::shared_ptr<ContentBrowserElement>>& OutElements,
+		ID3D11ShaderResourceView* Icon)
+	{
+		const std::filesystem::path ProjectMaterialPath = ToProjectAssetPath(MaterialPath);
+
+		FContentItem MaterialItem;
+		MaterialItem.Path = ProjectMaterialPath;
+		MaterialItem.Name = ProjectMaterialPath.filename().wstring();
+		MaterialItem.bIsDirectory = false;
+
+		std::shared_ptr<ContentBrowserElement> Element =
+			std::static_pointer_cast<ContentBrowserElement>(std::make_shared<MaterialElement>());
+		Element->SetContent(std::move(MaterialItem));
+		Element->SetIcon(Icon);
+		OutElements.push_back(std::move(Element));
+	}
+}
 
 bool ContentBrowserElement::RenderSelectSpace(ContentBrowserContext& Context)
 {
@@ -140,10 +198,10 @@ FString ContentBrowserElement::EllipsisText(const FString& text, float maxWidth)
 
 void ContentBrowserElement::OnRightClicked(ContentBrowserContext& Context)
 {
+	bIsSelected = true;
 	if (ImGui::MenuItem("Rename"))
 	{
 		Context.SelectedElement = shared_from_this();
-		bIsSelected = true;
 		StartRename(Context);
 	}
 }
@@ -175,10 +233,85 @@ void FBXElement::OnDoubleLeftClicked(ContentBrowserContext& Context)
 	Context.EditorEngine->OpenSkeletalMeshViewerAsset(FPaths::ToUtf8(ContentItem.Path.wstring()));
 }
 
-#include "Engine/Mesh/FBX/FBXManager.h"
 void FBXElement::Import()
 {
-	auto FBXScene = FFBXManager::LoadFbxScene(FPaths::ToUtf8(ContentItem.Path.wstring()));
+	const FString FbxPath = FPaths::ToUtf8(ContentItem.Path.wstring());
+	UFBXSceneAsset* SceneAsset = FMeshManager::LoadFbxScene(FbxPath);
+	if (!SceneAsset)
+	{
+		return;
+	}
+
+	TSet<FString> AddedMaterialPaths;
+	TArray<FString> MaterialPaths;
+
+	for (const FFBXSceneComponentDesc& Desc : SceneAsset->GetSceneComponents())
+	{
+		const bool bStaticMesh = Desc.Type == EFBXSceneComponentType::StaticMesh;
+		const bool bSkeletalMesh = Desc.Type == EFBXSceneComponentType::SkeletalMesh;
+		if (!bStaticMesh && !bSkeletalMesh)
+		{
+			continue;
+		}
+
+		const int32 SourceId = bStaticMesh ? Desc.SourceMeshId : Desc.SourceSkeletonId;
+		if (SourceId < 0)
+		{
+			continue;
+		}
+
+		const FString Prefix = bStaticMesh ? "#Mesh_" : "#Skeleton_";
+		const FString FallbackName = bStaticMesh ? "Mesh_" : "Skeleton_";
+		const FString ItemName = Desc.Name.empty()
+			? FallbackName + std::to_string(SourceId)
+			: Desc.Name;
+
+		FContentItem ImportedItem;
+		ImportedItem.Path = FPaths::ToWide(FbxPath + Prefix + std::to_string(SourceId));
+		ImportedItem.Name = FPaths::ToWide(ItemName);
+		ImportedItem.bIsDirectory = false;
+
+		std::shared_ptr<ContentBrowserElement> Element = bStaticMesh
+			? std::static_pointer_cast<ContentBrowserElement>(std::make_shared<ImportedStaticMeshElement>())
+			: std::static_pointer_cast<ContentBrowserElement>(std::make_shared<ImportedSkeletalMeshElement>());
+		Element->SetContent(std::move(ImportedItem));
+		Element->SetIcon(Icon);
+		InternalElements.push_back(std::move(Element));
+
+		if (bStaticMesh)
+		{
+			const TArray<UStaticMesh*>& StaticMeshes = SceneAsset->GetStaticMeshes();
+			if (Desc.StaticMeshAssetIndex >= 0 &&
+				Desc.StaticMeshAssetIndex < static_cast<int32>(StaticMeshes.size()) &&
+				StaticMeshes[Desc.StaticMeshAssetIndex])
+			{
+				for (const FStaticMaterial& Material : StaticMeshes[Desc.StaticMeshAssetIndex]->GetStaticMaterials())
+				{
+					AddUniqueMaterialPath(Material, AddedMaterialPaths, MaterialPaths);
+				}
+			}
+		}
+		else
+		{
+			const TArray<USkeletalMesh*>& SkeletalMeshes = SceneAsset->GetSkeletalMeshes();
+			if (Desc.SkeletalMeshAssetIndex >= 0 &&
+				Desc.SkeletalMeshAssetIndex < static_cast<int32>(SkeletalMeshes.size()) &&
+				SkeletalMeshes[Desc.SkeletalMeshAssetIndex])
+			{
+				for (const FMeshMaterial& Material : SkeletalMeshes[Desc.SkeletalMeshAssetIndex]->GetMaterials())
+				{
+					AddUniqueMaterialPath(Material, AddedMaterialPaths, MaterialPaths);
+				}
+			}
+		}
+	}
+
+	for (const FString& MaterialPath : MaterialPaths)
+	{
+		AddMaterialElement(MaterialPath, InternalElements, Icon);
+	}
+
+	bExpanded = !InternalElements.empty();
 }
 
 void MaterialElement::OnLeftClicked(ContentBrowserContext& Context)
@@ -206,6 +339,7 @@ void ExpandableElement::Render(ContentBrowserContext& Context)
 	ContentBrowserElement::Render(Context);
 
 	DrawExpandButton(Context);
+	Context.AdvanceContentGridSlot();
 
 	if (bExpanded)
 	{
@@ -225,7 +359,7 @@ void ExpandableElement::DrawExpandButton(ContentBrowserContext& Context)
 		TileMin.y + 2.0f
 	));
 
-	FString Name = FPaths::ToUtf8(ContentItem.Name) + "Expand";
+	FString Name = FPaths::ToUtf8(ContentItem.Name) + "ExpandButton";
 	ImGui::PushID(Name.c_str());
 
 	if (ImGui::SmallButton(bExpanded ? "v" : ">"))
@@ -252,102 +386,20 @@ void ExpandableElement::DrawExpandedPanel(ContentBrowserContext& Context)
 		return;
 	}
 
-	ImVec2 TileMin = ImGui::GetItemRectMin();
-	ImVec2 TileMax = ImGui::GetItemRectMax();
-
-	const float PanelWidth = 420.0f;
-	const float PanelHeight = 260.0f;
-
-	ImVec2 PanelPos(
-		TileMin.x,
-		TileMax.y + 4.0f
-	);
-
-	const ImGuiViewport* Viewport = ImGui::GetMainViewport();
-
-	if (PanelPos.x + PanelWidth > Viewport->WorkPos.x + Viewport->WorkSize.x)
-	{
-		PanelPos.x = Viewport->WorkPos.x + Viewport->WorkSize.x - PanelWidth - 8.0f;
-	}
-
-	if (PanelPos.y + PanelHeight > Viewport->WorkPos.y + Viewport->WorkSize.y)
-	{
-		PanelPos.y = TileMin.y - PanelHeight - 4.0f;
-	}
-
-	FString WindowId = "##ExpandablePanel";
-
-	ImGui::SetNextWindowPos(PanelPos, ImGuiCond_Always);
-	ImGui::SetNextWindowSize(ImVec2(PanelWidth, PanelHeight), ImGuiCond_Always);
-
-	ImGuiWindowFlags Flags =
-		ImGuiWindowFlags_NoTitleBar |
-		ImGuiWindowFlags_NoResize |
-		ImGuiWindowFlags_NoMove |
-		ImGuiWindowFlags_NoSavedSettings |
-		ImGuiWindowFlags_NoCollapse;
-
-	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f, 8.0f));
-
-	bool bOpen = true;
-	if (ImGui::Begin(WindowId.c_str(), &bOpen, Flags))
-	{
-		DrawInternalElements(Context, PanelWidth);
-	}
-	ImGui::End();
-
-	ImGui::PopStyleVar();
-
-	if (!bOpen)
-	{
-		bExpanded = false;
-	}
-
-	if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
-	{
-		const bool bPanelHovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow);
-		const bool bTileHovered = ImGui::IsItemHovered();
-
-		if (!bPanelHovered && !bTileHovered)
-		{
-			bExpanded = false;
-		}
-	}
+	DrawInternalElements(Context);
 }
 
-void ExpandableElement::DrawInternalElements(ContentBrowserContext& Context, float PanelWidth)
+void ExpandableElement::DrawInternalElements(ContentBrowserContext& Context)
 {
-	const float ItemWidth = Context.ContentSize.x;
-	const float ItemHeight = Context.ContentSize.y;
-	const float Gap = 8.0f;
-
-	int ColumnCount = static_cast<int>(PanelWidth / (ItemWidth + Gap));
-	if (ColumnCount < 1)
-	{
-		ColumnCount = 1;
-	}
-
-	ImVec2 StartPos = ImGui::GetCursorPos();
-
 	for (int32 Index = 0; Index < static_cast<int32>(InternalElements.size()); ++Index)
 	{
-		const int32 Column = Index % ColumnCount;
-		const int32 Row = Index / ColumnCount;
-
-		const float X = StartPos.x + Column * (ItemWidth + Gap);
-		const float Y = StartPos.y + Row * (ItemHeight + Gap);
-
-		ImGui::SetCursorPos(ImVec2(X, Y));
+		Context.MoveToContentGridSlot();
 		InternalElements[Index]->Render(Context);
+		if (!Context.bContentGridSlotConsumed)
+		{
+			Context.AdvanceContentGridSlot();
+		}
 	}
-
-	const int32 RowCount =
-		(static_cast<int32>(InternalElements.size()) + ColumnCount - 1) / ColumnCount;
-
-	ImGui::SetCursorPos(ImVec2(
-		StartPos.x,
-		StartPos.y + RowCount * (ItemHeight + Gap)
-	));
 }
 
 void ImportableElement::OnRightClicked(ContentBrowserContext& Context)

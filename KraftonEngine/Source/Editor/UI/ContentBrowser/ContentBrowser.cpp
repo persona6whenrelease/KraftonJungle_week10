@@ -384,17 +384,22 @@ void FEditorContentBrowserWidget::DrawContents()
 	}
 
 	ImVec2 startPos = ImGui::GetCursorPos();
+	BrowserContext.ContentGridStartPos = startPos;
+	BrowserContext.ContentGridColumnCount = columnCount;
+	BrowserContext.ContentGridSlotIndex = 0;
+	BrowserContext.ContentGridGapX = gapSize;
+	BrowserContext.ContentGridGapY = gapSize * 2.0f;
+	BrowserContext.ContentGridMaxBottomY = startPos.y;
+	BrowserContext.bContentGridSlotConsumed = false;
 
 	for (int i = 0; i < elementCount; ++i)
 	{
-		int column = i % columnCount;
-		int row = i / columnCount;
-
-		float x = startPos.x + column * (itemWidth + gapSize);
-		float y = startPos.y + row * (itemHeight + gapSize * 2.f);
-
-		ImGui::SetCursorPos(ImVec2(x, y));
+		BrowserContext.MoveToContentGridSlot();
 		CachedBrowserElements[i]->Render(BrowserContext);
+		if (!BrowserContext.bContentGridSlotConsumed)
+		{
+			BrowserContext.AdvanceContentGridSlot();
+		}
 	}
 
 	if (ImGui::BeginPopupContextWindow("ContentBrowserContextMenu", ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems))
@@ -418,8 +423,7 @@ void FEditorContentBrowserWidget::DrawContents()
 		ImGui::EndPopup();
 	}
 
-	int rowCount = (elementCount + columnCount - 1) / columnCount;
-	ImGui::SetCursorPos(ImVec2(startPos.x, startPos.y + rowCount * itemHeight));
+	ImGui::SetCursorPos(ImVec2(startPos.x, BrowserContext.ContentGridMaxBottomY));
 }
 
 TArray<FContentItem> FEditorContentBrowserWidget::ReadDirectory(std::wstring Path)

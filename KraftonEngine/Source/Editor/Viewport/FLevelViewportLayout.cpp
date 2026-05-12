@@ -1053,6 +1053,65 @@ void FLevelViewportLayout::RenderViewportUI(float DeltaTime)
 					SelectionManager->Select(NewActor);
 				}
 			}
+			else if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("StaticMeshContentItem"))
+			{
+				FContentItem ContentItem = *reinterpret_cast<const FContentItem*>(payload->Data);
+				const FString MeshPath = FPaths::ToUtf8(ContentItem.Path.wstring());
+				ID3D11Device* Device = RendererPtr ? RendererPtr->GetFD3DDevice().GetDevice() : nullptr;
+				UStaticMesh* StaticMesh = FMeshManager::LoadStaticMesh(MeshPath, Device);
+				if (!StaticMesh)
+				{
+					UE_LOG("[Viewport] Failed to load static mesh for drag-drop: %s", MeshPath.c_str());
+				}
+				else
+				{
+					AActor* NewActor = Cast<AActor>(FObjectFactory::Get().Create(AActor::StaticClass()->GetName(), Editor->GetWorld()));
+					UStaticMeshComponent* StaticMeshComponent = NewActor->AddComponent<UStaticMeshComponent>();
+					NewActor->SetRootComponent(StaticMeshComponent);
+					StaticMeshComponent->SetStaticMesh(StaticMesh);
+					Editor->GetWorld()->AddActor(NewActor);
+
+					FVector SpawnLocation(0, 0, 0);
+					FPoint MP = { ImGui::GetIO().MousePos.x, ImGui::GetIO().MousePos.y };
+					if (TryComputePlacementLocation(GetActiveViewportSlotIndex(), MP, SpawnLocation))
+					{
+						NewActor->SetActorLocation(SpawnLocation);
+					}
+					if (SelectionManager)
+					{
+						SelectionManager->Select(NewActor);
+					}
+				}
+			}
+			else if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SkeletalMeshContentItem"))
+			{
+				FContentItem ContentItem = *reinterpret_cast<const FContentItem*>(payload->Data);
+				const FString MeshPath = FPaths::ToUtf8(ContentItem.Path.wstring());
+				USkeletalMesh* SkeletalMesh = FMeshManager::LoadSkeletalMesh(MeshPath);
+				if (!SkeletalMesh)
+				{
+					UE_LOG("[Viewport] Failed to load skeletal mesh for drag-drop: %s", MeshPath.c_str());
+				}
+				else
+				{
+					AActor* NewActor = Cast<AActor>(FObjectFactory::Get().Create(AActor::StaticClass()->GetName(), Editor->GetWorld()));
+					USkeletalMeshComponent* SkeletalMeshComponent = NewActor->AddComponent<USkeletalMeshComponent>();
+					NewActor->SetRootComponent(SkeletalMeshComponent);
+					SkeletalMeshComponent->SetSkeletalMesh(SkeletalMesh);
+					Editor->GetWorld()->AddActor(NewActor);
+
+					FVector SpawnLocation(0, 0, 0);
+					FPoint MP = { ImGui::GetIO().MousePos.x, ImGui::GetIO().MousePos.y };
+					if (TryComputePlacementLocation(GetActiveViewportSlotIndex(), MP, SpawnLocation))
+					{
+						NewActor->SetActorLocation(SpawnLocation);
+					}
+					if (SelectionManager)
+					{
+						SelectionManager->Select(NewActor);
+					}
+				}
+			}
 			else if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("FBXContentItem"))
 			{
 				FContentItem ContentItem = *reinterpret_cast<const FContentItem*>(payload->Data);
