@@ -235,8 +235,11 @@ FMatrix FMatrix::GetInverse() const {
 		+ M[0][2] * (M[1][0] * A1323 - M[1][1] * A0323 + M[1][3] * A0123)
 		- M[0][3] * (M[1][0] * A1223 - M[1][1] * A0223 + M[1][2] * A0123);
 
-	if (std::fabsf(det) < 1e-6f) {
-		// Matrix is singular, inverse does not exist
+	// FBX는 보통 cm 단위인데, 우리는 m 단위 쓰고 있음.
+	// 그래서 import 할 때 SDK가 본 행렬을 1/100배로 줄임
+	// 1e-6f로 두면 역수 없다고 판단 -> 영행렬 -> 자식 행렬 사망.
+	if (std::fabsf(det) < 1e-20f)
+	{
 		FMatrix ret;
 		return ret;
 	}
