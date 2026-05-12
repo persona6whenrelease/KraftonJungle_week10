@@ -8,7 +8,182 @@
 #include "Component/SkeletalGizmoComponent.h" // 기즈모 헤더 추가
 #include "GameFramework/World.h"
 #include "Collision/RayUtils.h"
+#include "Render/Resource/MeshBufferManager.h"
+#include <cfloat>
+#include <cmath>
 namespace {
+	constexpr float ViewerGizmoAxisPickPixels = 1.0f;
+	constexpr float ViewerGizmoCenterPickPixels = 1.0f;
+	constexpr float ViewerGizmoRotatePickPixels = 1.0f;
+
+	float ComputeWorldUnitsPerPixelAtGizmo(
+		const UCameraComponent* Camera,
+		const UGizmoComponent* Gizmo,
+		float ViewportWidth,
+		float ViewportHeight)
+	{
+		if (!Camera || !Gizmo || ViewportHeight <= 0.0f)
+		{
+			return 0.0f;
+		}
+
+		if (Camera->IsOrthogonal())
+		{
+			const float AspectRatio = ViewportWidth > 0.0f
+				? ViewportWidth / ViewportHeight
+				: Camera->GetAspectRatio();
+			const float OrthoHeight = Camera->GetOrthoWidth() / AspectRatio;
+			return OrthoHeight / ViewportHeight;
+		}
+
+		float Distance = FVector::Distance(Camera->GetWorldLocation(), Gizmo->GetWorldLocation());
+		if (Distance < Camera->GetNearPlane())
+		{
+			Distance = Camera->GetNearPlane();
+		}
+
+		const float ViewHeightAtDepth = 2.0f * Distance * tanf(Camera->GetFOV() * 0.5f);
+		return ViewHeightAtDepth / ViewportHeight;
+	}
+
+	float Cross2D(const ImVec2& A, const ImVec2& B, const ImVec2& C)
+	{
+		return (B.x - A.x) * (C.y - A.y) - (B.y - A.y) * (C.x - A.x);
+	}
+
+	bool IsPointInsideTriangle2D(const ImVec2& Point, const ImVec2& A, const ImVec2& B, const ImVec2& C)
+	{
+		const float Area = Cross2D(A, B, C);
+		if (std::abs(Area) <= 1.0e-4f)
+		{
+			return false;
+		}
+
+		const float Edge0 = Cross2D(A, B, Point);
+		const float Edge1 = Cross2D(B, C, Point);
+		const float Edge2 = Cross2D(C, A, Point);
+		const bool bHasNegative = Edge0 < 0.0f || Edge1 < 0.0f || Edge2 < 0.0f;
+		const bool bHasPositive = Edge0 > 0.0f || Edge1 > 0.0f || Edge2 > 0.0f;
+		return !(bHasNegative && bHasPositive);
+	}
+
+	bool ProjectGizmoLocalToViewport(
+		const FMatrix& LocalToClip,
+		const FVector& LocalPosition,
+		float ViewportWidth,
+		float ViewportHeight,
+		ImVec2& OutScreen,
+		float& OutDepth)
+	{
+		const FVector ClipSpace = LocalToClip.TransformPositionWithW(LocalPosition);
+		if (!std::isfinite(ClipSpace.X) || !std::isfinite(ClipSpace.Y) || !std::isfinite(ClipSpace.Z) || ClipSpace.Z < 0.0f)
+		{
+			return false;
+		}
+
+		OutScreen.x = (ClipSpace.X * 0.5f + 0.5f) * ViewportWidth;
+		OutScreen.y = (1.0f - (ClipSpace.Y * 0.5f + 0.5f)) * ViewportHeight;
+		OutDepth = ClipSpace.Z;
+		return true;
+	}
+
+	bool PickGizmoScreenSpace(
+		UCameraComponent* Camera,
+		UGizmoComponent* Gizmo,
+		float MouseX,
+		float MouseY,
+		float ViewportWidth,
+		float ViewportHeight)
+	{
+		if (!Camera || !Gizmo || ViewportWidth <= 0.0f || ViewportHeight <= 0.0f)
+		{
+			if (Gizmo)
+			{
+				Gizmo->UpdateHoveredAxis(-1);
+			}
+			return false;
+		}
+
+		const float PerViewScale = Gizmo->GetScreenSpaceScaleForRender(
+			Camera->GetWorldLocation(),
+			Camera->IsOrthogonal(),
+			Camera->GetOrthoWidth());
+		const FMatrix RenderModel =
+			FMatrix::MakeScaleMatrix(FVector(PerViewScale, PerViewScale, PerViewScale)) *
+			FMatrix::MakeRotationEuler(Gizmo->GetRelativeRotation().ToVector()) *
+			FMatrix::MakeTranslationMatrix(Gizmo->GetWorldLocation());
+		const FMatrix LocalToClip = RenderModel * Camera->GetViewProjectionMatrix();
+		const FMeshDataView MeshData = Gizmo->GetMeshDataView();
+		if (!MeshData.IsValid())
+		{
+			Gizmo->UpdateHoveredAxis(-1);
+			return false;
+		}
+
+		const uint32 AxisMask = Gizmo->GetAxisMask();
+		const ImVec2 MousePoint(MouseX, MouseY);
+
+		uint32 BestIndexOffset = UINT32_MAX;
+		float BestDepth = -FLT_MAX;
+		bool bBestIsCenter = false;
+
+		for (uint32 IndexOffset = 0; IndexOffset + 2 < MeshData.IndexCount; IndexOffset += 3)
+		{
+			const uint32 Index0 = MeshData.IndexData[IndexOffset + 0];
+			const uint32 Index1 = MeshData.IndexData[IndexOffset + 1];
+			const uint32 Index2 = MeshData.IndexData[IndexOffset + 2];
+			if (Index0 >= MeshData.VertexCount || Index1 >= MeshData.VertexCount || Index2 >= MeshData.VertexCount)
+			{
+				continue;
+			}
+
+			const FVertex& Vertex0 = MeshData.GetVertex<FVertex>(Index0);
+			const FVertex& Vertex1 = MeshData.GetVertex<FVertex>(Index1);
+			const FVertex& Vertex2 = MeshData.GetVertex<FVertex>(Index2);
+			const int32 SubID = Vertex0.SubID;
+			if (SubID < 3 && (AxisMask & (1u << SubID)) == 0)
+			{
+				continue;
+			}
+
+			ImVec2 Screen0, Screen1, Screen2;
+			float Depth0 = 0.0f;
+			float Depth1 = 0.0f;
+			float Depth2 = 0.0f;
+			if (!ProjectGizmoLocalToViewport(LocalToClip, Vertex0.Position, ViewportWidth, ViewportHeight, Screen0, Depth0) ||
+				!ProjectGizmoLocalToViewport(LocalToClip, Vertex1.Position, ViewportWidth, ViewportHeight, Screen1, Depth1) ||
+				!ProjectGizmoLocalToViewport(LocalToClip, Vertex2.Position, ViewportWidth, ViewportHeight, Screen2, Depth2))
+			{
+				continue;
+			}
+
+			if (!IsPointInsideTriangle2D(MousePoint, Screen0, Screen1, Screen2))
+			{
+				continue;
+			}
+
+			const float TriangleDepth = (Depth0 + Depth1 + Depth2) / 3.0f;
+			const bool bIsCenter = SubID == 3;
+			if (BestIndexOffset == UINT32_MAX ||
+				(bIsCenter && !bBestIsCenter) ||
+				(bIsCenter == bBestIsCenter && TriangleDepth > BestDepth))
+			{
+				BestIndexOffset = IndexOffset;
+				BestDepth = TriangleDepth;
+				bBestIsCenter = bIsCenter;
+			}
+		}
+
+		if (BestIndexOffset == UINT32_MAX)
+		{
+			Gizmo->UpdateHoveredAxis(-1);
+			return false;
+		}
+
+		Gizmo->UpdateHoveredAxis(static_cast<int32>(BestIndexOffset));
+		return true;
+	}
+
 	FRay CalculateMouseRay(UCameraComponent* Camera, float MouseX, float MouseY, uint32 Width, uint32 Height)
 	{
 		if (!Camera || Width == 0 || Height == 0) return FRay();
@@ -181,16 +356,23 @@ void FSkeletalMeshViewerViewportClient::Resize(uint32 Width, uint32 Height)
 	{
 		return;
 	}
-	ViewportWidth = Width;
-	ViewportHeight = Height;
+	ViewportWidth = static_cast<float>(Width);
+	ViewportHeight = static_cast<float>(Height);
 	Camera->OnResize(static_cast<int32>(Width), static_cast<int32>(Height));
 }
 
-void FSkeletalMeshViewerViewportClient::SetViewportRect(float MinX, float MinY, uint32 Width, uint32 Height)
+void FSkeletalMeshViewerViewportClient::SetViewportRect(float MinX, float MinY, float Width, float Height)
 {
+	if (!Camera)
+	{
+		return;
+	}
+
 	ViewportMinX = MinX;
 	ViewportMinY = MinY;
-	Resize(Width, Height);
+	ViewportWidth = Width;
+	ViewportHeight = Height;
+	Camera->OnResize(static_cast<int32>(Width), static_cast<int32>(Height));
 }
 
 void FSkeletalMeshViewerViewportClient::FrameMesh(const FSkeletalMesh* MeshAsset)
@@ -287,13 +469,22 @@ void FSkeletalMeshViewerViewportClient::Tick(
 
 	BoneSelectionManager.Tick();
 	Gizmo = BoneSelectionManager.GetGizmo();
-	if (Gizmo && Gizmo->IsActive() && ViewportWidth > 0 && ViewportHeight > 0)
+	if (Gizmo && Gizmo->IsActive() && ViewportWidth > 0.0f && ViewportHeight > 0.0f)
 	{
 		Gizmo->ClearScreenSpaceScaleOverride();
 		Gizmo->ApplyScreenSpaceScaling(
 			Camera->GetWorldLocation(),
 			Camera->IsOrthogonal(),
 			Camera->GetOrthoWidth());
+		const float WorldUnitsPerPixel = ComputeWorldUnitsPerPixelAtGizmo(
+			Camera,
+			Gizmo,
+			ViewportWidth,
+			ViewportHeight);
+		Gizmo->SetScreenSpacePickingRadii(
+			WorldUnitsPerPixel * ViewerGizmoAxisPickPixels,
+			WorldUnitsPerPixel * ViewerGizmoCenterPickPixels,
+			WorldUnitsPerPixel * ViewerGizmoRotatePickPixels);
 		Gizmo->SetAxisMask(UGizmoComponent::ComputeAxisMask(RenderOptions.ViewportType, Gizmo->GetMode()));
 
 		if (bViewportHovered && !bIsCapturing && !Gizmo->IsHolding())
@@ -312,8 +503,8 @@ void FSkeletalMeshViewerViewportClient::Tick(
 		FRay MouseRay = Camera->DeprojectScreenToWorld(
 			LocalMouseX,
 			LocalMouseY,
-			static_cast<float>(ViewportWidth),
-			static_cast<float>(ViewportHeight));
+			ViewportWidth,
+			ViewportHeight);
 
 		bool bLeftMouseDown = ImGui::IsMouseDown(ImGuiMouseButton_Left);
 		bool bLeftMouseJustPressed = ImGui::IsMouseClicked(ImGuiMouseButton_Left);
@@ -338,8 +529,16 @@ void FSkeletalMeshViewerViewportClient::Tick(
 			{
 				FHitResult HitResult;
 
-				// LineTraceComponent 내부에서 충돌 시 SelectedAxis를 세팅하므로 자동으로 노란색 하이라이트가 됨
-				if (FRayUtils::RaycastComponent(Gizmo, MouseRay, HitResult))
+				const bool bGizmoHit = PickGizmoScreenSpace(
+					Camera,
+					Gizmo,
+					LocalMouseX,
+					LocalMouseY,
+					ViewportWidth,
+					ViewportHeight);
+
+				// 실제 렌더 mesh를 screen-space로 project해서 SelectedAxis를 세팅합니다.
+				if (bGizmoHit)
 				{
 					if (bLeftMouseJustPressed)
 					{

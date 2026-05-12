@@ -118,8 +118,8 @@ void FBoneSelectionManager::SyncGizmo()
 		FMatrix ComponentWorldMatrix = TargetSkelMesh->GetWorldMatrix();
 		FMatrix BoneWorldMatrix = BoneMeshSpaceMatrix * ComponentWorldMatrix;
 
-		BoneGizmo->SetTargetBone(TargetSkelMesh, SelectedBoneIndex);
 		BoneGizmo->SetWorldLocation(BoneWorldMatrix.GetLocation());
+		BoneGizmo->SetTargetBone(TargetSkelMesh, SelectedBoneIndex);
 
 		if (!BoneGizmo->IsActive())
 		{

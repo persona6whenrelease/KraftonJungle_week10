@@ -18,7 +18,7 @@ public:
 	void Shutdown();
 
 	void Resize(uint32 Width, uint32 Height);
-	void SetViewportRect(float MinX, float MinY, uint32 Width, uint32 Height);
+	void SetViewportRect(float MinX, float MinY, float Width, float Height);
 	void FrameMesh(const FSkeletalMesh* MeshAsset);
 	void SetViewportType(ELevelViewportType NewType);
 
@@ -40,6 +40,6 @@ private:
 	// Viewport 크기를 저장할 변수 추가 (Ray 계산용)
 	float ViewportMinX = 0.0f;
 	float ViewportMinY = 0.0f;
-	uint32 ViewportWidth = 0;
-	uint32 ViewportHeight = 0;
+	float ViewportWidth = 0.0f;
+	float ViewportHeight = 0.0f;
 };
