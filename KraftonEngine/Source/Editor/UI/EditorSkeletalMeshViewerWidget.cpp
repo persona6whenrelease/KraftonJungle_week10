@@ -1271,8 +1271,8 @@ void FEditorSkeletalMeshViewerWidget::DrawViewerShowFlagsControls(FViewportRende
 	{
 		ImGui::TableNextRow();
 		ImGui::TableNextColumn();
-		ImGui::Checkbox("Primitives", &Opts.ShowFlags.bPrimitives);
-		ImGui::TableNextColumn();
+		//ImGui::Checkbox("Primitives", &Opts.ShowFlags.bPrimitives);
+		//ImGui::TableNextColumn();
 		if (PreviewMeshComponent)
 		{
 			bool bMeshVisible = PreviewMeshComponent->IsVisible();
@@ -1280,8 +1280,8 @@ void FEditorSkeletalMeshViewerWidget::DrawViewerShowFlagsControls(FViewportRende
 				PreviewMeshComponent->SetVisibility(bMeshVisible);
 		}
 		ImGui::TableNextColumn();
-		ImGui::Checkbox("BillboardText", &Opts.ShowFlags.bBillboardText);
-		ImGui::TableNextColumn();
+		//ImGui::Checkbox("BillboardText", &Opts.ShowFlags.bBillboardText);
+		//ImGui::TableNextColumn();
 		ImGui::Checkbox("Grid", &Opts.ShowFlags.bGrid);
 		ImGui::TableNextColumn();
 		ImGui::Checkbox("World Axis", &Opts.ShowFlags.bWorldAxis);
@@ -1290,16 +1290,16 @@ void FEditorSkeletalMeshViewerWidget::DrawViewerShowFlagsControls(FViewportRende
 
 		ImGui::TableNextRow();
 		ImGui::TableNextColumn();
-		ImGui::Checkbox("Bounding Volume", &Opts.ShowFlags.bBoundingVolume);
-		ImGui::TableNextColumn();
-		ImGui::Checkbox("Collision", &Opts.ShowFlags.bCollisionShapes);
-		ImGui::TableNextColumn();
+		//ImGui::Checkbox("Bounding Volume", &Opts.ShowFlags.bBoundingVolume);
+		//ImGui::TableNextColumn();
+		//ImGui::Checkbox("Collision", &Opts.ShowFlags.bCollisionShapes);
+		//ImGui::TableNextColumn();
 		ImGui::Checkbox("Debug Draw", &Opts.ShowFlags.bDebugDraw);
 		ImGui::TableNextColumn();
-		ImGui::Checkbox("Octree", &Opts.ShowFlags.bOctree);
-		ImGui::TableNextColumn();
-		ImGui::Checkbox("Fog", &Opts.ShowFlags.bFog);
-		ImGui::TableNextColumn();
+		//ImGui::Checkbox("Octree", &Opts.ShowFlags.bOctree);
+		//ImGui::TableNextColumn();
+		//ImGui::Checkbox("Fog", &Opts.ShowFlags.bFog);
+		//ImGui::TableNextColumn();
 
 		ImGui::TableNextRow();
 		ImGui::TableNextColumn();
@@ -1312,9 +1312,9 @@ void FEditorSkeletalMeshViewerWidget::DrawViewerShowFlagsControls(FViewportRende
 		ImGui::TableNextColumn();
 		ImGui::Checkbox("Shadow Frustum", &Opts.ShowFlags.bShowShadowFrustum);
 		ImGui::TableNextColumn();
-		ImGui::Checkbox("Picking BVH", &Opts.ShowFlags.bPickingBVH);
-		ImGui::Checkbox("Collision BVH", &Opts.ShowFlags.bCollisionBVH);
-		ImGui::TableNextColumn();
+		//ImGui::Checkbox("Picking BVH", &Opts.ShowFlags.bPickingBVH);
+		//ImGui::Checkbox("Collision BVH", &Opts.ShowFlags.bCollisionBVH);
+		//ImGui::TableNextColumn();
 
 		ImGui::EndTable();
 	}
