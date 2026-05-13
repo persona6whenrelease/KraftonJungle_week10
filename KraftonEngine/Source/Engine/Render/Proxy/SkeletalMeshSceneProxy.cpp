@@ -1,9 +1,10 @@
-#include "Render/Proxy/SkeletalMeshSceneProxy.h"
+﻿#include "Render/Proxy/SkeletalMeshSceneProxy.h"
 
 #include <algorithm>
 #include "Component/SkinnedMeshComponent.h"
 #include "Materials/Material.h"
 #include "Materials/MaterialManager.h"
+#include "Render/Types/FrameContext.h"
 #include "Mesh/SkeletalMesh.h"
 
 namespace
@@ -22,6 +23,7 @@ namespace
 FSkeletalMeshSceneProxy::FSkeletalMeshSceneProxy(USkinnedMeshComponent* InComponent)
 	: FPrimitiveSceneProxy(InComponent)
 {
+	ProxyFlags |= EPrimitiveProxyFlags::PerViewportUpdate;
 }
 
 USkinnedMeshComponent* FSkeletalMeshSceneProxy::GetSkinnedMeshComponent() const
@@ -40,11 +42,24 @@ void FSkeletalMeshSceneProxy::UpdateMesh()
 	RebuildSectionDraws();
 }
 
+void FSkeletalMeshSceneProxy::UpdatePerViewport(const FFrameContext& Frame)
+{
+	UpdateVisibility();
+
+	if (!Frame.RenderOptions.ShowFlags.bSkeletalMesh)
+	{
+		bVisible = false;
+
+		return;
+	}
+	RebuildSectionDraws();
+}
+
 void FSkeletalMeshSceneProxy::RebuildSectionDraws()
 {
 	USkinnedMeshComponent* SkinnedComp = GetSkinnedMeshComponent();
 	USkeletalMesh* Mesh = SkinnedComp ? SkinnedComp->GetSkeletalMesh() : nullptr;
-	if (!Mesh || !Mesh->GetSkeletalMeshAsset())
+	if (!Mesh || !Mesh->GetSkeletalMeshAsset() || !bVisible)
 	{
 		MeshBuffer = nullptr;
 		SectionDraws.clear();
