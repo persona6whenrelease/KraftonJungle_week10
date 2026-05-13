@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "Core/CoreTypes.h"
 
 class USkinnedMeshComponent;
@@ -21,6 +21,7 @@ public:
 
 	bool IsBoneSelected(int32 BoneIndex) const;
 	int32 GetPrimarySelectedBone() const;
+	USkinnedMeshComponent* GetTargetSkeletalMesh() const { return TargetSkelMesh; }
 
 	// BoneSelectionManager.h 안의 public 영역에 추가
 	class USkeletalGizmoComponent* GetGizmo() const { return BoneGizmo; }

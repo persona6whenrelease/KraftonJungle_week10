@@ -33,6 +33,9 @@
 
 namespace
 {
+	constexpr float BoneDebugJointRadiusScale = 0.005f;
+	const FColor SelectedBoneDebugColor(255, 120, 0);
+
 	void DrawDebugOctahedralBone(UWorld* World, const FVector& Head, const FVector& Tail, const FColor& Color)
 	{
 		FVector Dir = Tail - Head;
@@ -1503,10 +1506,14 @@ void FEditorSkeletalMeshViewerWidget::UpdateBoneDebugLines()
 
 	// 연산이 완료된 MeshSpace 배열을 가져옵니다.
 	const auto& BoneMatrices = PreviewMeshComponent->GetMeshSpaceBoneMatrices();
+	const int32 CurrentSelectedBoneIndex = PreviewViewportClient
+		? PreviewViewportClient->GetBoneSelectionManager().GetPrimarySelectedBone()
+		: SelectedBoneIndex;
 
 	// 본 위치 디버그 스피어 크기 계산을 위한 대략적인 거리 측정
 	FVector Subtract = PreviewMeshComponent->GetWorldAABB().Max - PreviewMeshComponent->GetWorldAABB().Min; // [주의] GetMeshSpaceBoneMatrices()의 결과가 최신이 되도록 강제 업데이트 트리거
-	float distance = std::sqrt(Subtract.Dot(Subtract));
+	const float BoneDebugDistance = std::sqrt(Subtract.Dot(Subtract));
+	const float BoneDebugJointRadius = BoneDebugDistance * BoneDebugJointRadiusScale;
 
 	// 1. 컴포넌트 전체의 월드 변환 행렬
 	FMatrix ComponentWorldTransform = PreviewMeshComponent->GetWorldMatrix();
@@ -1517,7 +1524,8 @@ void FEditorSkeletalMeshViewerWidget::UpdateBoneDebugLines()
 		// bone sphere 그리기
 		FMatrix WorldMat = BoneMatrices[i] * ComponentWorldTransform;
 		FVector WorldPos = WorldMat.GetLocation();
-		DrawDebugNodepthSphere(PreviewWorld, WorldPos, 0.005f * distance, 8, FColor::Yellow());
+		const FColor BoneColor = i == CurrentSelectedBoneIndex ? SelectedBoneDebugColor : FColor::Yellow();
+		DrawDebugNodepthSphere(PreviewWorld, WorldPos, BoneDebugJointRadius, 8, BoneColor);
 	}
 
 	// 뼈다귀(Octahedral) 그리기
@@ -1537,7 +1545,8 @@ void FEditorSkeletalMeshViewerWidget::UpdateBoneDebugLines()
 		FMatrix ChildWorldMat = BoneMatrices[i] * ComponentWorldTransform;
 		FVector ChildPos = ChildWorldMat.GetLocation();
 
-		DrawDebugOctahedralBone(PreviewWorld, ParentPos, ChildPos, FColor::Green());
+		const FColor BoneColor = i == CurrentSelectedBoneIndex ? SelectedBoneDebugColor : FColor::Green();
+		DrawDebugOctahedralBone(PreviewWorld, ParentPos, ChildPos, BoneColor);
 
 	}
 

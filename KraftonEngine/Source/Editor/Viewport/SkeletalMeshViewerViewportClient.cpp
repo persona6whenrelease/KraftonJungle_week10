@@ -16,6 +16,8 @@ namespace {
 	constexpr float ViewerGizmoAxisPickPixels = 1.0f;
 	constexpr float ViewerGizmoCenterPickPixels = 1.0f;
 	constexpr float ViewerGizmoRotatePickPixels = 1.0f;
+	constexpr float ViewerBoneJointRadiusScale = 0.005f;
+	constexpr float ViewerBonePickMinPixels = 6.0f;
 
 	float ComputeWorldUnitsPerPixelAtGizmo(
 		const UCameraComponent* Camera,
@@ -45,6 +47,19 @@ namespace {
 
 		const float ViewHeightAtDepth = 2.0f * Distance * tanf(Camera->GetFOV() * 0.5f);
 		return ViewHeightAtDepth / ViewportHeight;
+	}
+
+	float ComputeBoneDebugWorldRadius(const USkinnedMeshComponent* SkelMeshComp)
+	{
+		if (!SkelMeshComp)
+		{
+			return 0.0f;
+		}
+
+		const FBoundingBox Bounds = SkelMeshComp->GetWorldAABB();
+		const FVector Diagonal = Bounds.Max - Bounds.Min;
+		const float Distance = std::sqrt(Diagonal.Dot(Diagonal));
+		return Distance * ViewerBoneJointRadiusScale;
 	}
 
 	float Cross2D(const ImVec2& A, const ImVec2& B, const ImVec2& C)
@@ -86,6 +101,149 @@ namespace {
 		OutScreen.y = (1.0f - (ClipSpace.Y * 0.5f + 0.5f)) * ViewportHeight;
 		OutDepth = ClipSpace.Z;
 		return true;
+	}
+
+	bool ProjectWorldToViewport(
+		const FMatrix& WorldToClip,
+		const FVector& WorldPosition,
+		float ViewportWidth,
+		float ViewportHeight,
+		ImVec2& OutScreen,
+		float& OutDepth)
+	{
+		const FVector ClipSpace = WorldToClip.TransformPositionWithW(WorldPosition);
+		if (!std::isfinite(ClipSpace.X) || !std::isfinite(ClipSpace.Y) || !std::isfinite(ClipSpace.Z) || ClipSpace.Z < 0.0f)
+		{
+			return false;
+		}
+
+		OutScreen.x = (ClipSpace.X * 0.5f + 0.5f) * ViewportWidth;
+		OutScreen.y = (1.0f - (ClipSpace.Y * 0.5f + 0.5f)) * ViewportHeight;
+		OutDepth = ClipSpace.Z;
+		return true;
+	}
+
+	float DistancePointToPoint2D(const ImVec2& A, const ImVec2& B)
+	{
+		const float DX = A.x - B.x;
+		const float DY = A.y - B.y;
+		return std::sqrt(DX * DX + DY * DY);
+	}
+
+	float ComputeWorldUnitsPerPixelAtWorldPosition(
+		UCameraComponent* Camera,
+		const FVector& WorldPosition,
+		float ViewportWidth,
+		float ViewportHeight)
+	{
+		if (!Camera || ViewportHeight <= 0.0f)
+		{
+			return 0.0f;
+		}
+
+		if (Camera->IsOrthogonal())
+		{
+			const float AspectRatio = ViewportWidth > 0.0f
+				? ViewportWidth / ViewportHeight
+				: Camera->GetAspectRatio();
+			const float OrthoHeight = Camera->GetOrthoWidth() / AspectRatio;
+			return OrthoHeight / ViewportHeight;
+		}
+
+		float Distance = FVector::Distance(Camera->GetWorldLocation(), WorldPosition);
+		if (Distance < Camera->GetNearPlane())
+		{
+			Distance = Camera->GetNearPlane();
+		}
+
+		const float ViewHeightAtDepth = 2.0f * Distance * tanf(Camera->GetFOV() * 0.5f);
+		return ViewHeightAtDepth / ViewportHeight;
+	}
+
+	float ProjectWorldRadiusToPixelsApprox(
+		UCameraComponent* Camera,
+		const FVector& WorldPosition,
+		float WorldRadius,
+		float ViewportWidth,
+		float ViewportHeight)
+	{
+		const float WorldUnitsPerPixel = ComputeWorldUnitsPerPixelAtWorldPosition(
+			Camera,
+			WorldPosition,
+			ViewportWidth,
+			ViewportHeight);
+		if (WorldUnitsPerPixel <= 0.0f || WorldRadius <= 0.0f)
+		{
+			return ViewerBonePickMinPixels;
+		}
+
+		return (std::max)(ViewerBonePickMinPixels, WorldRadius / WorldUnitsPerPixel);
+	}
+
+	int32 PickBoneScreenSpace(
+		UCameraComponent* Camera,
+		USkinnedMeshComponent* SkelMeshComp,
+		float MouseX,
+		float MouseY,
+		float ViewportWidth,
+		float ViewportHeight)
+	{
+		if (!Camera || !SkelMeshComp || !SkelMeshComp->GetSkeletalMesh() || ViewportWidth <= 0.0f || ViewportHeight <= 0.0f)
+		{
+			return -1;
+		}
+
+		const FSkeletalMesh* Asset = SkelMeshComp->GetSkeletalMesh()->GetSkeletalMeshAsset();
+		if (!Asset || Asset->Bones.empty())
+		{
+			return -1;
+		}
+
+		const TArray<FMatrix>& MeshSpaceBones = SkelMeshComp->GetMeshSpaceBoneMatrices();
+		if (MeshSpaceBones.size() < Asset->Bones.size())
+		{
+			return -1;
+		}
+
+		const FMatrix ComponentWorld = SkelMeshComp->GetWorldMatrix();
+		const FMatrix WorldToClip = Camera->GetViewProjectionMatrix();
+		const ImVec2 MousePoint(MouseX, MouseY);
+		const float WorldPickRadius = ComputeBoneDebugWorldRadius(SkelMeshComp);
+
+		int32 BestBoneIndex = -1;
+		float BestDistancePixels = FLT_MAX;
+		float BestDepth = -FLT_MAX;
+
+		for (int32 BoneIndex = 0; BoneIndex < static_cast<int32>(Asset->Bones.size()); ++BoneIndex)
+		{
+			const FMatrix BoneWorldMatrix = MeshSpaceBones[BoneIndex] * ComponentWorld;
+			const FVector BoneWorldPosition = BoneWorldMatrix.GetLocation();
+
+			ImVec2 BoneScreen;
+			float BoneDepth = 0.0f;
+			if (!ProjectWorldToViewport(WorldToClip, BoneWorldPosition, ViewportWidth, ViewportHeight, BoneScreen, BoneDepth))
+			{
+				continue;
+			}
+
+			const float PickRadiusPixels = ProjectWorldRadiusToPixelsApprox(Camera, BoneWorldPosition, WorldPickRadius, ViewportWidth, ViewportHeight);
+			const float DistancePixels = DistancePointToPoint2D(MousePoint, BoneScreen);
+			if (DistancePixels > PickRadiusPixels)
+			{
+				continue;
+			}
+
+			if (BestBoneIndex == -1 ||
+				DistancePixels < BestDistancePixels ||
+				(std::abs(DistancePixels - BestDistancePixels) <= 0.01f && BoneDepth > BestDepth))
+			{
+				BestBoneIndex = BoneIndex;
+				BestDistancePixels = DistancePixels;
+				BestDepth = BoneDepth;
+			}
+		}
+
+		return BestBoneIndex;
 	}
 
 	bool PickGizmoScreenSpace(
@@ -476,7 +634,9 @@ void FSkeletalMeshViewerViewportClient::Tick(
 
 	BoneSelectionManager.Tick();
 	Gizmo = BoneSelectionManager.GetGizmo();
-	if (Gizmo && Gizmo->IsActive() && ViewportWidth > 0.0f && ViewportHeight > 0.0f)
+	const bool bCanInteractWithViewport = bViewportHovered && !bIsCapturing && ViewportWidth > 0.0f && ViewportHeight > 0.0f;
+	const bool bGizmoActive = Gizmo && Gizmo->IsActive() && ViewportWidth > 0.0f && ViewportHeight > 0.0f;
+	if (bGizmoActive)
 	{
 		Gizmo->ClearScreenSpaceScaleOverride();
 		Gizmo->ApplyScreenSpaceScaling(
@@ -582,11 +742,26 @@ void FSkeletalMeshViewerViewportClient::Tick(
 				}
 				else
 				{
-					// [보너스 기능] 빈 공간을 좌클릭하면 본 선택 해제 및 기즈모 숨김
 					if (bLeftMouseJustPressed && !InputFrame.IsDown(VK_CONTROL))
 					{
-						BoneSelectionManager.ClearSelection();
-						InputFrame.ConsumeMouseButtons("SkeletalMeshViewer", "Clear bone selection");
+						const int32 HitBoneIndex = PickBoneScreenSpace(
+							Camera,
+							BoneSelectionManager.GetTargetSkeletalMesh(),
+							LocalMouseX,
+							LocalMouseY,
+							ViewportWidth,
+							ViewportHeight);
+						if (HitBoneIndex >= 0)
+						{
+							BoneSelectionManager.SelectBone(HitBoneIndex);
+							InputFrame.ConsumeMouseButtons("SkeletalMeshViewer", "Select bone");
+						}
+						else
+						{
+							// [보너스 기능] 빈 공간을 좌클릭하면 본 선택 해제 및 기즈모 숨김
+							BoneSelectionManager.ClearSelection();
+							InputFrame.ConsumeMouseButtons("SkeletalMeshViewer", "Clear bone selection");
+						}
 					}
 				}
 			}
@@ -594,6 +769,33 @@ void FSkeletalMeshViewerViewportClient::Tick(
 			{
 				// 마우스가 뷰포트 밖으로 나갔거나 카메라를 이리저리 돌리는 중이라면 호버링(노란색) 초기화
 				Gizmo->UpdateHoveredAxis(-1);
+			}
+		}
+	}
+	else if (bCanInteractWithViewport)
+	{
+		ImVec2 MousePos = ImGui::GetIO().MousePos;
+		const float LocalMouseX = MousePos.x - ViewportMinX;
+		const float LocalMouseY = MousePos.y - ViewportMinY;
+		const bool bLeftMouseJustPressed = ImGui::IsMouseClicked(ImGuiMouseButton_Left);
+		if (bLeftMouseJustPressed && !InputFrame.IsDown(VK_CONTROL))
+		{
+			const int32 HitBoneIndex = PickBoneScreenSpace(
+				Camera,
+				BoneSelectionManager.GetTargetSkeletalMesh(),
+				LocalMouseX,
+				LocalMouseY,
+				ViewportWidth,
+				ViewportHeight);
+			if (HitBoneIndex >= 0)
+			{
+				BoneSelectionManager.SelectBone(HitBoneIndex);
+				InputFrame.ConsumeMouseButtons("SkeletalMeshViewer", "Select bone");
+			}
+			else
+			{
+				BoneSelectionManager.ClearSelection();
+				InputFrame.ConsumeMouseButtons("SkeletalMeshViewer", "Clear bone selection");
 			}
 		}
 	}
