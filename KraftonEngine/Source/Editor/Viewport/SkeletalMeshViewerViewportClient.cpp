@@ -553,10 +553,11 @@ void FSkeletalMeshViewerViewportClient::Tick(
 				else
 				{
 					// [보너스 기능] 빈 공간을 좌클릭하면 본 선택 해제 및 기즈모 숨김
-					//if (bLeftMouseJustPressed)
-					//{
-					//	BoneSelectionManager.ClearSelection();
-					//}
+					if (bLeftMouseJustPressed && !InputFrame.IsDown(VK_CONTROL))
+					{
+						BoneSelectionManager.ClearSelection();
+						InputFrame.ConsumeMouseButtons("SkeletalMeshViewer", "Clear bone selection");
+					}
 				}
 			}
 			else
