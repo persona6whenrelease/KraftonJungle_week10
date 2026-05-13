@@ -1,9 +1,10 @@
-﻿#pragma once
+#pragma once
 
 #include "Viewport/ViewportClient.h"
 #include "Render/Types/ViewTypes.h"
 #include "Selection/BoneSelectionManager.h"
 class UCameraComponent;
+class USkinnedMeshComponent;
 struct FInputFrame;
 struct FSkeletalMesh;
 class UWorld;
