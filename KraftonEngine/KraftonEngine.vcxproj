@@ -323,6 +323,7 @@
     <ClCompile Include="Source\Editor\Selection\BoneSelectionManager.cpp" />
     <ClCompile Include="Source\Editor\Viewport\SkeletalMeshViewerViewportClient.cpp" />
     <ClCompile Include="Source\Engine\Component\SkeletalGizmoComponent.cpp" />
+    <ClCompile Include="Source\Engine\Mesh\FBX\FbxAnimationParser.cpp" />
     <ClCompile Include="Source\Engine\Mesh\FBX\FbxMaterialImportUtils.cpp" />
     <ClCompile Include="Source\Engine\Mesh\FBX\FbxMeshGeometryBuilder.cpp" />
     <ClCompile Include="Source\Engine\Mesh\FBX\FbxMetaParser.cpp" />
@@ -592,6 +593,7 @@
     <ClInclude Include="Source\Editor\Selection\BoneSelectionManager.h" />
     <ClInclude Include="Source\Editor\Viewport\SkeletalMeshViewerViewportClient.h" />
     <ClInclude Include="Source\Engine\Component\SkeletalGizmoComponent.h" />
+    <ClInclude Include="Source\Engine\Mesh\FBX\FbxAnimationParser.h" />
     <ClInclude Include="Source\Engine\Mesh\FBX\FbxMaterialImportUtils.h" />
     <ClInclude Include="Source\Engine\Mesh\FBX\FbxMeshGeometryBuilder.h" />
     <ClInclude Include="Source\Engine\Mesh\FBX\FbxMetaParser.h" />

@@ -1098,6 +1098,7 @@
     <ClCompile Include="Source\Engine\Mesh\FBX\FBXImporter.cpp" />
     <ClCompile Include="Source\Engine\Mesh\FBX\FBXUtil.cpp" />
     <ClCompile Include="Source\Engine\Mesh\FBX\FbxMetaParser.cpp" />
+    <ClCompile Include="Source\Engine\Mesh\FBX\FbxAnimationParser.cpp" />
     <ClCompile Include="Source\Engine\Mesh\FBX\FbxMaterialImportUtils.cpp" />
     <ClCompile Include="Source\Engine\Mesh\FBX\FbxMeshGeometryBuilder.cpp" />
     <ClCompile Include="Source\Engine\Mesh\FBX\FbxSkeletalMeshAssembler.cpp" />
@@ -2370,6 +2371,7 @@
     <ClInclude Include="Source\Engine\Mesh\FBX\FBXUtil.h" />
     <ClInclude Include="Source\Engine\Mesh\FBX\FbxMetaParser.h" />
     <ClInclude Include="Source\Engine\Mesh\FBX\FBXImportTypes.h" />
+    <ClInclude Include="Source\Engine\Mesh\FBX\FbxAnimationParser.h" />
     <ClInclude Include="Source\Engine\Mesh\FBX\FbxMaterialImportUtils.h" />
     <ClInclude Include="Source\Engine\Mesh\FBX\FbxMeshGeometryBuilder.h" />
     <ClInclude Include="Source\Engine\Mesh\FBX\FbxSkeletalMeshAssembler.h" />

@@ -35,6 +35,54 @@ struct FBoneInfo
 	}
 };
 
+// Baked per-frame local transform sample.
+struct FBoneAnimSample
+{
+	FMatrix LocalMatrix = FMatrix::Identity;
+};
+
+// One bone's track across all frames of a clip. Samples.size() == FAnimationClip::FrameCount.
+struct FBoneAnimTrack
+{
+	int32 BoneIndex = -1;
+	TArray<FBoneAnimSample> Samples;
+
+	friend FArchive& operator<<(FArchive& Ar, FBoneAnimTrack& Track)
+	{
+		Ar << Track.BoneIndex;
+		// FBoneAnimSample is bitwise-copyable (FMatrix is a POD of floats even though it has user
+		// constructors), so serialize the whole block as raw bytes instead of going through the
+		// generic TArray<T> path, which would static_assert on is_trivially_copyable.
+		uint32 SampleCount = static_cast<uint32>(Track.Samples.size());
+		Ar << SampleCount;
+		if (Ar.IsLoading()) Track.Samples.resize(SampleCount);
+		if (SampleCount > 0)
+		{
+			Ar.Serialize(Track.Samples.data(), SampleCount * sizeof(FBoneAnimSample));
+		}
+		return Ar;
+	}
+};
+
+struct FAnimationClip
+{
+	FString Name;
+	float Duration = 0.0f;
+	float FrameRate = 30.0f;
+	int32 FrameCount = 0;
+	TArray<FBoneAnimTrack> Tracks;
+
+	friend FArchive& operator<<(FArchive& Ar, FAnimationClip& Clip)
+	{
+		Ar << Clip.Name;
+		Ar << Clip.Duration;
+		Ar << Clip.FrameRate;
+		Ar << Clip.FrameCount;
+		Ar << Clip.Tracks;
+		return Ar;
+	}
+};
+
 struct FSkeletalMesh
 {
 	FString PathFileName;
@@ -42,6 +90,7 @@ struct FSkeletalMesh
 	TArray<uint32> Indices;
 	TArray<FMeshSection> Sections;
 	TArray<FBoneInfo> Bones;
+	TArray<FAnimationClip> AnimationClips;
 
 	FVector BoundsCenter = FVector(0, 0, 0);
 	FVector BoundsExtent = FVector(0, 0, 0);
@@ -76,5 +125,6 @@ struct FSkeletalMesh
 		Ar << Indices;
 		Ar << Sections;
 		Ar << Bones;
+		Ar << AnimationClips;
 	}
 };
