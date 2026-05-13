@@ -727,7 +727,7 @@ void RenderViewerViewportToolbar(FSkeletalMeshViewerViewportClient* PreviewClien
 	}
 }
 
-void RenderBoneTreeNode(const TArray<FBoneInfo>& Bones, int32 BoneIndex, int32& SelectedBoneIndex)
+void RenderBoneTreeNode(const TArray<FBoneInfo>& Bones, int32 BoneIndex, int32& SelectedBoneIndex, int32& OutDoubleClickedBoneIndex)
 {
 	if (BoneIndex < 0 || BoneIndex >= static_cast<int32>(Bones.size()))
 	{
@@ -765,13 +765,18 @@ void RenderBoneTreeNode(const TArray<FBoneInfo>& Bones, int32 BoneIndex, int32& 
 		SelectedBoneIndex = BoneIndex;
 	}
 
+	if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+	{
+		OutDoubleClickedBoneIndex = BoneIndex;
+	}
+
 	if (bOpen)
 	{
 		for (int32 ChildIndex = 0; ChildIndex < static_cast<int32>(Bones.size()); ++ChildIndex)
 		{
 			if (Bones[ChildIndex].ParentIndex == BoneIndex)
 			{
-				RenderBoneTreeNode(Bones, ChildIndex, SelectedBoneIndex);
+				RenderBoneTreeNode(Bones, ChildIndex, SelectedBoneIndex, OutDoubleClickedBoneIndex);
 			}
 		}
 		ImGui::TreePop();
@@ -1257,13 +1262,20 @@ void FEditorSkeletalMeshViewerWidget::RenderBonePanel()
 		{
 			// [추가] 렌더링 전 기존 선택 인덱스 캐싱
 			int32 PrevSelectedBoneIndex = SelectedBoneIndex;
+			int32 DoubleClickedBoneIndex = -1;
 
 			for (int32 BoneIndex = 0; BoneIndex < static_cast<int32>(MeshAsset->Bones.size()); ++BoneIndex)
 			{
+
 				if (MeshAsset->Bones[BoneIndex].ParentIndex < 0)
 				{
-					RenderBoneTreeNode(MeshAsset->Bones, BoneIndex, SelectedBoneIndex);
+					RenderBoneTreeNode(MeshAsset->Bones, BoneIndex, SelectedBoneIndex, DoubleClickedBoneIndex);
 				}
+			}
+
+			if (DoubleClickedBoneIndex != -1 && PreviewViewportClient)
+			{
+				PreviewViewportClient->FocusBone(PreviewMeshComponent, DoubleClickedBoneIndex);
 			}
 
 			// [추가] 클릭으로 인해 인덱스가 변했다면 매니저에 선택 명령 전달
