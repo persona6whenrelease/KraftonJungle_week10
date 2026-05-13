@@ -1173,6 +1173,7 @@ void FEditorSkeletalMeshViewerWidget::DrawViewerShowFlagsControls(FViewportRende
 			if (ImGui::Checkbox("Mesh", &bMeshVisible))
 				PreviewMeshComponent->SetVisibility(bMeshVisible);
 		}
+		ImGui::Checkbox("Draw Debug Line", &bDrawBoneDebugLines);
 		ImGui::TableNextColumn();
 		ImGui::Checkbox("BillboardText", &Opts.ShowFlags.bBillboardText);
 		ImGui::TableNextColumn();
@@ -1207,6 +1208,7 @@ void FEditorSkeletalMeshViewerWidget::DrawViewerShowFlagsControls(FViewportRende
 		ImGui::TableNextColumn();
 		ImGui::Checkbox("Picking BVH", &Opts.ShowFlags.bPickingBVH);
 		ImGui::Checkbox("Collision BVH", &Opts.ShowFlags.bCollisionBVH);
+		ImGui::TableNextColumn();
 
 		ImGui::EndTable();
 	}
@@ -1243,10 +1245,7 @@ void FEditorSkeletalMeshViewerWidget::RenderViewerViewportToolbar()
 	const float RowRightX = RowStartX + ImGui::GetContentRegionAvail().x;
 	RenderViewerTransformToolbar(PreviewClient, Cast<UEditorEngine>(GEngine));
 
-	const char* DebugLineLabel = "DrawDebugLine";
 	const float RightToolbarWidth =
-		CalcViewerTextButtonWidth(DebugLineLabel) +
-		ImGui::GetStyle().ItemSpacing.x +
 		CalcViewerTextButtonWidth(CurrentTypeName) +
 		ImGui::GetStyle().ItemSpacing.x +
 		CalcViewerTextButtonWidth(CurrentViewModeName) +
@@ -1265,23 +1264,6 @@ void FEditorSkeletalMeshViewerWidget::RenderViewerViewportToolbar()
 	{
 		ImGui::SameLine();
 	}
-
-	const bool bDebugLinesOn = PreviewClient->bDrawBoneDebugLines;
-	if (bDebugLinesOn)
-	{
-		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.30f, 0.50f, 0.80f, 1.0f));
-		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.38f, 0.58f, 0.88f, 1.0f));
-		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.22f, 0.42f, 0.72f, 1.0f));
-	}
-	if (ImGui::Button(DebugLineLabel))
-	{
-		PreviewClient->bDrawBoneDebugLines = !PreviewClient->bDrawBoneDebugLines;
-	}
-	if (bDebugLinesOn)
-	{
-		ImGui::PopStyleColor(3);
-	}
-	ImGui::SameLine();
 
 	if (ImGui::Button(CurrentTypeName))
 	{
@@ -1406,7 +1388,7 @@ void FEditorSkeletalMeshViewerWidget::UpdateBoneDebugLines()
 		return;
 	}
 
-	if (!PreviewViewportClient || !PreviewViewportClient->bDrawBoneDebugLines)
+	if (!bDrawBoneDebugLines)
 	{
 		return;
 	}
