@@ -27,6 +27,8 @@ public:
 	FViewportRenderOptions& GetRenderOptions() { return RenderOptions; }
 	const FViewportRenderOptions& GetRenderOptions() const { return RenderOptions; }
 
+	bool bDrawBoneDebugLines = true;
+
 	void Tick(float DeltaTime, bool bViewportHovered, bool bIsCapturing, FInputFrame& InputFrame);
 
 	FBoneSelectionManager& GetBoneSelectionManager() { return BoneSelectionManager; }
