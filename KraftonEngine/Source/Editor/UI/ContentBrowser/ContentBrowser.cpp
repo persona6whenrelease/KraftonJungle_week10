@@ -157,7 +157,7 @@ void FEditorContentBrowserWidget::Initialize(UEditorEngine* InEditor, ID3D11Devi
 	if (!InDevice) return;
 
 	ContentBrowserContext Context;
-	Context.ContentSize = ImVec2(50, 50);
+	Context.ContentSize = ImVec2(125, 125);
 	Context.EditorEngine = InEditor;
 	BrowserContext = Context;
 	LoadFromSettings();
@@ -189,10 +189,10 @@ void FEditorContentBrowserWidget::Render(float DeltaTime)
 
 	ImGui::Text(FPaths::ToUtf8(PathText).c_str());
 
-	ImGui::SameLine();
-	int size = static_cast<int>(BrowserContext.ContentSize.x);
-	ImGui::SliderInt("##slider", &size, 20, 100);
-	BrowserContext.ContentSize = ImVec2(static_cast<float>(size), static_cast<float>(size));
+	//ImGui::SameLine();
+	//int size = static_cast<int>(BrowserContext.ContentSize.x);
+	//ImGui::SliderInt("##slider", &size, 20, 100);
+	//BrowserContext.ContentSize = ImVec2(static_cast<float>(size), static_cast<float>(size));
 
 	if (!ImGui::BeginTable("ContentBrowserLayout", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersInnerV))
 	{
