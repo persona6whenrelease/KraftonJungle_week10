@@ -389,53 +389,6 @@ void DrawViewerGizmoDebugLines(
 }
 // 임시 기즈모 디버그 라인
 
-void DrawViewerShowFlagsControls(FViewportRenderOptions& Opts, const char* TableId)
-{
-	ImGui::Text("Show");
-	if (ImGui::BeginTable(TableId, 5, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchSame))
-	{
-		ImGui::TableNextRow();
-		ImGui::TableNextColumn();
-		ImGui::Checkbox("Primitives", &Opts.ShowFlags.bPrimitives);
-		ImGui::TableNextColumn();
-		ImGui::Checkbox("BillboardText", &Opts.ShowFlags.bBillboardText);
-		ImGui::TableNextColumn();
-		ImGui::Checkbox("Grid", &Opts.ShowFlags.bGrid);
-		ImGui::TableNextColumn();
-		ImGui::Checkbox("World Axis", &Opts.ShowFlags.bWorldAxis);
-		ImGui::TableNextColumn();
-		ImGui::Checkbox("Gizmo", &Opts.ShowFlags.bGizmo);
-
-		ImGui::TableNextRow();
-		ImGui::TableNextColumn();
-		ImGui::Checkbox("Bounding Volume", &Opts.ShowFlags.bBoundingVolume);
-		ImGui::TableNextColumn();
-		ImGui::Checkbox("Collision", &Opts.ShowFlags.bCollisionShapes);
-		ImGui::TableNextColumn();
-		ImGui::Checkbox("Debug Draw", &Opts.ShowFlags.bDebugDraw);
-		ImGui::TableNextColumn();
-		ImGui::Checkbox("Octree", &Opts.ShowFlags.bOctree);
-		ImGui::TableNextColumn();
-		ImGui::Checkbox("Fog", &Opts.ShowFlags.bFog);
-		ImGui::TableNextColumn();
-
-		ImGui::TableNextRow();
-		ImGui::TableNextColumn();
-		ImGui::Checkbox("FXAA", &Opts.ShowFlags.bFXAA);
-		ImGui::TableNextColumn();
-		ImGui::Checkbox("Visualize2.5D", &Opts.ShowFlags.bVisualize25DCulling);
-		ImGui::TableNextColumn();
-		ImGui::Checkbox("Shadows", &FProjectSettings::Get().Shadow.bEnabled);
-		ImGui::TableNextColumn();
-		ImGui::Checkbox("Shadow Frustum", &Opts.ShowFlags.bShowShadowFrustum);
-		ImGui::TableNextColumn();
-		ImGui::Checkbox("Picking BVH", &Opts.ShowFlags.bPickingBVH);
-		ImGui::Checkbox("Collision BVH", &Opts.ShowFlags.bCollisionBVH);
-
-		ImGui::EndTable();
-	}
-}
-
 void RenderViewerTransformToolbar(FSkeletalMeshViewerViewportClient* PreviewClient, UEditorEngine* EditorEngine)
 {
 	constexpr float ButtonSpacing = 4.0f;
@@ -448,19 +401,19 @@ void RenderViewerTransformToolbar(FSkeletalMeshViewerViewportClient* PreviewClie
 	ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(1.0f, 1.0f, 1.0f, 0.3f));
 
 	auto DrawGizmoIcon = [&](const char* Id, EViewerToolbarIcon Icon, EGizmoMode TargetMode, const char* FallbackLabel) -> bool
-	{
-		const bool bSelected = Gizmo && Gizmo->GetMode() == TargetMode;
-		if (bSelected)
 		{
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.5f, 0.8f, 1.0f));
-		}
-		const bool bClicked = DrawViewerToolbarIconButton(Id, Icon, FallbackLabel);
-		if (bSelected)
-		{
-			ImGui::PopStyleColor();
-		}
-		return bClicked;
-	};
+			const bool bSelected = Gizmo && Gizmo->GetMode() == TargetMode;
+			if (bSelected)
+			{
+				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.5f, 0.8f, 1.0f));
+			}
+			const bool bClicked = DrawViewerToolbarIconButton(Id, Icon, FallbackLabel);
+			if (bSelected)
+			{
+				ImGui::PopStyleColor();
+			}
+			return bClicked;
+		};
 
 	if (!Gizmo)
 	{
@@ -520,37 +473,37 @@ void RenderViewerTransformToolbar(FSkeletalMeshViewerViewportClient* PreviewClie
 
 	bool bSnapChanged = false;
 	auto DrawSnapControl = [&](const char* Id, EViewerToolbarIcon Icon, const char* FallbackLabel, bool& bEnabled, float& Value, float MinValue)
-	{
-		ImGui::SameLine(0.0f, 6.0f);
-		ImGui::PushID(Id);
-		const bool bWasEnabled = bEnabled;
-		if (bWasEnabled)
 		{
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.5f, 0.8f, 1.0f));
-			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.38f, 0.58f, 0.88f, 1.0f));
-			ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.22f, 0.42f, 0.72f, 1.0f));
-		}
-		if (DrawViewerToolbarIconButton("##SnapToggle", Icon, FallbackLabel))
-		{
-			bEnabled = !bEnabled;
-			bSnapChanged = true;
-		}
-		if (bWasEnabled)
-		{
-			ImGui::PopStyleColor(3);
-		}
-		ImGui::SameLine(0.0f, 2.0f);
-		ImGui::SetNextItemWidth(48.0f);
-		if (ImGui::InputFloat("##Value", &Value, 0.0f, 0.0f, "%.2f"))
-		{
-			if (Value < MinValue)
+			ImGui::SameLine(0.0f, 6.0f);
+			ImGui::PushID(Id);
+			const bool bWasEnabled = bEnabled;
+			if (bWasEnabled)
 			{
-				Value = MinValue;
+				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.5f, 0.8f, 1.0f));
+				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.38f, 0.58f, 0.88f, 1.0f));
+				ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.22f, 0.42f, 0.72f, 1.0f));
 			}
-			bSnapChanged = true;
-		}
-		ImGui::PopID();
-	};
+			if (DrawViewerToolbarIconButton("##SnapToggle", Icon, FallbackLabel))
+			{
+				bEnabled = !bEnabled;
+				bSnapChanged = true;
+			}
+			if (bWasEnabled)
+			{
+				ImGui::PopStyleColor(3);
+			}
+			ImGui::SameLine(0.0f, 2.0f);
+			ImGui::SetNextItemWidth(48.0f);
+			if (ImGui::InputFloat("##Value", &Value, 0.0f, 0.0f, "%.2f"))
+			{
+				if (Value < MinValue)
+				{
+					Value = MinValue;
+				}
+				bSnapChanged = true;
+			}
+			ImGui::PopID();
+		};
 
 	DrawSnapControl("ViewerTranslateSnap", EViewerToolbarIcon::TranslateSnap, "T", Settings.bEnableTranslationSnap, Settings.TranslationSnapSize, 0.001f);
 	DrawSnapControl("ViewerRotateSnap", EViewerToolbarIcon::RotateSnap, "R", Settings.bEnableRotationSnap, Settings.RotationSnapSize, 0.001f);
@@ -559,191 +512,6 @@ void RenderViewerTransformToolbar(FSkeletalMeshViewerViewportClient* PreviewClie
 	if (EditorEngine && (bSnapChanged || Gizmo))
 	{
 		EditorEngine->ApplyTransformSettingsToGizmo(Gizmo);
-	}
-}
-
-void RenderViewerViewportToolbar(FSkeletalMeshViewerViewportClient* PreviewClient)
-{
-	if (!PreviewClient)
-	{
-		return;
-	}
-
-	EnsureViewerToolbarIconsLoaded();
-	FViewportRenderOptions& Opts = PreviewClient->GetRenderOptions();
-
-	static const char* ViewportTypeNames[] = {
-		"Perspective", "Top", "Bottom", "Left", "Right", "Front", "Back", "Free Orthographic"
-	};
-	constexpr int32 ViewportTypeCount = sizeof(ViewportTypeNames) / sizeof(ViewportTypeNames[0]);
-	int32 CurrentTypeIdx = static_cast<int32>(Opts.ViewportType);
-	const char* CurrentTypeName =
-		(CurrentTypeIdx >= 0 && CurrentTypeIdx < ViewportTypeCount)
-		? ViewportTypeNames[CurrentTypeIdx]
-		: ViewportTypeNames[0];
-
-	static const char* ViewModeNames[] = { "Phong", "Unlit", "Gouraud", "Lambert", "Wireframe", "SceneDepth", "WorldNormal", "LightCulling" };
-	const int32 ViewModeIndex = static_cast<int32>(Opts.ViewMode);
-	const char* CurrentViewModeName = (ViewModeIndex >= 0 && ViewModeIndex < static_cast<int32>(EViewMode::Count))
-		? ViewModeNames[ViewModeIndex]
-		: ViewModeNames[static_cast<int32>(EViewMode::Lit_Phong)];
-
-	const float RowStartX = ImGui::GetCursorPosX();
-	const float RowRightX = RowStartX + ImGui::GetContentRegionAvail().x;
-	RenderViewerTransformToolbar(PreviewClient, Cast<UEditorEngine>(GEngine));
-
-	const char* DebugLineLabel = "DrawDebugLine";
-	const float RightToolbarWidth =
-		CalcViewerTextButtonWidth(DebugLineLabel) +
-		ImGui::GetStyle().ItemSpacing.x +
-		CalcViewerTextButtonWidth(CurrentTypeName) +
-		ImGui::GetStyle().ItemSpacing.x +
-		CalcViewerTextButtonWidth(CurrentViewModeName) +
-		ImGui::GetStyle().ItemSpacing.x +
-		CalcViewerIconButtonWidth() +
-		ImGui::GetStyle().ItemSpacing.x +
-		CalcViewerIconButtonWidth();
-	const float RightToolbarStartX = RowRightX - RightToolbarWidth;
-
-	if (ImGui::GetCursorPosX() < RightToolbarStartX)
-	{
-		ImGui::SameLine();
-		ImGui::SetCursorPosX(RightToolbarStartX);
-	}
-	else
-	{
-		ImGui::SameLine();
-	}
-
-	const bool bDebugLinesOn = PreviewClient->bDrawBoneDebugLines;
-	if (bDebugLinesOn)
-	{
-		ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.30f, 0.50f, 0.80f, 1.0f));
-		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.38f, 0.58f, 0.88f, 1.0f));
-		ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.22f, 0.42f, 0.72f, 1.0f));
-	}
-	if (ImGui::Button(DebugLineLabel))
-	{
-		PreviewClient->bDrawBoneDebugLines = !PreviewClient->bDrawBoneDebugLines;
-	}
-	if (bDebugLinesOn)
-	{
-		ImGui::PopStyleColor(3);
-	}
-	ImGui::SameLine();
-
-	if (ImGui::Button(CurrentTypeName))
-	{
-		ImGui::OpenPopup("ViewerViewportTypePopup");
-	}
-	if (ImGui::BeginPopup("ViewerViewportTypePopup"))
-	{
-		for (int32 TypeIndex = 0; TypeIndex < ViewportTypeCount; ++TypeIndex)
-		{
-			const bool bSelected = TypeIndex == CurrentTypeIdx;
-			if (ImGui::Selectable(ViewportTypeNames[TypeIndex], bSelected))
-			{
-				PreviewClient->SetViewportType(static_cast<ELevelViewportType>(TypeIndex));
-			}
-		}
-		ImGui::EndPopup();
-	}
-
-	ImGui::SameLine();
-	if (ImGui::Button(CurrentViewModeName))
-	{
-		ImGui::OpenPopup("ViewerViewModePopup");
-	}
-	if (ImGui::BeginPopup("ViewerViewModePopup"))
-	{
-		int32 CurrentMode = (ViewModeIndex >= 0 && ViewModeIndex < static_cast<int32>(EViewMode::Count))
-			? ViewModeIndex
-			: static_cast<int32>(EViewMode::Lit_Phong);
-
-		if (ImGui::BeginTable("ViewerViewModeTable", 3, ImGuiTableFlags_SizingStretchSame))
-		{
-			ImGui::TableNextRow();
-			ImGui::TableNextColumn();
-			ImGui::RadioButton("Unlit", &CurrentMode, static_cast<int32>(EViewMode::Unlit));
-			ImGui::TableNextColumn();
-			ImGui::RadioButton("Phong", &CurrentMode, static_cast<int32>(EViewMode::Lit_Phong));
-			ImGui::TableNextColumn();
-			ImGui::RadioButton("Gouraud", &CurrentMode, static_cast<int32>(EViewMode::Lit_Gouraud));
-
-			ImGui::TableNextRow();
-			ImGui::TableNextColumn();
-			ImGui::RadioButton("Lambert", &CurrentMode, static_cast<int32>(EViewMode::Lit_Lambert));
-			ImGui::TableNextColumn();
-			ImGui::RadioButton("Wireframe", &CurrentMode, static_cast<int32>(EViewMode::Wireframe));
-			ImGui::TableNextColumn();
-			ImGui::RadioButton("SceneDepth", &CurrentMode, static_cast<int32>(EViewMode::SceneDepth));
-			ImGui::TableNextColumn();
-			ImGui::RadioButton("WorldNormal", &CurrentMode, static_cast<int32>(EViewMode::WorldNormal));
-
-			ImGui::TableNextRow();
-			ImGui::TableNextColumn();
-			ImGui::RadioButton("LightCulling", &CurrentMode, static_cast<int32>(EViewMode::LightCulling));
-			ImGui::EndTable();
-		}
-
-		Opts.ViewMode = static_cast<EViewMode>(CurrentMode);
-		ImGui::EndPopup();
-	}
-
-	ImGui::SameLine();
-	if (DrawViewerToolbarIconButton("##ViewerShowFlagsIcon", EViewerToolbarIcon::ShowFlag, "Show"))
-	{
-		ImGui::OpenPopup("ViewerShowFlagsPopup");
-	}
-	if (ImGui::BeginPopup("ViewerShowFlagsPopup"))
-	{
-		DrawViewerShowFlagsControls(Opts, "ViewerShowFlagsTable");
-		ImGui::EndPopup();
-	}
-
-	ImGui::SameLine();
-	if (DrawViewerToolbarIconButton("##ViewerSettingsIcon", EViewerToolbarIcon::Setting, "Settings"))
-	{
-		ImGui::OpenPopup("ViewerSettingsPopup");
-	}
-	if (ImGui::BeginPopup("ViewerSettingsPopup"))
-	{
-		if (ImGui::CollapsingHeader("Viewport Utility Settings (Grid , Camera , SceneDepth , FXAA)"))
-		{
-			ImGui::Text("Grid");
-			ImGui::SliderFloat("Spacing", &Opts.GridSpacing, 0.1f, 10.0f, "%.1f");
-			ImGui::SliderInt("Half Line Count", &Opts.GridHalfLineCount, 10, 500);
-
-			ImGui::Separator();
-			ImGui::Text("Camera");
-			ImGui::SliderFloat("Move Sensitivity", &Opts.CameraMoveSensitivity, 0.1f, 5.0f, "%.1f");
-			ImGui::SliderFloat("Rotate Sensitivity", &Opts.CameraRotateSensitivity, 0.1f, 5.0f, "%.1f");
-
-			ImGui::Separator();
-			ImGui::Text("SceneDepth");
-			ImGui::SliderFloat("Exponent", &Opts.Exponent, 1.0f, 512.0f, "%.0f");
-			ImGui::Combo("Mode", &Opts.SceneDepthVisMode, "Power\0Linear\0");
-
-			ImGui::Text("FXAA");
-			ImGui::SliderFloat("EdgeThreshold", &Opts.EdgeThreshold, 0.06f, 0.333f, "%.3f");
-			ImGui::SliderFloat("EdgeThresholdMin", &Opts.EdgeThresholdMin, 0.0312f, 0.0833f, "%.4f");
-		}
-
-		if (ImGui::CollapsingHeader("Light Culling Settings"))
-		{
-			int32 CullingMode = static_cast<int32>(Opts.LightCullingMode);
-			ImGui::RadioButton("Off", &CullingMode, static_cast<int32>(ELightCullingMode::Off));
-			ImGui::SameLine();
-			ImGui::RadioButton("Tile", &CullingMode, static_cast<int32>(ELightCullingMode::Tile));
-			ImGui::SameLine();
-			ImGui::RadioButton("Cluster", &CullingMode, static_cast<int32>(ELightCullingMode::Cluster));
-			Opts.LightCullingMode = static_cast<ELightCullingMode>(CullingMode);
-			ImGui::SliderFloat("HeatMapMax", &Opts.HeatMapMax, 1.0f, 100.0f, "%.0f");
-			ImGui::Checkbox("Enable2.5DCulling", &Opts.Enable25DCulling);
-			ImGui::Checkbox("Visualize2.5DCulling", &Opts.ShowFlags.bVisualize25DCulling);
-		}
-
-		ImGui::EndPopup();
 	}
 }
 
@@ -1128,7 +896,7 @@ void FEditorSkeletalMeshViewerWidget::RenderViewportPanel(float DeltaTime)
 	}
 
 	EnsurePreviewScene();
-	RenderViewerViewportToolbar(PreviewViewportClient);
+	RenderViewerViewportToolbar();
 	ImGui::Separator();
 
 	ImVec2 ViewportMin = ImGui::GetCursorScreenPos();
@@ -1388,6 +1156,246 @@ USkeletalMesh* FEditorSkeletalMeshViewerWidget::GetSelectedSkeletalMesh() const
 	}
 
 	return SkeletalMeshes[SelectedResourceIndex];
+}
+
+void FEditorSkeletalMeshViewerWidget::DrawViewerShowFlagsControls(FViewportRenderOptions& Opts, const char* TableId)
+{
+	ImGui::Text("Show");
+	if (ImGui::BeginTable(TableId, 6, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchSame))
+	{
+		ImGui::TableNextRow();
+		ImGui::TableNextColumn();
+		ImGui::Checkbox("Primitives", &Opts.ShowFlags.bPrimitives);
+		ImGui::TableNextColumn();
+		if (PreviewMeshComponent)
+		{
+			bool bMeshVisible = PreviewMeshComponent->IsVisible();
+			if (ImGui::Checkbox("Mesh", &bMeshVisible))
+				PreviewMeshComponent->SetVisibility(bMeshVisible);
+		}
+		ImGui::TableNextColumn();
+		ImGui::Checkbox("BillboardText", &Opts.ShowFlags.bBillboardText);
+		ImGui::TableNextColumn();
+		ImGui::Checkbox("Grid", &Opts.ShowFlags.bGrid);
+		ImGui::TableNextColumn();
+		ImGui::Checkbox("World Axis", &Opts.ShowFlags.bWorldAxis);
+		ImGui::TableNextColumn();
+		ImGui::Checkbox("Gizmo", &Opts.ShowFlags.bGizmo);
+
+		ImGui::TableNextRow();
+		ImGui::TableNextColumn();
+		ImGui::Checkbox("Bounding Volume", &Opts.ShowFlags.bBoundingVolume);
+		ImGui::TableNextColumn();
+		ImGui::Checkbox("Collision", &Opts.ShowFlags.bCollisionShapes);
+		ImGui::TableNextColumn();
+		ImGui::Checkbox("Debug Draw", &Opts.ShowFlags.bDebugDraw);
+		ImGui::TableNextColumn();
+		ImGui::Checkbox("Octree", &Opts.ShowFlags.bOctree);
+		ImGui::TableNextColumn();
+		ImGui::Checkbox("Fog", &Opts.ShowFlags.bFog);
+		ImGui::TableNextColumn();
+
+		ImGui::TableNextRow();
+		ImGui::TableNextColumn();
+		ImGui::Checkbox("FXAA", &Opts.ShowFlags.bFXAA);
+		ImGui::TableNextColumn();
+		ImGui::Checkbox("Visualize2.5D", &Opts.ShowFlags.bVisualize25DCulling);
+		ImGui::TableNextColumn();
+		ImGui::Checkbox("Shadows", &FProjectSettings::Get().Shadow.bEnabled);
+		ImGui::TableNextColumn();
+		ImGui::Checkbox("Shadow Frustum", &Opts.ShowFlags.bShowShadowFrustum);
+		ImGui::TableNextColumn();
+		ImGui::Checkbox("Picking BVH", &Opts.ShowFlags.bPickingBVH);
+		ImGui::Checkbox("Collision BVH", &Opts.ShowFlags.bCollisionBVH);
+
+		ImGui::EndTable();
+	}
+}
+
+void FEditorSkeletalMeshViewerWidget::RenderViewerViewportToolbar()
+{
+	FSkeletalMeshViewerViewportClient* PreviewClient = PreviewViewportClient;
+	if (!PreviewClient)
+	{
+		return;
+	}
+
+	EnsureViewerToolbarIconsLoaded();
+	FViewportRenderOptions& Opts = PreviewClient->GetRenderOptions();
+
+	static const char* ViewportTypeNames[] = {
+		"Perspective", "Top", "Bottom", "Left", "Right", "Front", "Back", "Free Orthographic"
+	};
+	constexpr int32 ViewportTypeCount = sizeof(ViewportTypeNames) / sizeof(ViewportTypeNames[0]);
+	int32 CurrentTypeIdx = static_cast<int32>(Opts.ViewportType);
+	const char* CurrentTypeName =
+		(CurrentTypeIdx >= 0 && CurrentTypeIdx < ViewportTypeCount)
+		? ViewportTypeNames[CurrentTypeIdx]
+		: ViewportTypeNames[0];
+
+	static const char* ViewModeNames[] = { "Phong", "Unlit", "Gouraud", "Lambert", "Wireframe", "SceneDepth", "WorldNormal", "LightCulling" };
+	const int32 ViewModeIndex = static_cast<int32>(Opts.ViewMode);
+	const char* CurrentViewModeName = (ViewModeIndex >= 0 && ViewModeIndex < static_cast<int32>(EViewMode::Count))
+		? ViewModeNames[ViewModeIndex]
+		: ViewModeNames[static_cast<int32>(EViewMode::Lit_Phong)];
+
+	const float RowStartX = ImGui::GetCursorPosX();
+	const float RowRightX = RowStartX + ImGui::GetContentRegionAvail().x;
+	RenderViewerTransformToolbar(PreviewClient, Cast<UEditorEngine>(GEngine));
+
+	const char* DebugLineLabel = "DrawDebugLine";
+	const float RightToolbarWidth =
+		CalcViewerTextButtonWidth(DebugLineLabel) +
+		ImGui::GetStyle().ItemSpacing.x +
+		CalcViewerTextButtonWidth(CurrentTypeName) +
+		ImGui::GetStyle().ItemSpacing.x +
+		CalcViewerTextButtonWidth(CurrentViewModeName) +
+		ImGui::GetStyle().ItemSpacing.x +
+		CalcViewerIconButtonWidth() +
+		ImGui::GetStyle().ItemSpacing.x +
+		CalcViewerIconButtonWidth();
+	const float RightToolbarStartX = RowRightX - RightToolbarWidth;
+
+	if (ImGui::GetCursorPosX() < RightToolbarStartX)
+	{
+		ImGui::SameLine();
+		ImGui::SetCursorPosX(RightToolbarStartX);
+	}
+	else
+	{
+		ImGui::SameLine();
+	}
+
+	const bool bDebugLinesOn = PreviewClient->bDrawBoneDebugLines;
+	if (bDebugLinesOn)
+	{
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.30f, 0.50f, 0.80f, 1.0f));
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.38f, 0.58f, 0.88f, 1.0f));
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.22f, 0.42f, 0.72f, 1.0f));
+	}
+	if (ImGui::Button(DebugLineLabel))
+	{
+		PreviewClient->bDrawBoneDebugLines = !PreviewClient->bDrawBoneDebugLines;
+	}
+	if (bDebugLinesOn)
+	{
+		ImGui::PopStyleColor(3);
+	}
+	ImGui::SameLine();
+
+	if (ImGui::Button(CurrentTypeName))
+	{
+		ImGui::OpenPopup("ViewerViewportTypePopup");
+	}
+	if (ImGui::BeginPopup("ViewerViewportTypePopup"))
+	{
+		for (int32 TypeIndex = 0; TypeIndex < ViewportTypeCount; ++TypeIndex)
+		{
+			const bool bSelected = TypeIndex == CurrentTypeIdx;
+			if (ImGui::Selectable(ViewportTypeNames[TypeIndex], bSelected))
+			{
+				PreviewClient->SetViewportType(static_cast<ELevelViewportType>(TypeIndex));
+			}
+		}
+		ImGui::EndPopup();
+	}
+
+	ImGui::SameLine();
+	if (ImGui::Button(CurrentViewModeName))
+	{
+		ImGui::OpenPopup("ViewerViewModePopup");
+	}
+	if (ImGui::BeginPopup("ViewerViewModePopup"))
+	{
+		int32 CurrentMode = (ViewModeIndex >= 0 && ViewModeIndex < static_cast<int32>(EViewMode::Count))
+			? ViewModeIndex
+			: static_cast<int32>(EViewMode::Lit_Phong);
+
+		if (ImGui::BeginTable("ViewerViewModeTable", 3, ImGuiTableFlags_SizingStretchSame))
+		{
+			ImGui::TableNextRow();
+			ImGui::TableNextColumn();
+			ImGui::RadioButton("Unlit", &CurrentMode, static_cast<int32>(EViewMode::Unlit));
+			ImGui::TableNextColumn();
+			ImGui::RadioButton("Phong", &CurrentMode, static_cast<int32>(EViewMode::Lit_Phong));
+			ImGui::TableNextColumn();
+			ImGui::RadioButton("Gouraud", &CurrentMode, static_cast<int32>(EViewMode::Lit_Gouraud));
+
+			ImGui::TableNextRow();
+			ImGui::TableNextColumn();
+			ImGui::RadioButton("Lambert", &CurrentMode, static_cast<int32>(EViewMode::Lit_Lambert));
+			ImGui::TableNextColumn();
+			ImGui::RadioButton("Wireframe", &CurrentMode, static_cast<int32>(EViewMode::Wireframe));
+			ImGui::TableNextColumn();
+			ImGui::RadioButton("SceneDepth", &CurrentMode, static_cast<int32>(EViewMode::SceneDepth));
+			ImGui::TableNextColumn();
+			ImGui::RadioButton("WorldNormal", &CurrentMode, static_cast<int32>(EViewMode::WorldNormal));
+
+			ImGui::TableNextRow();
+			ImGui::TableNextColumn();
+			ImGui::RadioButton("LightCulling", &CurrentMode, static_cast<int32>(EViewMode::LightCulling));
+			ImGui::EndTable();
+		}
+
+		Opts.ViewMode = static_cast<EViewMode>(CurrentMode);
+		ImGui::EndPopup();
+	}
+
+	ImGui::SameLine();
+	if (DrawViewerToolbarIconButton("##ViewerShowFlagsIcon", EViewerToolbarIcon::ShowFlag, "Show"))
+	{
+		ImGui::OpenPopup("ViewerShowFlagsPopup");
+	}
+	if (ImGui::BeginPopup("ViewerShowFlagsPopup"))
+	{
+		DrawViewerShowFlagsControls(Opts, "ViewerShowFlagsTable");
+		ImGui::EndPopup();
+	}
+
+	ImGui::SameLine();
+	if (DrawViewerToolbarIconButton("##ViewerSettingsIcon", EViewerToolbarIcon::Setting, "Settings"))
+	{
+		ImGui::OpenPopup("ViewerSettingsPopup");
+	}
+	if (ImGui::BeginPopup("ViewerSettingsPopup"))
+	{
+		if (ImGui::CollapsingHeader("Viewport Utility Settings (Grid , Camera , SceneDepth , FXAA)"))
+		{
+			ImGui::Text("Grid");
+			ImGui::SliderFloat("Spacing", &Opts.GridSpacing, 0.1f, 10.0f, "%.1f");
+			ImGui::SliderInt("Half Line Count", &Opts.GridHalfLineCount, 10, 500);
+
+			ImGui::Separator();
+			ImGui::Text("Camera");
+			ImGui::SliderFloat("Move Sensitivity", &Opts.CameraMoveSensitivity, 0.1f, 5.0f, "%.1f");
+			ImGui::SliderFloat("Rotate Sensitivity", &Opts.CameraRotateSensitivity, 0.1f, 5.0f, "%.1f");
+
+			ImGui::Separator();
+			ImGui::Text("SceneDepth");
+			ImGui::SliderFloat("Exponent", &Opts.Exponent, 1.0f, 512.0f, "%.0f");
+			ImGui::Combo("Mode", &Opts.SceneDepthVisMode, "Power\0Linear\0");
+
+			ImGui::Text("FXAA");
+			ImGui::SliderFloat("EdgeThreshold", &Opts.EdgeThreshold, 0.06f, 0.333f, "%.3f");
+			ImGui::SliderFloat("EdgeThresholdMin", &Opts.EdgeThresholdMin, 0.0312f, 0.0833f, "%.4f");
+		}
+
+		if (ImGui::CollapsingHeader("Light Culling Settings"))
+		{
+			int32 CullingMode = static_cast<int32>(Opts.LightCullingMode);
+			ImGui::RadioButton("Off", &CullingMode, static_cast<int32>(ELightCullingMode::Off));
+			ImGui::SameLine();
+			ImGui::RadioButton("Tile", &CullingMode, static_cast<int32>(ELightCullingMode::Tile));
+			ImGui::SameLine();
+			ImGui::RadioButton("Cluster", &CullingMode, static_cast<int32>(ELightCullingMode::Cluster));
+			Opts.LightCullingMode = static_cast<ELightCullingMode>(CullingMode);
+			ImGui::SliderFloat("HeatMapMax", &Opts.HeatMapMax, 1.0f, 100.0f, "%.0f");
+			ImGui::Checkbox("Enable2.5DCulling", &Opts.Enable25DCulling);
+			ImGui::Checkbox("Visualize2.5DCulling", &Opts.ShowFlags.bVisualize25DCulling);
+		}
+
+		ImGui::EndPopup();
+	}
 }
 
 
