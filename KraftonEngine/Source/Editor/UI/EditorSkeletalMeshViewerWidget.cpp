@@ -32,6 +32,39 @@
 
 namespace
 {
+FVector GetRotationEulerNoScale(const FMatrix& Matrix)
+{
+	FMatrix RotationMatrix = Matrix;
+	const FVector Scale = Matrix.GetScale();
+	if (std::abs(Scale.X) > 0.0001f)
+	{
+		RotationMatrix.M[0][0] /= Scale.X;
+		RotationMatrix.M[0][1] /= Scale.X;
+		RotationMatrix.M[0][2] /= Scale.X;
+	}
+	if (std::abs(Scale.Y) > 0.0001f)
+	{
+		RotationMatrix.M[1][0] /= Scale.Y;
+		RotationMatrix.M[1][1] /= Scale.Y;
+		RotationMatrix.M[1][2] /= Scale.Y;
+	}
+	if (std::abs(Scale.Z) > 0.0001f)
+	{
+		RotationMatrix.M[2][0] /= Scale.Z;
+		RotationMatrix.M[2][1] /= Scale.Z;
+		RotationMatrix.M[2][2] /= Scale.Z;
+	}
+	RotationMatrix.SetLocation(FVector(0.0f, 0.0f, 0.0f));
+	return RotationMatrix.GetEuler();
+}
+
+FMatrix MakeLocalPoseMatrix(const FVector& Location, const FVector& Rotation, const FVector& Scale)
+{
+	return FMatrix::MakeScaleMatrix(Scale) *
+		FMatrix::MakeRotationEuler(Rotation) *
+		FMatrix::MakeTranslationMatrix(Location);
+}
+
 enum class EViewerToolbarIcon : int32
 {
 	Setting = 0,
@@ -1132,6 +1165,11 @@ void FEditorSkeletalMeshViewerWidget::RenderBonePanel()
 		ImGui::TextUnformatted("Bone Hierarchy");
 		ImGui::Separator();
 
+		if (PreviewViewportClient)
+		{
+			SelectedBoneIndex = PreviewViewportClient->GetBoneSelectionManager().GetPrimarySelectedBone();
+		}
+
 		USkeletalMesh* SelectedMesh = GetSelectedSkeletalMesh();
 		const FSkeletalMesh* MeshAsset = SelectedMesh ? SelectedMesh->GetSkeletalMeshAsset() : nullptr;
 		if (!MeshAsset)
@@ -1173,27 +1211,58 @@ void FEditorSkeletalMeshViewerWidget::RenderTransformPanel()
 		ImGui::TextUnformatted("Transform");
 		ImGui::Separator();
 
+		if (PreviewViewportClient)
+		{
+			SelectedBoneIndex = PreviewViewportClient->GetBoneSelectionManager().GetPrimarySelectedBone();
+		}
+
 		USkeletalMesh* SelectedMesh = GetSelectedSkeletalMesh();
 		const FSkeletalMesh* MeshAsset = SelectedMesh ? SelectedMesh->GetSkeletalMeshAsset() : nullptr;
-		if (!MeshAsset || SelectedBoneIndex < 0 || SelectedBoneIndex >= static_cast<int32>(MeshAsset->Bones.size()))
+		if (!MeshAsset ||
+			!PreviewMeshComponent ||
+			SelectedBoneIndex < 0 ||
+			SelectedBoneIndex >= static_cast<int32>(MeshAsset->Bones.size()))
 		{
 			ImGui::TextDisabled("No bone selected");
 		}
 		else
 		{
+			const TArray<FMatrix>& LocalPoses = PreviewMeshComponent->GetLocalBonePoseMatrices();
+			if (SelectedBoneIndex >= static_cast<int32>(LocalPoses.size()))
+			{
+				ImGui::TextDisabled("No bone pose available");
+				ImGui::EndChild();
+				return;
+			}
+
 			const FBoneInfo& Bone = MeshAsset->Bones[SelectedBoneIndex];
-			const FVector LocationVector = Bone.LocalBindPose.GetLocation();
-			const FVector RotationVector = Bone.LocalBindPose.GetEuler();
-			const FVector ScaleVector = Bone.LocalBindPose.GetScale();
+			const FMatrix& LocalPose = LocalPoses[SelectedBoneIndex];
+			const FVector LocationVector = LocalPose.GetLocation();
+			const FVector RotationVector = GetRotationEulerNoScale(LocalPose);
+			const FVector ScaleVector = LocalPose.GetScale();
 			float Location[3] = { LocationVector.X, LocationVector.Y, LocationVector.Z };
 			float Rotation[3] = { RotationVector.X, RotationVector.Y, RotationVector.Z };
 			float Scale[3] = { ScaleVector.X, ScaleVector.Y, ScaleVector.Z };
 
 			ImGui::TextUnformatted(Bone.Name.c_str());
 			ImGui::Separator();
-			ImGui::InputFloat3("Location", Location, "%.3f", ImGuiInputTextFlags_ReadOnly);
-			ImGui::InputFloat3("Rotation", Rotation, "%.3f", ImGuiInputTextFlags_ReadOnly);
-			ImGui::InputFloat3("Scale", Scale, "%.3f", ImGuiInputTextFlags_ReadOnly);
+			bool bChanged = false;
+			bChanged |= ImGui::DragFloat3("Location", Location, 0.1f, -100000.0f, 100000.0f, "%.3f");
+			bChanged |= ImGui::DragFloat3("Rotation", Rotation, 0.1f, -360.0f, 360.0f, "%.3f");
+			bChanged |= ImGui::DragFloat3("Scale", Scale, 0.01f, 0.001f, 100.0f, "%.3f");
+
+			if (bChanged)
+			{
+				FVector NewLocation(Location[0], Location[1], Location[2]);
+				FVector NewRotation(Rotation[0], Rotation[1], Rotation[2]);
+				FVector NewScale(
+					(std::max)(Scale[0], 0.001f),
+					(std::max)(Scale[1], 0.001f),
+					(std::max)(Scale[2], 0.001f));
+				PreviewMeshComponent->SetBoneLocalPose(
+					SelectedBoneIndex,
+					MakeLocalPoseMatrix(NewLocation, NewRotation, NewScale));
+			}
 		}
 	}
 	ImGui::EndChild();
