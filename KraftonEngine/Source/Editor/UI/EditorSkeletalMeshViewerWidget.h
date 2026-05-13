@@ -3,6 +3,7 @@
 #include "Editor/UI/EditorWidget.h"
 #include "GameFramework/World.h"
 #include "ImGui/imgui.h"
+#include "Render/Types/ViewTypes.h"
 
 class UFBXSceneAsset;
 class USkeletalMesh;
@@ -33,6 +34,9 @@ private:
 	void RenderBonePanel();
 	void RenderTransformPanel();
 
+	void RenderViewerViewportToolbar();
+	void DrawViewerShowFlagsControls(FViewportRenderOptions& Opts, const char* TableId);
+
 	USkeletalMesh* GetSelectedSkeletalMesh() const;
 
 	void UpdateBoneDebugLines();
@@ -55,4 +59,5 @@ private:
 	bool bHasPreviewViewportRect = false;
 	bool bPreviewViewportWantsMouseCapture = false;
 	bool bPreviewViewportWantsKeyboardCapture = false;
+	bool bDrawBoneDebugLines = true;
 };
