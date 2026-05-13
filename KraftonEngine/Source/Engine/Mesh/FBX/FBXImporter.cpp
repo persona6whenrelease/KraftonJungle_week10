@@ -1,6 +1,7 @@
 ﻿#include "FBXImporter.h"
 
 #include "Core/Log.h"
+#include "FbxAnimationParser.h"
 #include "FbxMaterialImportUtils.h"
 #include "FbxMetaParser.h"
 #include "FbxSkeletalMeshAssembler.h"
@@ -149,6 +150,32 @@ bool FBXImporter::ImportFbxAsset(const FString& InFilePath, FFBXAsset& OutFBXAss
 	{
 		ShutdownSdk();
 		return false;
+	}
+
+	// Bake any FBX AnimStack curves into per-bone tracks attached to the assembled skeletal meshes.
+	// We don't have a runtime animation system, so the clips are sampled into a flat array and
+	// played back hardcoded by USkeletalMeshComponent.
+	{
+		FFbxAnimationParser AnimationParser(ImportMeta);
+		for (const FFbxSkeletonMeta& SkeletonMeta : ImportMeta.Skeletons)
+		{
+			auto AssetIndexIt = OutFBXAsset.SkeletonIdToSkeletalMeshAssetIndex.find(SkeletonMeta.SkeletonId);
+			if (AssetIndexIt == OutFBXAsset.SkeletonIdToSkeletalMeshAssetIndex.end())
+			{
+				continue;
+			}
+
+			const int32 SkeletalMeshIndex = AssetIndexIt->second;
+			if (!IsValidIndex(OutFBXAsset.SkeletalMeshes, SkeletalMeshIndex))
+			{
+				continue;
+			}
+
+			AnimationParser.ParseSkeletonAnimations(
+				Scene,
+				SkeletonMeta,
+				OutFBXAsset.SkeletalMeshes[SkeletalMeshIndex]);
+		}
 	}
 
 	OutFBXAsset.StaticMeshMaterials.resize(OutFBXAsset.StaticMeshes.size());

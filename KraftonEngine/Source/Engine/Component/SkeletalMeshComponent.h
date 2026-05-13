@@ -13,6 +13,8 @@ public:
 protected:
 	void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction& ThisTickFunction) override;
 	void ApplyDebugRandomBoneAnimation(float DeltaTime);
+	bool ApplyBakedAnimation(float DeltaTime);
 
 	float DebugBoneAnimTime = 0.0f;
+	float BakedAnimTime = 0.0f;
 };
