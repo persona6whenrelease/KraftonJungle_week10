@@ -29,9 +29,80 @@
 #include "Render/Pipeline/Renderer.h"
 #include "Render/Resource/MeshBufferManager.h"
 #include "WICTextureLoader.h"
+#include "Debug/DrawDebugHelpers.h"
 
 namespace
 {
+	void DrawDebugOctahedralBone(UWorld* World, const FVector& Head, const FVector& Tail, const FColor& Color)
+	{
+		FVector Dir = Tail - Head;
+		float Length = std::sqrt(Dir.X * Dir.X + Dir.Y * Dir.Y + Dir.Z * Dir.Z);
+
+		// 뼈의 길이가 너무 짧으면 그리지 않음
+		if (Length < 0.001f) return;
+
+		Dir.X /= Length;
+		Dir.Y /= Length;
+		Dir.Z /= Length;
+
+		// --- [설정값] ---
+		// OffsetRatio: 마름모(가장 두꺼운 부분)가 위치할 지점. 
+		// 0.8f = 부모에서 출발해 자식 쪽으로 80% 간 지점 (자식 쪽에 무게가 실린 형태)
+		// (참고: 블렌더 기본 형태는 0.1f ~ 0.2f로 부모 쪽에 무게가 실려 있습니다.)
+		float OffsetRatio = 0.2f;
+
+		// BoneThickness: 뼈의 두께. 길이에 비례하게 설정 (길이의 10%)
+		float BoneThickness = Length * 0.05f;
+		// --------------
+
+		// 가장 두꺼운 중심점 계산
+		FVector MidPos = Head + FVector(Dir.X * Length * OffsetRatio, Dir.Y * Length * OffsetRatio, Dir.Z * Length * OffsetRatio);
+
+		// 직교하는 두 축(Right, Up) 계산을 위한 임의의 Up 벡터
+		FVector ArbitraryUp = (std::abs(Dir.Z) > 0.99f) ? FVector(1.0f, 0.0f, 0.0f) : FVector(0.0f, 0.0f, 1.0f);
+
+		// Right = ArbitraryUp x Dir (외적)
+		FVector Right(
+			ArbitraryUp.Y * Dir.Z - ArbitraryUp.Z * Dir.Y,
+			ArbitraryUp.Z * Dir.X - ArbitraryUp.X * Dir.Z,
+			ArbitraryUp.X * Dir.Y - ArbitraryUp.Y * Dir.X
+		);
+		float RightLen = std::sqrt(Right.X * Right.X + Right.Y * Right.Y + Right.Z * Right.Z);
+		Right.X /= RightLen; Right.Y /= RightLen; Right.Z /= RightLen;
+
+		// Up = Dir x Right (외적)
+		FVector Up(
+			Dir.Y * Right.Z - Dir.Z * Right.Y,
+			Dir.Z * Right.X - Dir.X * Right.Z,
+			Dir.X * Right.Y - Dir.Y * Right.X
+		);
+
+		// 마름모의 4개 꼭짓점
+		FVector P1 = MidPos + FVector(Right.X * BoneThickness, Right.Y * BoneThickness, Right.Z * BoneThickness);
+		FVector P2 = MidPos + FVector(Up.X * BoneThickness, Up.Y * BoneThickness, Up.Z * BoneThickness);
+		FVector P3 = MidPos - FVector(Right.X * BoneThickness, Right.Y * BoneThickness, Right.Z * BoneThickness);
+		FVector P4 = MidPos - FVector(Up.X * BoneThickness, Up.Y * BoneThickness, Up.Z * BoneThickness);
+
+		// 선 12가닥 그리기
+		// 1. 밑면 (마름모 링)
+		DrawDebugNodepthLine(World, P1, P2, Color);
+		DrawDebugNodepthLine(World, P2, P3, Color);
+		DrawDebugNodepthLine(World, P3, P4, Color);
+		DrawDebugNodepthLine(World, P4, P1, Color);
+
+		// 2. Head(부모)에서 마름모로 이어지는 선
+		DrawDebugNodepthLine(World, Head, P1, Color);
+		DrawDebugNodepthLine(World, Head, P2, Color);
+		DrawDebugNodepthLine(World, Head, P3, Color);
+		DrawDebugNodepthLine(World, Head, P4, Color);
+
+		// 3. Tail(자식)에서 마름모로 이어지는 선
+		DrawDebugNodepthLine(World, Tail, P1, Color);
+		DrawDebugNodepthLine(World, Tail, P2, Color);
+		DrawDebugNodepthLine(World, Tail, P3, Color);
+		DrawDebugNodepthLine(World, Tail, P4, Color);
+	}
+
 FVector GetRotationEulerNoScale(const FMatrix& Matrix)
 {
 	FMatrix RotationMatrix = Matrix;
@@ -825,6 +896,8 @@ void FEditorSkeletalMeshViewerWidget::TickPreviewScene(float DeltaTime)
 	}
 
 	PreviewWorld->Tick(DeltaTime, DeltaTime, LEVELTICK_ViewportsOnly);
+
+	UpdateBoneDebugLines();
 }
 
 void FEditorSkeletalMeshViewerWidget::UpdateInput(float DeltaTime)
@@ -1268,6 +1341,7 @@ void FEditorSkeletalMeshViewerWidget::RenderTransformPanel()
 	ImGui::EndChild();
 }
 
+
 USkeletalMesh* FEditorSkeletalMeshViewerWidget::GetSelectedSkeletalMesh() const
 {
 	if (!CurrentSceneAsset)
@@ -1282,4 +1356,56 @@ USkeletalMesh* FEditorSkeletalMeshViewerWidget::GetSelectedSkeletalMesh() const
 	}
 
 	return SkeletalMeshes[SelectedResourceIndex];
+}
+
+
+void FEditorSkeletalMeshViewerWidget::UpdateBoneDebugLines()
+{
+	if (!PreviewSkeletalMesh || !PreviewMeshComponent)
+	{
+		return;
+	}
+
+	const auto& Bones = PreviewSkeletalMesh->GetSkeletalMeshAsset()->Bones;
+
+	// 연산이 완료된 MeshSpace 배열을 가져옵니다.
+	const auto& BoneMatrices = PreviewMeshComponent->GetMeshSpaceBoneMatrices();
+
+	// 본 위치 디버그 스피어 크기 계산을 위한 대략적인 거리 측정
+	FVector Subtract = PreviewMeshComponent->GetWorldAABB().Max - PreviewMeshComponent->GetWorldAABB().Min; // [주의] GetMeshSpaceBoneMatrices()의 결과가 최신이 되도록 강제 업데이트 트리거
+	float distance = Subtract.Dot(Subtract);
+
+	// 1. 컴포넌트 전체의 월드 변환 행렬
+	FMatrix ComponentWorldTransform = PreviewMeshComponent->GetWorldMatrix();
+
+	// 관절에 구체(Sphere) 그리기
+	for (int i = 0; i < Bones.size(); ++i)
+	{
+		// bone sphere 그리기
+		FMatrix WorldMat = BoneMatrices[i] * ComponentWorldTransform;
+		FVector WorldPos = WorldMat.GetLocation();
+		DrawDebugNodepthSphere(PreviewWorld, WorldPos, 0.001f * distance, 8, FColor::Yellow());
+	}
+
+	// 뼈다귀(Octahedral) 그리기
+	for (int i = 0; i < Bones.size(); ++i)
+	{
+		const auto& Bone = Bones[i];
+
+		if (Bone.ParentIndex < 0 || Bone.ParentIndex >= BoneMatrices.size())
+		{
+			continue;
+		}
+
+		// Component Space(Mesh Space) * Component World Transform = 최종 World Space
+		FMatrix ParentWorldMat = BoneMatrices[Bone.ParentIndex] * ComponentWorldTransform;
+		FVector ParentPos = ParentWorldMat.GetLocation();
+
+		FMatrix ChildWorldMat = BoneMatrices[i] * ComponentWorldTransform;
+		FVector ChildPos = ChildWorldMat.GetLocation();
+
+		DrawDebugOctahedralBone(PreviewWorld, ParentPos, ChildPos, FColor::Green());
+
+	}
+
 }

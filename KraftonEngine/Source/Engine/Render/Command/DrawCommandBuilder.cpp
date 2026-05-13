@@ -29,6 +29,7 @@ void FDrawCommandBuilder::Create(ID3D11Device* InDevice, ID3D11DeviceContext* In
 	PassRenderStateTable = InPassRenderStateTable;
 
 	EditorLines.Create(InDevice);
+	EditorNoDepthLines.Create(InDevice);
 	GridLines.Create(InDevice);
 	FontGeometry.Create(InDevice);
 
@@ -43,6 +44,7 @@ void FDrawCommandBuilder::Create(ID3D11Device* InDevice, ID3D11DeviceContext* In
 void FDrawCommandBuilder::Release()
 {
 	EditorLines.Release();
+	EditorNoDepthLines.Release();
 	GridLines.Release();
 	FontGeometry.Release();
 
@@ -76,6 +78,7 @@ void FDrawCommandBuilder::BeginCollect(const FFrameContext& Frame, uint32 MaxPro
 
 	// 동적 지오메트리 초기화
 	EditorLines.Clear();
+	EditorNoDepthLines.Clear();
 	GridLines.Clear();
 	FontGeometry.Clear();
 	FontGeometry.ClearScreen();
@@ -380,7 +383,10 @@ void FDrawCommandBuilder::PrepareDynamicGeometry(const FFrameContext& Frame, con
 	{
 		EditorLines.AddLine(Line.Start, Line.End, Line.Color.ToVector4());
 	}
-
+	for (const auto& Line : Scene->GetDebugLinesNoDepth())
+	{
+		EditorNoDepthLines.AddLine(Line.Start, Line.End, Line.Color.ToVector4());
+	}
 	// --- Grid 패스: 월드 그리드 + 축 ---
 	if (Scene->HasGrid())
 	{
@@ -450,6 +456,10 @@ void FDrawCommandBuilder::BuildEditorLineCommands(EViewMode ViewMode)
 
 	EmitLineCommand(EditorLines, EditorShader, EditorLinesRS);
 	EmitLineCommand(GridLines, EditorShader, EditorLinesRS);
+
+	FDrawCommandRenderState NoDepthLinesRS = EditorLinesRS;
+	NoDepthLinesRS.DepthStencil = EDepthStencilState::NoDepth;
+	EmitLineCommand(EditorNoDepthLines, EditorShader, NoDepthLinesRS);
 }
 
 // ============================================================

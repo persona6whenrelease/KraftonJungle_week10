@@ -287,6 +287,7 @@ void FScene::ClearFrameData()
 	OverlayTexts.clear();
 	DebugAABBs.clear();
 	DebugLines.clear();
+	DebugLinesNoDepth.clear();
 	Grid = {};
 }
 
@@ -303,6 +304,12 @@ void FScene::AddDebugAABB(const FVector& Min, const FVector& Max, const FColor& 
 void FScene::AddDebugLine(const FVector& Start, const FVector& End, const FColor& Color)
 {
 	DebugLines.push_back({ Start, End, Color });
+}
+
+void FScene::AddDebugLineNoDepth(const FVector& Start, const FVector& End, const FColor& Color)
+{
+	DebugLinesNoDepth.push_back({ Start, End, Color });
+
 }
 
 void FScene::SetGrid(float Spacing, int32 HalfLineCount)

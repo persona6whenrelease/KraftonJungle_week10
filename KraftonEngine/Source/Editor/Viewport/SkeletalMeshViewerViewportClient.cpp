@@ -467,6 +467,8 @@ void FSkeletalMeshViewerViewportClient::Tick(
 		return;
 	}
 
+#pragma region Skeltal Gizmo Interaction
+
 	USkeletalGizmoComponent* Gizmo = BoneSelectionManager.GetGizmo();
 	const bool bGizmoHolding = Gizmo && Gizmo->IsHolding();
 	TickPreviewCameraInput(Camera, DeltaTime, bViewportHovered, bIsCapturing, bGizmoHolding, InputFrame);
@@ -567,6 +569,8 @@ void FSkeletalMeshViewerViewportClient::Tick(
 			}
 		}
 	}
+
+#pragma endregion
 
 }
 

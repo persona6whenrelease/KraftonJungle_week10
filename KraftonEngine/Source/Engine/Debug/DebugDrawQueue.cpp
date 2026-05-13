@@ -1,8 +1,8 @@
-#include "Debug/DebugDrawQueue.h"
+﻿#include "Debug/DebugDrawQueue.h"
 #include <cmath>
 
 void FDebugDrawQueue::AddLine(const FVector& Start, const FVector& End,
-	const FColor& Color, float Duration)
+	const FColor& Color, float Duration, bool bNoDepth)
 {
 	FDebugDrawItem Item;
 	Item.Start = Start;
@@ -10,6 +10,7 @@ void FDebugDrawQueue::AddLine(const FVector& Start, const FVector& End,
 	Item.Color = Color;
 	Item.RemainingTime = Duration;
 	Item.bOneFrame = (Duration <= 0.0f);
+	Item.bNoDepth = bNoDepth;
 	Items.push_back(Item);
 }
 
@@ -41,7 +42,7 @@ void FDebugDrawQueue::AddBox(const FVector& Center, const FVector& Extent,
 }
 
 void FDebugDrawQueue::AddSphere(const FVector& Center, float Radius, int32 Segments,
-	const FColor& Color, float Duration)
+	const FColor& Color, float Duration, bool bNoDepth)
 {
 	if (Segments < 4) Segments = 4;
 
@@ -55,7 +56,7 @@ void FDebugDrawQueue::AddSphere(const FVector& Center, float Radius, int32 Segme
 		AddLine(
 			Center + FVector(cosf(A0) * Radius, sinf(A0) * Radius, 0.0f),
 			Center + FVector(cosf(A1) * Radius, sinf(A1) * Radius, 0.0f),
-			Color, Duration);
+			Color, Duration, bNoDepth);
 	}
 
 	// XZ 평면 (Y축 기준 원)
@@ -66,7 +67,7 @@ void FDebugDrawQueue::AddSphere(const FVector& Center, float Radius, int32 Segme
 		AddLine(
 			Center + FVector(cosf(A0) * Radius, 0.0f, sinf(A0) * Radius),
 			Center + FVector(cosf(A1) * Radius, 0.0f, sinf(A1) * Radius),
-			Color, Duration);
+			Color, Duration, bNoDepth);
 	}
 
 	// YZ 평면 (X축 기준 원)
@@ -77,7 +78,7 @@ void FDebugDrawQueue::AddSphere(const FVector& Center, float Radius, int32 Segme
 		AddLine(
 			Center + FVector(0.0f, cosf(A0) * Radius, sinf(A0) * Radius),
 			Center + FVector(0.0f, cosf(A1) * Radius, sinf(A1) * Radius),
-			Color, Duration);
+			Color, Duration, bNoDepth);
 	}
 }
 

@@ -24,6 +24,11 @@ void DrawDebugLine(UWorld* World,
 	const FColor& Color = FColor::White(),
 	float Duration = 0.0f);
 
+void DrawDebugNodepthLine(UWorld* World,
+	const FVector& Start, const FVector& End,
+	const FColor& Color = FColor::White(),
+	float Duration = 0.0f);
+
 void DrawDebugBox(UWorld* World,
 	const FVector& Center, const FVector& Extent,
 	const FColor& Color = FColor::White(),
@@ -54,6 +59,12 @@ void DrawDebugSphere(UWorld* World,
 	const FColor& Color = FColor::White(),
 	float Duration = 0.0f);
 
+void DrawDebugNodepthSphere(UWorld* World,
+	const FVector& Center, float Radius,
+	int32 Segments = 16,
+	const FColor& Color = FColor::White(),
+	float Duration = 0.0f);
+
 void DrawDebugPoint(UWorld* World,
 	const FVector& Position, float Size = 0.1f,
 	const FColor& Color = FColor::White(),
@@ -68,10 +79,12 @@ void DrawDebugFrustum(UWorld* World,
 #else
 
 inline void DrawDebugLine(UWorld*, const FVector&, const FVector&, const FColor & = FColor::White(), float = 0.0f) {}
+inline void DrawDebugNodepthLine(UWorld*, const FVector&, const FVector&, const FColor & = FColor::White(), float = 0.0f) {}
 inline void DrawDebugBox(UWorld*, const FVector&, const FVector&, const FColor & = FColor::White(), float = 0.0f) {}
 inline void DrawDebugBox(UWorld*, const FVector&, const FVector&, const FVector&, const FVector&, const FColor & = FColor::White(), float = 0.0f) {}
 inline void DrawDebugBox(UWorld*, const FVector&, const FVector&, const FVector&, const FVector&, const FVector&, const FVector&, const FVector&, const FVector&, const FColor & = FColor::White(), float = 0.0f) {}
 inline void DrawDebugSphere(UWorld*, const FVector&, float, int32 = 16, const FColor & = FColor::White(), float = 0.0f) {}
+inline void DrawDebugNodepthSphere(UWorld*, const FVector&, float, int32 = 16, const FColor & = FColor::White(), float = 0.0f) {}
 inline void DrawDebugPoint(UWorld*, const FVector&, float = 0.1f, const FColor & = FColor::White(), float = 0.0f) {}
 inline void DrawDebugFrustum(UWorld*, const FMatrix&, const FColor & = FColor::White(), float = 0.0f) {}
 

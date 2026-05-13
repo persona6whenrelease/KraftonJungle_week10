@@ -1,4 +1,4 @@
-#include "RenderCollector.h"
+﻿#include "RenderCollector.h"
 
 #include "Component/ActorComponent.h"
 #include "Component/Collision/ShapeComponent.h"
@@ -74,7 +74,14 @@ void FRenderCollector::CollectDebugDraw(const FFrameContext& Frame, FScene& Scen
 
 	for (const FDebugDrawItem& Item : Scene.GetDebugDrawQueue().GetItems())
 	{
-		Scene.AddDebugLine(Item.Start, Item.End, Item.Color);
+		if (Item.bNoDepth)
+		{
+			Scene.AddDebugLineNoDepth(Item.Start, Item.End, Item.Color);
+		}
+		else
+		{
+			Scene.AddDebugLine(Item.Start, Item.End, Item.Color);
+		}
 	}
 }
 

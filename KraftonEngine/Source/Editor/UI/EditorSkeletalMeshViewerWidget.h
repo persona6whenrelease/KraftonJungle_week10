@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Editor/UI/EditorWidget.h"
 #include "GameFramework/World.h"
@@ -32,7 +32,10 @@ private:
 	void RenderViewportPanel(float DeltaTime);
 	void RenderBonePanel();
 	void RenderTransformPanel();
+
 	USkeletalMesh* GetSelectedSkeletalMesh() const;
+
+	void UpdateBoneDebugLines();
 
 	UFBXSceneAsset* CurrentSceneAsset = nullptr;
 	USkeletalMesh* PreviewSkeletalMesh = nullptr;

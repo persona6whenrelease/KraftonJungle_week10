@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Core/CoreTypes.h"
 #include "Core/EngineTypes.h"
@@ -14,6 +14,7 @@ struct FDebugDrawItem
 	FColor  Color;
 	float   RemainingTime;	// <= 0이면 이번 프레임 후 제거 (0 = 1프레임만)
 	bool    bOneFrame;		// Duration == 0으로 추가된 항목 (1프레임 표시 후 제거)
+	bool    bNoDepth = false;
 };
 
 // ============================================================
@@ -27,13 +28,13 @@ class FDebugDrawQueue
 {
 public:
 	void AddLine(const FVector& Start, const FVector& End,
-		const FColor& Color, float Duration);
+		const FColor& Color, float Duration, bool bNoDepth = false);
 
 	void AddBox(const FVector& Center, const FVector& Extent,
 		const FColor& Color, float Duration);
 
 	void AddSphere(const FVector& Center, float Radius, int32 Segments,
-		const FColor& Color, float Duration);
+		const FColor& Color, float Duration, bool bNoDepth = false);
 
 	// Duration 감소 + 만료 항목 제거. 매 프레임 Tick 시 호출.
 	void Tick(float DeltaTime);

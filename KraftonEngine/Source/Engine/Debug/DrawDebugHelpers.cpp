@@ -11,6 +11,11 @@ void DrawDebugLine(UWorld* World,
 	if (!World) return;
 	World->GetScene().GetDebugDrawQueue().AddLine(Start, End, Color, Duration);
 }
+void DrawDebugNodepthLine(UWorld* World, const FVector& Start, const FVector& End, const FColor& Color, float Duration)
+{
+	if (!World) return;
+	World->GetScene().GetDebugDrawQueue().AddLine(Start, End, Color, Duration, true);
+}
 
 void DrawDebugBox(UWorld* World,
 	const FVector& Center, const FVector& Extent,
@@ -67,6 +72,14 @@ void DrawDebugSphere(UWorld* World,
 	World->GetScene().GetDebugDrawQueue().AddSphere(Center, Radius, Segments, Color, Duration);
 }
 
+void DrawDebugNodepthSphere(UWorld* World,
+	const FVector& Center, float Radius,
+	int32 Segments, const FColor& Color, float Duration)
+{
+	if (!World) return;
+	World->GetScene().GetDebugDrawQueue().AddSphere(Center, Radius, Segments, Color, Duration, true);
+}
+
 void DrawDebugPoint(UWorld* World,
 	const FVector& Position, float Size,
 	const FColor& Color, float Duration)
@@ -105,3 +118,4 @@ void DrawDebugFrustum(UWorld* World,
 }
 
 #endif // _DEBUG
+

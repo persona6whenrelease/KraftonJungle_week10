@@ -58,7 +58,9 @@ public:
 	// --- Debug lines ---
 	struct FDebugLine { FVector Start; FVector End; FColor Color; };
 	void AddDebugLine(const FVector& Start, const FVector& End, const FColor& Color);
+	void AddDebugLineNoDepth(const FVector& Start, const FVector& End, const FColor& Color);
 	const TArray<FDebugLine>& GetDebugLines() const { return DebugLines; }
+	const TArray<FDebugLine>& GetDebugLinesNoDepth() const { return DebugLinesNoDepth; }
 
 	// --- Grid ---
 	struct FGridParams { float Spacing = 0.0f; int32 HalfLineCount = 0; bool bEnabled = false; };
@@ -70,6 +72,8 @@ public:
 	// --- DebugDraw (Duration 기반 디버그 라인) ---
 	FDebugDrawQueue& GetDebugDrawQueue() { return DebugDrawQueue; }
 	const FDebugDrawQueue& GetDebugDrawQueue() const { return DebugDrawQueue; }
+	FDebugDrawQueue& GetDebugDrawNoDepthQueue() { return DebugDrawNoDepthQueue; }
+	const FDebugDrawQueue& GetDebugDrawNoDepthQueue() const { return DebugDrawNoDepthQueue; }
 
 	// --- Shadow frustum 디버그 라인 제출 ---
 	void SubmitShadowFrustumDebug(UWorld* World, const FFrameContext& Frame);
@@ -105,9 +109,11 @@ private:
 	TArray<FOverlayText> OverlayTexts;
 	TArray<FDebugAABB>   DebugAABBs;
 	TArray<FDebugLine>   DebugLines;
+	TArray<FDebugLine> DebugLinesNoDepth;
 
 	FGridParams Grid;
 	FDebugDrawQueue DebugDrawQueue;
+	FDebugDrawQueue DebugDrawNoDepthQueue;
 
 	FSceneEnvironment Environment;
 };

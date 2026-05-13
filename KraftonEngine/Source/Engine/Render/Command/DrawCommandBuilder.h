@@ -74,6 +74,7 @@ private:
 
 	// 동적 지오메트리
 	FLineGeometry  EditorLines;
+	FLineGeometry EditorNoDepthLines;
 	FLineGeometry  GridLines;
 	FFontGeometry  FontGeometry;
 
