@@ -59,4 +59,5 @@ private:
 	bool bHasPreviewViewportRect = false;
 	bool bPreviewViewportWantsMouseCapture = false;
 	bool bPreviewViewportWantsKeyboardCapture = false;
+	bool bDrawBoneDebugLines = true;
 };
