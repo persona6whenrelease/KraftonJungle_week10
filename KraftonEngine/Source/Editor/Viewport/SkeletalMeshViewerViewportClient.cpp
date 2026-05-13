@@ -1,4 +1,4 @@
-#include "SkeletalMeshViewerViewportClient.h"
+﻿#include "SkeletalMeshViewerViewportClient.h"
 #include "Object/Object.h"
 #include "Editor/Settings/EditorSettings.h"
 #include "Component/CameraComponent.h"
@@ -493,11 +493,25 @@ void FSkeletalMeshViewerViewportClient::Tick(
 			WorldUnitsPerPixel * ViewerGizmoRotatePickPixels);
 		Gizmo->SetAxisMask(UGizmoComponent::ComputeAxisMask(RenderOptions.ViewportType, Gizmo->GetMode()));
 
-		if (bViewportHovered && !bIsCapturing && !Gizmo->IsHolding())
+		if (bViewportHovered && !Gizmo->IsHolding())
 		{
-			if (ImGui::IsKeyPressed(ImGuiKey_W)) Gizmo->SetTranslateMode();
-			if (ImGui::IsKeyPressed(ImGuiKey_E)) Gizmo->SetRotateMode();
-			if (ImGui::IsKeyPressed(ImGuiKey_R)) Gizmo->SetScaleMode();
+			if (ImGui::IsKeyPressed(ImGuiKey_Space))
+			{
+				EGizmoMode CurrentMode = Gizmo->GetMode();
+
+				if (CurrentMode == EGizmoMode::Translate)
+				{
+					Gizmo->SetRotateMode();
+				}
+				else if (CurrentMode == EGizmoMode::Rotate)
+				{
+					Gizmo->SetScaleMode();
+				}
+				else // Scale 모드이거나 기타 모드일 경우 다시 Translate로
+				{
+					Gizmo->SetTranslateMode();
+				}
+			}
 		}
 
 		// ImGui의 윈도우 내 기준 상대 마우스 좌표를 구합니다. 
