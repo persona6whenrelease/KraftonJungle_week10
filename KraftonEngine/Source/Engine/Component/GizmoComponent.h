@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "PrimitiveComponent.h"
 #include "Core/CoreTypes.h"
@@ -46,6 +46,8 @@ public:
 	static uint32 ComputeAxisMask(ELevelViewportType ViewportType, EGizmoMode Mode);
 	void UpdateHoveredAxis(int Index);
 	void UpdateDrag(const FRay& Ray, const FVector& CameraForward, const FVector& CameraRight, const FVector& CameraUp);
+	void UpdateScreenSpaceRotateDrag(float MouseX, float MouseY, float ViewportWidth, float ViewportHeight,
+		const FMatrix& ViewProjection, const FVector& CameraForward);
 	void DragEnd();
 
 	void SetTargetLocation(FVector NewLocation);
@@ -108,6 +110,8 @@ private:
 
 	void UpdateLinearDrag(const FRay& Ray);
 	void UpdateAngularDrag(const FRay& Ray);
+	void UpdateScreenSpaceAngularDrag(float MouseX, float MouseY, float ViewportWidth, float ViewportHeight,
+		const FMatrix& ViewProjection, const FVector& CameraForward);
 	void UpdateScreenSpaceTranslation(const FRay& Ray, const FVector& CameraForward);
 	void UpdateUniformScale(const FRay& Ray, const FVector& CameraForward, const FVector& CameraRight, const FVector& CameraUp);
 
@@ -116,6 +120,7 @@ private:
 	const TArray<AActor*>* AllSelectedActors = nullptr;
 	EGizmoMode CurMode = EGizmoMode::Translate;
 	FVector LastIntersectionLocation;
+	FVector2 LastScreenDragVector;
 	const float AxisLength = 1.0f;
 	float Radius = 0.1f;
 	const float ScaleSensitivity = 1.0f;

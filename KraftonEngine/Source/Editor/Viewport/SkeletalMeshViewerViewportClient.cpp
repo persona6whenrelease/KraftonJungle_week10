@@ -1,4 +1,4 @@
-﻿#include "SkeletalMeshViewerViewportClient.h"
+#include "SkeletalMeshViewerViewportClient.h"
 #include "Object/Object.h"
 #include "Editor/Settings/EditorSettings.h"
 #include "Component/CameraComponent.h"
@@ -525,7 +525,20 @@ void FSkeletalMeshViewerViewportClient::Tick(
 			else if (bLeftMouseDown)
 			{
 				// 드래그 업데이트 (실제 뼈대 트랜스폼 연산 발생)
-				Gizmo->UpdateDrag(MouseRay, Camera->GetForwardVector(), Camera->GetRightVector(), Camera->GetUpVector());
+				if (Gizmo->GetMode() == EGizmoMode::Rotate)
+				{
+					Gizmo->UpdateScreenSpaceRotateDrag(
+						LocalMouseX,
+						LocalMouseY,
+						ViewportWidth,
+						ViewportHeight,
+						Camera->GetViewProjectionMatrix(),
+						Camera->GetForwardVector());
+				}
+				else
+				{
+					Gizmo->UpdateDrag(MouseRay, Camera->GetForwardVector(), Camera->GetRightVector(), Camera->GetUpVector());
+				}
 			}
 		}
 		else

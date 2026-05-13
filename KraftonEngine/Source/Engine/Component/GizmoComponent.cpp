@@ -1,4 +1,4 @@
-﻿#include "GizmoComponent.h"
+#include "GizmoComponent.h"
 #include "Object/ObjectFactory.h"
 #include "GameFramework/AActor.h"
 #include "GameFramework/World.h"
@@ -11,6 +11,7 @@
 #include "Render/Proxy/GizmoSceneProxy.h"
 #include "Render/Scene/FScene.h"
 #include <cfloat>
+#include <cmath>
 
 IMPLEMENT_CLASS(UGizmoComponent, UPrimitiveComponent)
 HIDE_FROM_COMPONENT_LIST(UGizmoComponent)
@@ -648,6 +649,77 @@ void UGizmoComponent::UpdateAngularDrag(const FRay& Ray)
 	HandleDrag(DeltaAngle);
 
 	LastIntersectionLocation = CurrentIntersectionLocation;
+}
+
+void UGizmoComponent::UpdateScreenSpaceRotateDrag(
+	float MouseX,
+	float MouseY,
+	float ViewportWidth,
+	float ViewportHeight,
+	const FMatrix& ViewProjection,
+	const FVector& CameraForward)
+{
+	if (CurMode != EGizmoMode::Rotate)
+	{
+		return;
+	}
+
+	UpdateScreenSpaceAngularDrag(MouseX, MouseY, ViewportWidth, ViewportHeight, ViewProjection, CameraForward);
+}
+
+void UGizmoComponent::UpdateScreenSpaceAngularDrag(
+	float MouseX,
+	float MouseY,
+	float ViewportWidth,
+	float ViewportHeight,
+	const FMatrix& ViewProjection,
+	const FVector& CameraForward)
+{
+	if (SelectedAxis < 0 || SelectedAxis > 2 || ViewportWidth <= 0.0f || ViewportHeight <= 0.0f)
+	{
+		return;
+	}
+
+	const FVector ClipSpace = ViewProjection.TransformPositionWithW(GetWorldLocation());
+	if (!std::isfinite(ClipSpace.X) || !std::isfinite(ClipSpace.Y) || !std::isfinite(ClipSpace.Z) || ClipSpace.Z < 0.0f)
+	{
+		return;
+	}
+
+	const FVector2 CenterScreen(
+		(ClipSpace.X * 0.5f + 0.5f) * ViewportWidth,
+		(1.0f - (ClipSpace.Y * 0.5f + 0.5f)) * ViewportHeight);
+	const FVector2 CurrentVector(MouseX - CenterScreen.X, MouseY - CenterScreen.Y);
+	constexpr float MinScreenRadius = 4.0f;
+	if (CurrentVector.Length() < MinScreenRadius)
+	{
+		return;
+	}
+
+	if (bIsFirstFrameOfDrag)
+	{
+		LastScreenDragVector = CurrentVector;
+		bIsFirstFrameOfDrag = false;
+		return;
+	}
+
+	if (LastScreenDragVector.Length() < MinScreenRadius)
+	{
+		LastScreenDragVector = CurrentVector;
+		return;
+	}
+
+	const float Cross = LastScreenDragVector.X * CurrentVector.Y - LastScreenDragVector.Y * CurrentVector.X;
+	const float Dot = LastScreenDragVector.Dot(CurrentVector);
+	float DeltaAngle = std::atan2(Cross, Dot);
+
+	const FVector AxisVector = GetVectorForAxis(SelectedAxis).Normalized();
+	const float ViewSign = CameraForward.Dot(AxisVector) >= 0.0f ? -1.0f : 1.0f;
+	DeltaAngle *= ViewSign;
+
+	HandleDrag(DeltaAngle);
+
+	LastScreenDragVector = CurrentVector;
 }
 
 void UGizmoComponent::UpdateHoveredAxis(int Index)
