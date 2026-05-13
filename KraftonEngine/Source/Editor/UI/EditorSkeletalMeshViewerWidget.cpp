@@ -515,7 +515,7 @@ void RenderViewerTransformToolbar(FSkeletalMeshViewerViewportClient* PreviewClie
 	}
 }
 
-void RenderBoneTreeNode(const TArray<FBoneInfo>& Bones, int32 BoneIndex, int32& SelectedBoneIndex, int32& OutDoubleClickedBoneIndex)
+void RenderBoneTreeNode(const TArray<FBoneInfo>& Bones, int32 BoneIndex, int32& SelectedBoneIndex, int32& OutDoubleClickedBoneIndex, TArray<int32>& OutVisibleOrder, bool bScrollToSelected, int32 RequestSetOpenBoneIndex, bool bRequestSetOpenValue)
 {
 	if (BoneIndex < 0 || BoneIndex >= static_cast<int32>(Bones.size()))
 	{
@@ -542,11 +542,22 @@ void RenderBoneTreeNode(const TArray<FBoneInfo>& Bones, int32 BoneIndex, int32& 
 		Flags |= ImGuiTreeNodeFlags_Leaf;
 	}
 
+	if (BoneIndex == RequestSetOpenBoneIndex)
+	{
+		ImGui::SetNextItemOpen(bRequestSetOpenValue);
+	}
+
 	const bool bOpen = ImGui::TreeNodeEx(
 		reinterpret_cast<void*>(static_cast<intptr_t>(BoneIndex)),
 		Flags,
 		"%s",
 		Bones[BoneIndex].Name.c_str());
+
+	OutVisibleOrder.push_back(BoneIndex);
+	if (bScrollToSelected && SelectedBoneIndex == BoneIndex)
+	{
+		ImGui::SetScrollHereY(0.5f);
+	}
 
 	if (ImGui::IsItemClicked())
 	{
@@ -564,7 +575,7 @@ void RenderBoneTreeNode(const TArray<FBoneInfo>& Bones, int32 BoneIndex, int32& 
 		{
 			if (Bones[ChildIndex].ParentIndex == BoneIndex)
 			{
-				RenderBoneTreeNode(Bones, ChildIndex, SelectedBoneIndex, OutDoubleClickedBoneIndex);
+				RenderBoneTreeNode(Bones, ChildIndex, SelectedBoneIndex, OutDoubleClickedBoneIndex, OutVisibleOrder, bScrollToSelected, RequestSetOpenBoneIndex, bRequestSetOpenValue);
 			}
 		}
 		ImGui::TreePop();
@@ -1052,12 +1063,107 @@ void FEditorSkeletalMeshViewerWidget::RenderBonePanel()
 			int32 PrevSelectedBoneIndex = SelectedBoneIndex;
 			int32 DoubleClickedBoneIndex = -1;
 
+			TArray<int32> VisibleOrder;
+			VisibleOrder.reserve(MeshAsset->Bones.size());
+
 			for (int32 BoneIndex = 0; BoneIndex < static_cast<int32>(MeshAsset->Bones.size()); ++BoneIndex)
 			{
 
 				if (MeshAsset->Bones[BoneIndex].ParentIndex < 0)
 				{
-					RenderBoneTreeNode(MeshAsset->Bones, BoneIndex, SelectedBoneIndex, DoubleClickedBoneIndex);
+					RenderBoneTreeNode(MeshAsset->Bones, BoneIndex, SelectedBoneIndex, DoubleClickedBoneIndex, VisibleOrder, bScrollToSelectedBone, RequestSetOpenBoneIndex, bRequestSetOpenValue);
+				}
+			}
+			bScrollToSelectedBone = false;
+			RequestSetOpenBoneIndex = -1;
+
+			if (ImGui::IsWindowFocused() && !VisibleOrder.empty())
+			{
+				const bool bDown  = ImGui::IsKeyPressed(ImGuiKey_DownArrow,  true);
+				const bool bUp    = ImGui::IsKeyPressed(ImGuiKey_UpArrow,    true);
+				const bool bLeft  = ImGui::IsKeyPressed(ImGuiKey_LeftArrow,  true);
+				const bool bRight = ImGui::IsKeyPressed(ImGuiKey_RightArrow, true);
+
+				int32 Cur = -1;
+				if (bDown || bUp || bLeft || bRight)
+				{
+					for (int32 i = 0; i < static_cast<int32>(VisibleOrder.size()); ++i)
+					{
+						if (VisibleOrder[i] == SelectedBoneIndex)
+						{
+							Cur = i;
+							break;
+						}
+					}
+				}
+
+				if (bDown || bUp)
+				{
+					int32 Next = Cur;
+					if (Cur < 0)
+					{
+						Next = 0;
+					}
+					else if (bDown)
+					{
+						Next = std::min(Cur + 1, static_cast<int32>(VisibleOrder.size()) - 1);
+					}
+					else
+					{
+						Next = std::max(Cur - 1, 0);
+					}
+
+					if (Next != Cur)
+					{
+						SelectedBoneIndex     = VisibleOrder[Next];
+						bScrollToSelectedBone = true;
+					}
+				}
+				else if ((bLeft || bRight) && Cur >= 0)
+				{
+					const int32 SelBone = SelectedBoneIndex;
+
+					int32 FirstChild = -1;
+					for (int32 j = 0; j < static_cast<int32>(MeshAsset->Bones.size()); ++j)
+					{
+						if (MeshAsset->Bones[j].ParentIndex == SelBone)
+						{
+							FirstChild = j;
+							break;
+						}
+					}
+					const bool bHasChildren = (FirstChild >= 0);
+					const bool bIsOpen      = bHasChildren
+					                       && Cur + 1 < static_cast<int32>(VisibleOrder.size())
+					                       && MeshAsset->Bones[VisibleOrder[Cur + 1]].ParentIndex == SelBone;
+
+					if (bRight && bHasChildren)
+					{
+						if (!bIsOpen)
+						{
+							RequestSetOpenBoneIndex = SelBone;
+							bRequestSetOpenValue    = true;
+						}
+						SelectedBoneIndex     = FirstChild;
+						bScrollToSelectedBone = true;
+					}
+					else if (bLeft)
+					{
+						if (bHasChildren && bIsOpen)
+						{
+							RequestSetOpenBoneIndex = SelBone;
+							bRequestSetOpenValue    = false;
+						}
+						else
+						{
+							const int32 Parent = MeshAsset->Bones[SelBone].ParentIndex;
+							if (Parent >= 0)
+							{
+								SelectedBoneIndex     = Parent;
+								bScrollToSelectedBone = true;
+							}
+						}
+					}
 				}
 			}
 
