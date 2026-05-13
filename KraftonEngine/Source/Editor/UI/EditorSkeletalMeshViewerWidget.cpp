@@ -1506,7 +1506,7 @@ void FEditorSkeletalMeshViewerWidget::UpdateBoneDebugLines()
 
 	// 본 위치 디버그 스피어 크기 계산을 위한 대략적인 거리 측정
 	FVector Subtract = PreviewMeshComponent->GetWorldAABB().Max - PreviewMeshComponent->GetWorldAABB().Min; // [주의] GetMeshSpaceBoneMatrices()의 결과가 최신이 되도록 강제 업데이트 트리거
-	float distance = Subtract.Dot(Subtract);
+	float distance = std::sqrt(Subtract.Dot(Subtract));
 
 	// 1. 컴포넌트 전체의 월드 변환 행렬
 	FMatrix ComponentWorldTransform = PreviewMeshComponent->GetWorldMatrix();
@@ -1517,7 +1517,7 @@ void FEditorSkeletalMeshViewerWidget::UpdateBoneDebugLines()
 		// bone sphere 그리기
 		FMatrix WorldMat = BoneMatrices[i] * ComponentWorldTransform;
 		FVector WorldPos = WorldMat.GetLocation();
-		DrawDebugNodepthSphere(PreviewWorld, WorldPos, 0.001f * distance, 8, FColor::Yellow());
+		DrawDebugNodepthSphere(PreviewWorld, WorldPos, 0.005f * distance, 8, FColor::Yellow());
 	}
 
 	// 뼈다귀(Octahedral) 그리기
