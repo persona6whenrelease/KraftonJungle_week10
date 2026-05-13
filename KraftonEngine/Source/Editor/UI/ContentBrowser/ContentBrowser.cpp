@@ -189,11 +189,12 @@ void FEditorContentBrowserWidget::Render(float DeltaTime)
 
 	ImGui::Text(FPaths::ToUtf8(PathText).c_str());
 
-	//ImGui::SameLine();
-	//int size = static_cast<int>(BrowserContext.ContentSize.x);
-	//ImGui::SliderInt("##slider", &size, 20, 100);
-	//BrowserContext.ContentSize = ImVec2(static_cast<float>(size), static_cast<float>(size));
-
+	ImGui::SameLine();
+	int size = static_cast<int>(GetIconSize());
+	if (ImGui::SliderInt("##slider", &size, 20, 100))
+	{
+		SetIconSize(static_cast<float>(size));
+	}
 	if (!ImGui::BeginTable("ContentBrowserLayout", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersInnerV))
 	{
 		ImGui::End();

@@ -47,6 +47,9 @@ private:
 	FString StatusMessage = "Double-click an FBX asset in ContentBrowser";
 	int32 SelectedResourceIndex = -1;
 	int32 SelectedBoneIndex = -1;
+	bool bScrollToSelectedBone = false;
+	int32 RequestSetOpenBoneIndex = -1;
+	bool bRequestSetOpenValue = false;
 
 	UWorld* PreviewWorld = nullptr;
 	AActor* PreviewActor = nullptr;
