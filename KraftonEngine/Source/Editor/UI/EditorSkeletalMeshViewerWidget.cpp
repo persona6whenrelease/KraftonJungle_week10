@@ -1173,7 +1173,6 @@ void FEditorSkeletalMeshViewerWidget::DrawViewerShowFlagsControls(FViewportRende
 			if (ImGui::Checkbox("Mesh", &bMeshVisible))
 				PreviewMeshComponent->SetVisibility(bMeshVisible);
 		}
-		ImGui::Checkbox("Draw Debug Line", &bDrawBoneDebugLines);
 		ImGui::TableNextColumn();
 		ImGui::Checkbox("BillboardText", &Opts.ShowFlags.bBillboardText);
 		ImGui::TableNextColumn();
@@ -1201,6 +1200,7 @@ void FEditorSkeletalMeshViewerWidget::DrawViewerShowFlagsControls(FViewportRende
 		ImGui::Checkbox("FXAA", &Opts.ShowFlags.bFXAA);
 		ImGui::TableNextColumn();
 		ImGui::Checkbox("Visualize2.5D", &Opts.ShowFlags.bVisualize25DCulling);
+		ImGui::Checkbox("Draw Debug Line", &bDrawBoneDebugLines);
 		ImGui::TableNextColumn();
 		ImGui::Checkbox("Shadows", &FProjectSettings::Get().Shadow.bEnabled);
 		ImGui::TableNextColumn();
