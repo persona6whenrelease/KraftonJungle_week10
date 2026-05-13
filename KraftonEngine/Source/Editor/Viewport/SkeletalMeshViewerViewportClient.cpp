@@ -9,6 +9,7 @@
 #include "GameFramework/World.h"
 #include "Collision/RayUtils.h"
 #include "Render/Resource/MeshBufferManager.h"
+#include "Component/SkinnedMeshComponent.h"
 #include <cfloat>
 #include <cmath>
 namespace {
@@ -604,5 +605,64 @@ void FSkeletalMeshViewerViewportClient::Tick(
 void FSkeletalMeshViewerViewportClient::SetPreviewWorld(UWorld* InWorld)
 {
 	BoneSelectionManager.SetScene(InWorld ? &InWorld->GetScene() : nullptr);
+}
+
+void FSkeletalMeshViewerViewportClient::FocusBone(USkinnedMeshComponent* SkelMeshComp, int32 BoneIndex)
+{
+	if (!SkelMeshComp || !SkelMeshComp->GetSkeletalMesh() || !Camera)
+	{
+		return;
+	}
+
+	const FSkeletalMesh* Asset = SkelMeshComp->GetSkeletalMesh()->GetSkeletalMeshAsset();
+	if (!Asset || BoneIndex < 0 || BoneIndex >= Asset->Bones.size())
+	{
+		return;
+	}
+
+	const TArray<FMatrix>& MeshSpaceBones = SkelMeshComp->GetMeshSpaceBoneMatrices();
+	FMatrix CompWorld = SkelMeshComp->GetWorldMatrix();
+
+	// 1. 타겟 본(클릭한 본)의 월드 위치 계산
+	FMatrix BoneWorldMatrix = MeshSpaceBones[BoneIndex] * CompWorld;
+	FVector BoneWorldLocation = BoneWorldMatrix.GetLocation();
+
+	// 2. 카메라 포커스 거리(Zoom) 동적 계산
+	// 기본값 2.0f 대신 부모 뼈와의 거리를 측정해 뼈 크기에 맞게 줌인/줌아웃 되도록 합니다.
+	float FocusDistance = 2.0f;
+	int32 ParentIndex = Asset->Bones[BoneIndex].ParentIndex;
+
+	if (ParentIndex >= 0 && ParentIndex < MeshSpaceBones.size())
+	{
+		FMatrix ParentWorldMatrix = MeshSpaceBones[ParentIndex] * CompWorld;
+		FVector ParentWorldLocation = ParentWorldMatrix.GetLocation();
+
+		// 부모 본과 현재 본 사이의 거리 계산 (자체 엔진 벡터 클래스에 맞게 수정)
+		FVector Diff = ParentWorldLocation - BoneWorldLocation;
+		float BoneLength = std::sqrt(Diff.X * Diff.X + Diff.Y * Diff.Y + Diff.Z * Diff.Z);
+
+		if (BoneLength > 0.001f)
+		{
+			// 뼈 길이의 약 3배 정도 뒤에서 바라보게 설정 (원하는 수치로 튜닝하세요)
+			FocusDistance = BoneLength * 3.0f;
+		}
+	}
+
+	// 3. 카메라 이동 및 방향 설정
+	FVector ViewDir = Camera->GetWorldLocation() - BoneWorldLocation;
+	float DirLength = std::sqrt(ViewDir.X * ViewDir.X + ViewDir.Y * ViewDir.Y + ViewDir.Z * ViewDir.Z);
+
+	// 카메라가 본과 완전히 겹쳐있는 상태라면 예외 처리
+	if (DirLength < 0.001f)
+	{
+		ViewDir = FVector(1.0f, 1.0f, 1.0f);
+		DirLength = std::sqrt(3.0f);
+	}
+
+	ViewDir.X /= DirLength; ViewDir.Y /= DirLength; ViewDir.Z /= DirLength;
+
+	// 최종 카메라 위치 및 회전 세팅
+	Camera->SetWorldLocation(BoneWorldLocation + ViewDir * FocusDistance);
+	Camera->LookAt(BoneWorldLocation);
 }
 

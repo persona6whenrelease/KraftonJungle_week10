@@ -32,6 +32,9 @@ public:
 	FBoneSelectionManager& GetBoneSelectionManager() { return BoneSelectionManager; }
 
 	void SetPreviewWorld(UWorld* InWorld);
+
+	void FocusBone(USkinnedMeshComponent* SkelMeshComp, int32 BoneIndex);
+
 private:
 	UCameraComponent* Camera = nullptr;
 	FViewportRenderOptions RenderOptions;
