@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Render/Proxy/PrimitiveSceneProxy.h"
 
@@ -11,6 +11,7 @@ public:
 
 	void UpdateMaterial() override;
 	void UpdateMesh() override;
+	void UpdatePerViewport(const FFrameContext& Frame) override;
 
 private:
 	USkinnedMeshComponent* GetSkinnedMeshComponent() const;

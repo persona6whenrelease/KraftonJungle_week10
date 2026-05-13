@@ -270,6 +270,8 @@ void DrawShowFlagsControls(FViewportRenderOptions& Opts, const char* TableId)
 		ImGui::TableNextColumn();
 		ImGui::Checkbox("Primitives", &Opts.ShowFlags.bPrimitives);
 		ImGui::TableNextColumn();
+		ImGui::Checkbox("Skeletal Mesh", &Opts.ShowFlags.bSkeletalMesh);
+		ImGui::TableNextColumn();
 		ImGui::Checkbox("BillboardText", &Opts.ShowFlags.bBillboardText);
 		ImGui::TableNextColumn();
 		ImGui::Checkbox("Grid", &Opts.ShowFlags.bGrid);

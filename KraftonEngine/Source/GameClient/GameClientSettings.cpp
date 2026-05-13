@@ -1,4 +1,4 @@
-#include "GameClient/GameClientSettings.h"
+﻿#include "GameClient/GameClientSettings.h"
 
 #include "Engine/Platform/Paths.h"
 #include "SimpleJSON/json.hpp"
@@ -68,6 +68,7 @@ void ApplyRuntimeDefaults(FGameClientSettings& Settings)
 	Settings.RenderOptions = FViewportRenderOptions();
 	Settings.RenderOptions.ViewMode = EViewMode::Lit_Phong;
 	Settings.RenderOptions.ShowFlags.bPrimitives = true;
+	Settings.RenderOptions.ShowFlags.bSkeletalMesh = true;
 	Settings.RenderOptions.ShowFlags.bGrid = false;
 	Settings.RenderOptions.ShowFlags.bWorldAxis = false;
 	Settings.RenderOptions.ShowFlags.bGizmo = false;
