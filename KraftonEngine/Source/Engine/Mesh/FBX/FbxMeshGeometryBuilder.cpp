@@ -30,6 +30,35 @@ namespace
 		return std::fabs(UV.X) <= UVZeroTolerance && std::fabs(UV.Y) <= UVZeroTolerance;
 	}
 
+	float GetUpper3x3Determinant(const FMatrix& Matrix)
+	{
+		return
+			Matrix.M[0][0] * (Matrix.M[1][1] * Matrix.M[2][2] - Matrix.M[1][2] * Matrix.M[2][1]) -
+			Matrix.M[0][1] * (Matrix.M[1][0] * Matrix.M[2][2] - Matrix.M[1][2] * Matrix.M[2][0]) +
+			Matrix.M[0][2] * (Matrix.M[1][0] * Matrix.M[2][1] - Matrix.M[1][1] * Matrix.M[2][0]);
+	}
+
+	bool HasMirroredHandedness(const FMatrix& Matrix)
+	{
+		constexpr float DeterminantEpsilon = 1.e-6f;
+		return GetUpper3x3Determinant(Matrix) < -DeterminantEpsilon;
+	}
+
+	void AppendTriangleIndices(TArray<uint32>& OutIndices, uint32 I0, uint32 I1, uint32 I2, bool bFlipWinding)
+	{
+		OutIndices.push_back(I0);
+		if (bFlipWinding)
+		{
+			OutIndices.push_back(I2);
+			OutIndices.push_back(I1);
+		}
+		else
+		{
+			OutIndices.push_back(I1);
+			OutIndices.push_back(I2);
+		}
+	}
+
 	struct FFbxGeometryBuildStats
 	{
 		FFbxUVReadStats UVReadStats;
@@ -320,7 +349,10 @@ namespace
 			Stats.FirstNonZeroUV.Y);
 	}
 
-	void TransformSkeletalVertexToAssetSpace(FSkeletalVertex& Vertex, const FMatrix& MeshToAssetBindMatrix)
+	void TransformSkeletalVertexToAssetSpace(
+		FSkeletalVertex& Vertex,
+		const FMatrix& MeshToAssetBindMatrix,
+		bool bFlipHandedness)
 	{
 		Vertex.pos = MeshToAssetBindMatrix.TransformPositionWithW(Vertex.pos);
 		Vertex.normal = NormalizeSafe(
@@ -330,10 +362,13 @@ namespace
 		const FVector TangentDirection = NormalizeSafe(
 			MeshToAssetBindMatrix.TransformVector(FVector(Vertex.tangent.X, Vertex.tangent.Y, Vertex.tangent.Z)),
 			FVector(1.0f, 0.0f, 0.0f));
-		Vertex.tangent = FVector4(TangentDirection, Vertex.tangent.W);
+		Vertex.tangent = FVector4(TangentDirection, bFlipHandedness ? -Vertex.tangent.W : Vertex.tangent.W);
 	}
 
-	void TransformStaticVertexToAssetSpace(FNormalVertex& Vertex, const FMatrix& MeshToAssetBindMatrix)
+	void TransformStaticVertexToAssetSpace(
+		FNormalVertex& Vertex,
+		const FMatrix& MeshToAssetBindMatrix,
+		bool bFlipHandedness)
 	{
 		Vertex.pos = MeshToAssetBindMatrix.TransformPositionWithW(Vertex.pos);
 		Vertex.normal = NormalizeSafe(
@@ -343,7 +378,7 @@ namespace
 		const FVector TangentDirection = NormalizeSafe(
 			MeshToAssetBindMatrix.TransformVector(FVector(Vertex.tangent.X, Vertex.tangent.Y, Vertex.tangent.Z)),
 			FVector(1.0f, 0.0f, 0.0f));
-		Vertex.tangent = FVector4(TangentDirection, Vertex.tangent.W);
+		Vertex.tangent = FVector4(TangentDirection, bFlipHandedness ? -Vertex.tangent.W : Vertex.tangent.W);
 	}
 
 	FString GetMaterialSlotName(const FFbxMeshMeta& MeshMeta, int32 MaterialIndex)
@@ -402,6 +437,13 @@ namespace FbxMeshGeometryBuilder
 		const int32 PolygonCount = Mesh->GetPolygonCount();
 		std::unordered_map<FFbxSkeletalVertexKey, uint32, FFbxSkeletalVertexKeyHasher> VertexToIndex;
 		VertexToIndex.reserve(static_cast<size_t>(PolygonCount) * 3);
+		const bool bFlipWinding = HasMirroredHandedness(MeshToAssetBindMatrix);
+		if (bFlipWinding)
+		{
+			UE_LOG("[FBXImporter] Mirrored skeletal mesh transform detected; flipping winding. MeshId=%d Node=%s",
+				MeshMeta.MeshId,
+				MeshMeta.SourceNodePath.c_str());
+		}
 
 		for (int32 PolyIndex = 0; PolyIndex < PolygonCount; ++PolyIndex)
 		{
@@ -453,7 +495,7 @@ namespace FbxMeshGeometryBuilder
 				Vertex.tangent = FBXUtil::ReadTangent(Mesh, ControlPointIndex, PolygonVertexCounter);
 
 				UpdateUVStats(GeometryStats, Vertex.tex);
-				TransformSkeletalVertexToAssetSpace(Vertex, MeshToAssetBindMatrix);
+				TransformSkeletalVertexToAssetSpace(Vertex, MeshToAssetBindMatrix, bFlipWinding);
 				AssignWeights(ControlPointIndex, Vertex);
 
 				const uint32 VertexCountBefore = static_cast<uint32>(OutPart.Vertices.size());
@@ -475,12 +517,12 @@ namespace FbxMeshGeometryBuilder
 			TArray<uint32>& SectionIndices = IndicesByMaterial[MaterialSlotIndex];
 			for (int32 i = 1; i + 1 < static_cast<int32>(PolygonVertexIndices.size()); ++i)
 			{
-				//SectionIndices.push_back(PolygonVertexIndices[0]);
-				//SectionIndices.push_back(PolygonVertexIndices[i + 1]);
-				//SectionIndices.push_back(PolygonVertexIndices[i]);
-				SectionIndices.push_back(PolygonVertexIndices[0]);
-				SectionIndices.push_back(PolygonVertexIndices[i]);
-				SectionIndices.push_back(PolygonVertexIndices[i + 1]);
+				AppendTriangleIndices(
+					SectionIndices,
+					PolygonVertexIndices[0],
+					PolygonVertexIndices[i],
+					PolygonVertexIndices[i + 1],
+					bFlipWinding);
 			}
 		}
 
@@ -550,6 +592,13 @@ namespace FbxMeshGeometryBuilder
 		const int32 PolygonCount = Mesh->GetPolygonCount();
 		std::unordered_map<FFbxStaticVertexKey, uint32, FFbxStaticVertexKeyHasher> VertexToIndex;
 		VertexToIndex.reserve(static_cast<size_t>(PolygonCount) * 3);
+		const bool bFlipWinding = HasMirroredHandedness(MeshToAssetBindMatrix);
+		if (bFlipWinding)
+		{
+			UE_LOG("[FBXImporter] Mirrored static mesh transform detected; flipping winding. MeshId=%d Node=%s",
+				MeshMeta.MeshId,
+				MeshMeta.SourceNodePath.c_str());
+		}
 
 		for (int32 PolyIndex = 0; PolyIndex < PolygonCount; ++PolyIndex)
 		{
@@ -602,7 +651,7 @@ namespace FbxMeshGeometryBuilder
 				Vertex.tangent = FBXUtil::ReadTangent(Mesh, ControlPointIndex, PolygonVertexCounter);
 
 				UpdateUVStats(GeometryStats, Vertex.tex);
-				TransformStaticVertexToAssetSpace(Vertex, MeshToAssetBindMatrix);
+				TransformStaticVertexToAssetSpace(Vertex, MeshToAssetBindMatrix, bFlipWinding);
 
 				const uint32 VertexCountBefore = static_cast<uint32>(OutMesh.Vertices.size());
 				const uint32 VertexIndex = FindOrAddStaticVertex(Vertex, OutMesh.Vertices, VertexToIndex);
@@ -623,9 +672,12 @@ namespace FbxMeshGeometryBuilder
 			TArray<uint32>& SectionIndices = IndicesByMaterial[MaterialSlotIndex];
 			for (int32 i = 1; i + 1 < static_cast<int32>(PolygonVertexIndices.size()); ++i)
 			{
-				SectionIndices.push_back(PolygonVertexIndices[0]);
-				SectionIndices.push_back(PolygonVertexIndices[i]);
-				SectionIndices.push_back(PolygonVertexIndices[i + 1]);
+				AppendTriangleIndices(
+					SectionIndices,
+					PolygonVertexIndices[0],
+					PolygonVertexIndices[i],
+					PolygonVertexIndices[i + 1],
+					bFlipWinding);
 			}
 		}
 
